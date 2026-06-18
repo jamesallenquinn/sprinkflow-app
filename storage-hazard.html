@@ -2,10 +2,24 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>SprinkFlow Storage Hazard Analysis</title>
-    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#0d1116" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./assets/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./assets/logo.png" />
     <link rel="stylesheet" href="./storage-hazard.css?v=2" />
+    <style>
+      /* PWA back bar + mobile guards for the desktop-oriented analyzer */
+      .pwa-backbar { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 6px;
+        padding: 12px 16px calc(12px + env(safe-area-inset-top,0px)); background: rgba(13,17,22,0.95);
+        backdrop-filter: blur(10px); border-bottom: 1px solid #2d3742; }
+      .pwa-backbar a { color: #ffb03a; font-weight: 700; text-decoration: none; font-size: 1rem; display: inline-flex; align-items: center; gap: 4px; }
+      @media (max-width: 560px) {
+        .analysis-shell { padding: 14px !important; }
+        .analysis-shell [style*="grid-template-columns"], .input-pane > * [class*="grid"] { }
+      }
+    </style>
     <script>
       const storageHazardParams = new URLSearchParams(window.location.search);
       if (storageHazardParams.has("embedded")) {
@@ -15,9 +29,10 @@
     </script>
   </head>
   <body data-theme="default">
+    <nav class="pwa-backbar"><a href="./index.html">‹ All tools</a></nav>
     <header class="topbar">
       <div class="brand">
-        <img src="./icon.svg" alt="" />
+        <img src="./assets/icon.svg" alt="" />
         <div>
           <p>SprinkFlow Lab Tool</p>
           <h1>Storage Hazard Analysis</h1>
