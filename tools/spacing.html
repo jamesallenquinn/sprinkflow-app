@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Sprinkler Spacing — SprinkFlow</title>
+  <meta name="theme-color" content="#0d1116" />
+  <link rel="manifest" href="../manifest.webmanifest" />
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <header class="app-bar">
+    <a class="back" href="../index.html" aria-label="Back">‹</a>
+    <div><div class="title">Sprinkler Spacing</div><div class="sub">Coverage area &amp; required flow</div></div>
+  </header>
+
+  <main class="tool-page">
+    <div class="field"><label>Along branch lines (X)</label>
+      <div class="row2">
+        <select id="xMode"><option value="between">Between sprinklers</option><option value="wall">To wall</option></select>
+        <input id="xDist" type="number" inputmode="decimal" placeholder="ft" />
+      </div>
+    </div>
+    <div class="field"><label>Between branch lines (Y)</label>
+      <div class="row2">
+        <select id="yMode"><option value="between">Between branch lines</option><option value="wall">To wall</option></select>
+        <input id="yDist" type="number" inputmode="decimal" placeholder="ft" />
+      </div>
+    </div>
+
+    <div class="result-card">
+      <div class="lbl">Coverage area per sprinkler</div>
+      <div class="big" id="area">— sq ft</div>
+      <div id="rows"></div>
+      <div class="field" style="margin-top:16px;margin-bottom:0"><label>Custom density (gpm/sq ft)</label>
+        <input id="customDensity" type="number" inputmode="decimal" placeholder="e.g. 0.20" />
+      </div>
+    </div>
+    <p class="hint">"To wall" distance is doubled to get the effective coverage dimension (per NFPA 13). Required flow = coverage area × density.</p>
+  </main>
+
+  <script>
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("../sw.js").catch(()=>{});
+    const HAZARDS = [
+      { name: "Light Hazard", density: 0.10 },
+      { name: "Ordinary Hazard 1", density: 0.15 },
+      { name: "Ordinary Hazard 2", density: 0.20 },
+      { name: "Extra Hazard 1", density: 0.30 },
+      { name: "Extra Hazard 2", density: 0.40 },
+    ];
+    const num = id => { const v = parseFloat(document.getElementById(id).value); return Number.isFinite(v) ? v : 0; };
+    function effective(mode, dist){ return mode === "wall" ? dist * 2 : dist; }
+    function update(){
+      const x = effective(document.getElementById("xMode").value, num("xDist"));
+      const y = effective(document.getElementById("yMode").value, num("yDist"));
+      const area = x * y;
+      document.getElementById("area").textContent = area > 0 ? area.toFixed(2) + " sq ft" : "— sq ft";
+      const rows = HAZARDS.map(h => ({ name: h.name, d: h.density.toFixed(2), gpm: area > 0 ? (area*h.density).toFixed(2) : "—" }));
+      const cd = parseFloat(document.getElementById("customDensity").value);
+      if (Number.isFinite(cd) && cd > 0) rows.push({ name: "Custom", d: cd.toFixed(3), gpm: area > 0 ? (area*cd).toFixed(2) : "—" });
+      document.getElementById("rows").innerHTML = rows.map(r =>
+        `<div class="result-row"><span>${r.name} <small style="color:var(--line-strong)">(${r.d})</small></span><span class="v">${r.gpm}${r.gpm!=="—"?" gpm":""}</span></div>`).join("");
+    }
+    document.querySelectorAll("input,select").forEach(el => el.addEventListener("input", update));
+    update();
+  </script>
+</body>
+</html>

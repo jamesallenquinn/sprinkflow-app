@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>SprinkFlow Tools</title>
+  <meta name="description" content="Fire sprinkler calculators and reference tools — storage hazard, spacing, NFPA references, and more." />
+  <meta name="theme-color" content="#0d1116" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="./assets/logo.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="app-bar">
+    <img src="./assets/logo.png" alt="" />
+    <div>
+      <div class="title">SprinkFlow Tools</div>
+      <div class="sub">Fire sprinkler calculators &amp; references</div>
+    </div>
+  </header>
+
+  <section class="launcher-hero">
+    <h1>Field tools, <span class="grad">in your pocket.</span></h1>
+    <p>Quick calculators and code references for fire sprinkler designers. Works offline once installed.</p>
+  </section>
+
+  <div class="install-tip" id="installTip" hidden>
+    Tip: add this to your home screen — in your browser menu, choose <strong>Add to Home Screen</strong>.
+  </div>
+
+  <main class="tool-grid">
+    <a class="tool-card" href="./storage-hazard.html">
+      <div class="ic">📦</div>
+      <h3>Storage Hazard</h3>
+      <p>NFPA storage commodity &amp; protection criteria analyzer.</p>
+    </a>
+    <a class="tool-card" href="./tools/feet-inch.html">
+      <div class="ic">📐</div>
+      <h3>Feet / Inch</h3>
+      <p>Add, subtract &amp; convert feet-inch-fraction measurements.</p>
+    </a>
+    <a class="tool-card" href="./tools/spacing.html">
+      <div class="ic">⬚</div>
+      <h3>Sprinkler Spacing</h3>
+      <p>Max coverage area &amp; spacing from protection criteria.</p>
+    </a>
+    <div class="tool-card soon">
+      <div class="ic">💧</div>
+      <h3>Water Supply</h3>
+      <p>Plot &amp; read static/residual supply curves.</p>
+      <span class="badge-soon">Coming soon</span>
+    </div>
+    <div class="tool-card soon">
+      <div class="ic">📖</div>
+      <h3>NFPA 13 References</h3>
+      <p>Quick code lookups across editions.</p>
+      <span class="badge-soon">Coming soon</span>
+    </div>
+    <div class="tool-card soon">
+      <div class="ic">🚒</div>
+      <h3>NFPA 1142</h3>
+      <p>Rural/suburban water-supply calc.</p>
+      <span class="badge-soon">Coming soon</span>
+    </div>
+  </main>
+
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
+    }
+    // show install tip only when not already installed (standalone)
+    const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
+    if (!standalone) document.getElementById("installTip").hidden = false;
+  </script>
+</body>
+</html>
