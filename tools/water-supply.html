@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Water Supply Curve — SprinkFlow</title>
+  <meta name="theme-color" content="#0d1116" />
+  <link rel="manifest" href="../manifest.webmanifest" />
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <header class="app-bar">
+    <a class="back" href="../index.html" aria-label="Back">‹</a>
+    <div><div class="title">Water Supply</div><div class="sub">Flow test curve &amp; available flow</div></div>
+  </header>
+
+  <main class="tool-page">
+    <div class="row2">
+      <div class="field"><label>Static pressure (psi)</label><input id="ps" type="number" inputmode="decimal" placeholder="psi" /></div>
+      <div class="field"><label>Residual pressure (psi)</label><input id="pr" type="number" inputmode="decimal" placeholder="psi" /></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Test flow Q₁ (gpm)</label><input id="q1" type="number" inputmode="decimal" placeholder="gpm" /></div>
+      <div class="field"><label>Read flow at (psi)</label><input id="p2" type="number" inputmode="decimal" placeholder="20" value="20" /></div>
+    </div>
+
+    <div class="result-card">
+      <div class="lbl">Available flow at <span id="p2lbl">20</span> psi</div>
+      <div class="big" id="qAt">— gpm</div>
+      <svg id="chart" viewBox="0 0 340 230" style="width:100%;height:auto;margin-top:6px"></svg>
+      <div class="result-row"><span>Static (Q=0)</span><span class="v" id="rPs">—</span></div>
+      <div class="result-row"><span>Residual @ test flow</span><span class="v" id="rPr">—</span></div>
+      <div class="result-row"><span>Max flow (curve to 0 psi)</span><span class="v" id="rMax">—</span></div>
+      <p class="hint" id="err" data-tone="error"></p>
+    </div>
+    <p class="hint">Hazen-Williams curve: Q₂ = Q₁ × ((Ps − P₂)/(Ps − Pr))^0.54. Requires Static &gt; Residual and a test flow.</p>
+  </main>
+
+  <script>
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("../sw.js").catch(()=>{});
+    const num = id => { const v = parseFloat(document.getElementById(id).value); return Number.isFinite(v) ? v : null; };
+    const flowAtPressure = (p2, ps, pr, q1) => q1 * Math.pow((ps - p2) / (ps - pr), 0.54);
+    const pressureAtFlow = (q, ps, pr, q1) => ps - (ps - pr) * Math.pow(q / q1, 1.85);
+    function update(){
+      const ps=num("ps"), pr=num("pr"), q1=num("q1"), p2=(num("p2") ?? 20);
+      document.getElementById("p2lbl").textContent = p2;
+      const err=document.getElementById("err");
+      const blank=()=>{["qAt","rPs","rPr","rMax"].forEach(id=>document.getElementById(id).textContent="—");document.getElementById("chart").innerHTML="";};
+      if (ps==null||pr==null||q1==null){ err.textContent="Enter static, residual, and test flow."; blank(); return; }
+      if (!(ps>pr)){ err.textContent="Static pressure must be greater than residual."; blank(); return; }
+      if (!(q1>0)){ err.textContent="Test flow must be greater than zero."; blank(); return; }
+      err.textContent="";
+      const qMax = flowAtPressure(0, ps, pr, q1);           // flow when pressure drops to 0
+      const qAtP2 = p2<ps ? flowAtPressure(p2, ps, pr, q1) : 0;
+      document.getElementById("qAt").textContent = Math.round(qAtP2).toLocaleString()+" gpm";
+      document.getElementById("rPs").textContent = ps+" psi @ 0 gpm";
+      document.getElementById("rPr").textContent = pr+" psi @ "+Math.round(q1).toLocaleString()+" gpm";
+      document.getElementById("rMax").textContent = Math.round(qMax).toLocaleString()+" gpm";
+      drawChart(ps, pr, q1, p2, qAtP2, qMax);
+    }
+    function drawChart(ps, pr, q1, p2, qAtP2, qMax){
+      const W=340,H=230,padL=38,padR=12,padT=12,padB=28;
+      const maxX = qMax*1.08, maxY = ps*1.08;
+      const X = q => padL + (q/maxX)*(W-padL-padR);
+      const Y = p => H-padB - (p/maxY)*(H-padT-padB);
+      let pts=[];
+      for (let i=0;i<=40;i++){ const q=(maxX*i/40); const p=Math.max(0, pressureAtFlow(q, ps, pr, q1)); pts.push(`${X(q).toFixed(1)},${Y(p).toFixed(1)}`); }
+      const grid = `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${H-padB}" stroke="#2d3742"/><line x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}" stroke="#2d3742"/>`;
+      const curve = `<polyline points="${pts.join(' ')}" fill="none" stroke="url(#g)" stroke-width="2.5"/>`;
+      const pt = (q,p,cls)=>`<circle cx="${X(q).toFixed(1)}" cy="${Y(p).toFixed(1)}" r="4.5" fill="${cls}"/>`;
+      const target = (p2<ps && qAtP2>0) ? pt(qAtP2,p2,"#37b7e4")+`<line x1="${X(qAtP2)}" y1="${Y(p2)}" x2="${X(qAtP2)}" y2="${H-padB}" stroke="#37b7e4" stroke-dasharray="3 3" opacity="0.6"/>` : "";
+      const labels = `<text x="${padL}" y="${padT+8}" fill="#aab4bd" font-size="9">${Math.round(maxY)} psi</text><text x="${W-padR}" y="${H-padB+18}" fill="#aab4bd" font-size="9" text-anchor="end">${Math.round(maxX)} gpm</text>`;
+      document.getElementById("chart").innerHTML =
+        `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5a2f"/><stop offset="1" stop-color="#37b7e4"/></linearGradient></defs>${grid}${curve}${pt(0,ps,"#ffb03a")}${pt(q1,pr,"#ff5a2f")}${target}${labels}`;
+    }
+    document.querySelectorAll("input").forEach(el=>el.addEventListener("input",update));
+    update();
+  </script>
+</body>
+</html>
