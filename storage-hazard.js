@@ -1748,7 +1748,8 @@
   }
 
   function buildGeneratedCmda2025GroupAPlasticRackCeilingCandidates(inputs) {
-    if (!is2025Edition(inputs) || inputs.systemType !== "CMDA") return [];
+    // Covers 2022 and 2025: NFPA 13 Table 21.5.1.1 and Table 21.5.2 are identical in both editions.
+    if (!uses2022StorageTables(inputs.edition) || inputs.systemType !== "CMDA") return [];
     if (!["Single-Row Rack", "Double-Row Rack", "Multiple-Row Rack"].includes(inputs.arrangement)) return [];
     const isCarton = inputs.commodity === "Cartoned Group A";
     const isExposed = inputs.commodity === "Exposed Nonexpanded Group A";
@@ -1794,7 +1795,7 @@
           tableTitle: "Table 21.5.1.1",
           confidence: "table-derived",
           notes: [
-            "NFPA 13 2025 Table 21.5.1.1 (Group A plastic commodities in cartons, single/double/multiple-row racks, up to 25 ft)",
+            `NFPA 13 ${inputs.edition} Table 21.5.1.1 (Group A plastic commodities in cartons, single/double/multiple-row racks, up to 25 ft)`,
             "Ceiling-only control mode density/area",
             `Storage up to ${row.sMax} ft; ceiling up to ${row.ceilMax} ft; clearance ${row.clearMaxEx ? "under" : "up to"} ${row.clearMax} ft`,
             "Linear interpolation of density/area between storage heights with the same clearance is permitted (21.5.1.2); no interpolation between clearance (21.5.1.3)",
@@ -1824,7 +1825,7 @@
           tableTitle: "Table 21.5.2",
           confidence: "table-derived",
           notes: [
-            "NFPA 13 2025 Table 21.5.2 (Exposed nonexpanded Group A plastics)",
+            `NFPA 13 ${inputs.edition} Table 21.5.2 (Exposed nonexpanded Group A plastics)`,
             "Ceiling-only control mode density/area",
             `Storage up to ${row.sMax} ft; ceiling up to ${row.ceilMax} ft`,
             "Confirm against the full Table 21.5.2 for taller storage rows not yet encoded",
@@ -2236,9 +2237,11 @@
     if (inputs.systemType !== "CMDA") return [];
     if (!isRackArrangement(inputs.arrangement)) return [];
     if (inputs.commodity === "Exposed Nonexpanded Group A" && inputs.edition === "2016") return buildGeneratedCmdaExposedNonexpandedGroupARack2016Candidates(inputs);
-    if (inputs.commodity === "Exposed Nonexpanded Group A" && (inputs.edition === "2019" || inputs.edition === "2022")) return buildGeneratedCmdaExposedNonexpandedGroupARack2019Candidates(inputs);
+    // 2022 Group A plastic racks are handled by buildGeneratedCmda2025GroupAPlasticRackCeilingCandidates
+    // (Table 21.5.1.1 / 21.5.2 — identical to 2025). Only 2019 uses the legacy figure-based builder below.
+    if (inputs.commodity === "Exposed Nonexpanded Group A" && inputs.edition === "2019") return buildGeneratedCmdaExposedNonexpandedGroupARack2019Candidates(inputs);
     if (inputs.commodity !== "Cartoned Group A") return [];
-    if (inputs.edition === "2019" || inputs.edition === "2022") return buildGeneratedCmdaGroupARack2019Candidates(inputs);
+    if (inputs.edition === "2019") return buildGeneratedCmdaGroupARack2019Candidates(inputs);
     if (inputs.edition === "2016") return buildGeneratedCmdaGroupARack2016Candidates(inputs);
     return [];
   }
