@@ -1680,7 +1680,7 @@
             : inputs.encapsulated ? "encapsulated" : "cartoned or encapsulated";
           candidates.push({
             id: `generated-2025-cmda-25-4-${packaging}-${inputs.commodity}-${inputs.arrangement}-${row.maxStorage}-${row.maxCeiling}-${row.aisle}-${row.levelKey}-${temperatureKey}`,
-            name: `Table 25.4 CMDA ${inputs.commodity} combined option`,
+            name: `Section 25.4 CMDA ${inputs.commodity} combined option`,
             basis: `${formatNumber(density, 3)} gpm/ft2 over 2000 ft2 ceiling + ${inRack.sprinklers} in-rack sprinklers @ ${formatNumber(inRack.flow, 0)} gpm`,
             sprinklerDemand,
             hoseAllowance,
@@ -3292,7 +3292,7 @@
       temperature: "Intermediate-temperature",
       notes: [
         "Option 3 uses K25.2 (K-360) extended-coverage pendent sprinklers; do not treat this as a standard K25.2 sprinkler",
-        "Horizontal barriers are required with Option 3 in accordance with Table 25.6.2.4.1 and Section 25.6.2.5",
+        "Horizontal barriers are required with Option 3 in accordance with Section 25.6.2.4.1 and Section 25.6.2.5",
       ],
     },
   };
