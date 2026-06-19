@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Fire Sprinkler Study — SprinkFlow</title>
+  <meta name="description" content="Self-paced fire sprinkler study questions based on NFPA 13 (2025 edition). Learn how the standard is organized — no timer, no limit." />
+  <meta name="theme-color" content="#0d1116" />
+  <link rel="manifest" href="../manifest.webmanifest" />
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="../assets/logo.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+  <style>
+    :root { --good:#3ddc97; --bad:#ff5a4f; --study:#37b7e4; }
+    body { overflow-x:hidden; }
+    .s-wrap { max-width:580px; margin:0 auto; padding:0 14px calc(28px + env(safe-area-inset-bottom,0px)); }
+
+    .src-badge { display:inline-flex; align-items:center; gap:7px; font:600 .74rem/1 Inter; letter-spacing:.02em;
+      color:var(--study); background:rgba(55,183,228,.10); border:1px solid rgba(55,183,228,.35); border-radius:999px; padding:7px 12px; }
+
+    /* hero / start */
+    .hero { text-align:center; padding:24px 6px 4px; }
+    .hero .ic { font-size:48px; line-height:1; }
+    .hero h1 { font:700 1.8rem/1.1 'Space Grotesk'; margin:12px 0 6px; }
+    .hero h1 .grad { background:linear-gradient(120deg,#37b7e4,#3ddc97); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+    .hero p { color:var(--muted); margin:0 auto 16px; max-width:44ch; }
+    .picker { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:16px; margin:18px 0; text-align:left; }
+    .picker label { display:block; font:600 .78rem Inter; color:var(--muted); margin-bottom:7px; }
+    .picker select { width:100%; box-sizing:border-box; background:var(--bg); border:1px solid var(--line-strong); border-radius:12px; padding:13px; color:var(--ink); font:500 1rem Inter; }
+    .picker .count { margin-top:10px; font:500 .85rem Inter; color:var(--muted); }
+
+    .btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; border:0; border-radius:14px; padding:16px; font:700 1.05rem 'Space Grotesk'; cursor:pointer; }
+    .btn.primary { background:linear-gradient(120deg,#37b7e4,#3ddc97); color:#06231d; }
+    .btn.ghost { background:var(--surface); color:var(--ink); border:1px solid var(--line); font-weight:600; }
+    .btn + .btn { margin-top:10px; }
+
+    /* chapter map */
+    .map { margin-top:18px; background:var(--surface); border:1px solid var(--line); border-radius:16px; overflow:hidden; }
+    .map > button { width:100%; text-align:left; background:none; border:0; color:var(--ink); font:700 1rem 'Space Grotesk'; padding:14px 16px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; }
+    .map .body { display:none; padding:0 16px 12px; }
+    .map.open .body { display:block; }
+    .map .chap { display:flex; gap:10px; padding:7px 0; border-top:1px solid var(--line); font:500 .9rem Inter; }
+    .map .chap .num { flex:none; width:30px; color:var(--study); font-weight:700; }
+    .map .chap .ttl { color:var(--muted); }
+
+    /* HUD */
+    .hud { display:flex; align-items:center; gap:10px; margin:6px 0 14px; }
+    .hud .pill { flex:1; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:8px 10px; text-align:center; }
+    .hud .pill .k { font:600 .62rem/1 Inter; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+    .hud .pill .v { font:700 1.15rem/1.1 'Space Grotesk'; margin-top:4px; color:var(--ink); }
+    .hud .pill.correct .v { color:var(--good); }
+    .hud .pill.streak .v { color:var(--study); }
+
+    .qcard { background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:20px 18px; margin-bottom:16px; box-shadow:0 8px 30px rgba(0,0,0,.25); }
+    .qcard .tag { font:600 .66rem/1 Inter; letter-spacing:.08em; text-transform:uppercase; color:var(--study); }
+    .qcard h2 { font:600 1.2rem/1.4 'Space Grotesk'; margin:10px 0 0; color:var(--ink); }
+
+    .choices { display:grid; gap:10px; }
+    .choice { display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:var(--surface); border:1px solid var(--line); color:var(--ink);
+      border-radius:14px; padding:14px; font:500 1rem/1.35 Inter; cursor:pointer; transition:transform .08s, border-color .15s, background .15s; }
+    .choice:active { transform:scale(.985); }
+    .choice .badge { flex:none; width:30px; height:30px; border-radius:9px; display:grid; place-items:center; font:700 .95rem 'Space Grotesk'; background:var(--surface-soft); border:1px solid var(--line-strong); color:var(--muted); }
+    .choice.correct { border-color:var(--good); background:rgba(61,220,151,.12); }
+    .choice.correct .badge { background:var(--good); color:#06281b; border-color:var(--good); }
+    .choice.wrong { border-color:var(--bad); background:rgba(255,90,79,.12); }
+    .choice.wrong .badge { background:var(--bad); color:#2a0a08; border-color:var(--bad); }
+    .choice[disabled] { cursor:default; }
+
+    .explain { margin-top:14px; background:var(--surface-soft); border:1px solid var(--line-strong); border-left:4px solid var(--study); border-radius:12px; padding:13px 14px; }
+    .explain .head { font:700 .92rem Inter; margin-bottom:6px; }
+    .explain .head.ok { color:var(--good); } .explain .head.no { color:var(--bad); }
+    .explain .body { font:500 .92rem/1.5 Inter; color:var(--ink); }
+    .explain .src { margin-top:9px; font:600 .76rem Inter; color:var(--study); }
+
+    .next-wrap { margin-top:16px; }
+    .src-foot { text-align:center; margin-top:14px; font:500 .78rem Inter; color:var(--muted); }
+    .hidden { display:none !important; }
+    .toast { position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%); z-index:60;
+      background:var(--surface); border:1px solid var(--line-strong); color:var(--ink); font:600 .9rem Inter; padding:12px 16px; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.4); display:none; }
+    .toast.show { display:block; animation:tin .3s ease; }
+    @keyframes tin { from { opacity:0; transform:translate(-50%,8px); } to { opacity:1; transform:translateX(-50%); } }
+  </style>
+</head>
+<body>
+  <header class="app-bar">
+    <a class="back" href="../index.html" aria-label="Back">‹</a>
+    <div><div class="title">Fire Sprinkler Study</div><div class="sub">Learn the standard, at your own pace</div></div>
+  </header>
+
+  <main class="s-wrap">
+    <!-- START -->
+    <section id="screen-start">
+      <div class="hero">
+        <div class="ic">📚</div>
+        <h1>Fire Sprinkler <span class="grad">Study</span></h1>
+        <p>Multiple-choice questions to help you learn how the standard is organized and where to find what. No timer, no limit — study as long as you like.</p>
+        <span class="src-badge">📘 Based on <span id="srcName">NFPA 13, 2025 edition</span></span>
+      </div>
+
+      <div class="picker">
+        <label for="topicSelect">Focus area</label>
+        <select id="topicSelect"></select>
+        <div class="count" id="topicCount">—</div>
+      </div>
+
+      <button class="btn primary" id="startBtn">▶ Start studying</button>
+
+      <div class="map" id="chapMap">
+        <button id="chapMapToggle">🗺 Chapter map (2025) <span id="chapMapChevron">▾</span></button>
+        <div class="body" id="chapMapBody"></div>
+      </div>
+    </section>
+
+    <!-- STUDY -->
+    <section id="screen-study" class="hidden">
+      <div class="hud">
+        <div class="pill"><div class="k">Seen</div><div class="v" id="seenVal">0</div></div>
+        <div class="pill correct"><div class="k">Correct</div><div class="v" id="correctVal">0</div></div>
+        <div class="pill streak"><div class="k">Streak</div><div class="v" id="streakVal">0</div></div>
+      </div>
+
+      <div class="qcard">
+        <div class="tag" id="qTag">Study</div>
+        <h2 id="qText">—</h2>
+      </div>
+      <div class="choices" id="choices"></div>
+
+      <div class="explain hidden" id="explain">
+        <div class="head" id="explainHead"></div>
+        <div class="body" id="explainBody"></div>
+        <div class="src" id="explainSrc"></div>
+      </div>
+
+      <div class="next-wrap hidden" id="nextWrap"><button class="btn primary" id="nextBtn">Next question →</button></div>
+      <div class="src-foot">Source: <span id="srcFoot">NFPA 13, 2025 edition</span> · <a href="#" id="changeTopic" style="color:var(--study)">change focus area</a></div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="./nfpa-study-questions.js"></script>
+  <script>
+  (function () {
+    "use strict";
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("../sw.js").catch(() => {});
+
+    var $ = function (id) { return document.getElementById(id); };
+    var QS = window.NFPA_STUDY_QUESTIONS || [];
+    var CH = window.NFPA_STUDY_CHAPTERS || [];
+    var SRC = window.NFPA_STUDY_SOURCE || "NFPA 13, 2025 edition";
+    var TOPICS = ["All topics", "General", "Water & Piping", "Components & Systems", "Sprinklers", "Storage", "Plans & Acceptance"];
+
+    $("srcName").textContent = SRC; $("srcFoot").textContent = SRC;
+
+    function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" })[c]; }); }
+    function shuffle(a) { a = a.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+
+    // topic dropdown
+    $("topicSelect").innerHTML = TOPICS.map(function (t) {
+      var n = t === "All topics" ? QS.length : QS.filter(function (q) { return q.topic === t; }).length;
+      return '<option value="' + esc(t) + '">' + esc(t) + ' (' + n + ')</option>';
+    }).join("");
+    function updateCount() {
+      var t = $("topicSelect").value;
+      var n = t === "All topics" ? QS.length : QS.filter(function (q) { return q.topic === t; }).length;
+      $("topicCount").textContent = n + " question" + (n === 1 ? "" : "s") + " in this focus area";
+    }
+    $("topicSelect").addEventListener("change", updateCount);
+    updateCount();
+
+    // chapter map
+    $("chapMapBody").innerHTML = CH.map(function (c) {
+      return '<div class="chap"><span class="num">' + c.n + '</span><span class="ttl">' + esc(c.t) + '</span></div>';
+    }).join("");
+    $("chapMapToggle").onclick = function () {
+      var m = $("chapMap"); m.classList.toggle("open");
+      $("chapMapChevron").textContent = m.classList.contains("open") ? "▴" : "▾";
+    };
+
+    // ---- study state ----
+    var deck = [], ptr = 0, cur = null, seen = 0, correct = 0, streak = 0, locked = false;
+    var letters = ["A", "B", "C", "D"];
+
+    function show(name) {
+      $("screen-start").classList.add("hidden");
+      $("screen-study").classList.add("hidden");
+      $("screen-" + name).classList.remove("hidden");
+      window.scrollTo(0, 0);
+    }
+
+    function buildDeck() {
+      var t = $("topicSelect").value;
+      var pool = t === "All topics" ? QS : QS.filter(function (q) { return q.topic === t; });
+      deck = shuffle(pool); ptr = 0;
+    }
+
+    function startStudy() {
+      buildDeck();
+      seen = 0; correct = 0; streak = 0;
+      $("seenVal").textContent = "0"; $("correctVal").textContent = "0"; $("streakVal").textContent = "0";
+      show("study");
+      nextQuestion();
+    }
+
+    function nextQuestion() {
+      if (ptr >= deck.length) { buildDeck(); toast("Looped through all of them — reshuffling 🔄"); }
+      cur = deck[ptr++];
+      locked = false;
+      $("qTag").textContent = cur.topic || "Study";
+      $("qText").textContent = cur.q;
+      $("explain").classList.add("hidden");
+      $("nextWrap").classList.add("hidden");
+      $("choices").innerHTML = cur.c.map(function (txt, i) {
+        return '<button class="choice" data-i="' + i + '"><span class="badge">' + letters[i] + '</span><span>' + esc(txt) + '</span></button>';
+      }).join("");
+      [].forEach.call($("choices").children, function (b) { b.onclick = function () { pick(parseInt(b.dataset.i, 10)); }; });
+    }
+
+    function pick(choice) {
+      if (locked) return;
+      locked = true;
+      var ok = choice === cur.a;
+      seen++;
+      [].forEach.call($("choices").children, function (b) {
+        var i = parseInt(b.dataset.i, 10);
+        b.disabled = true;
+        if (i === cur.a) b.classList.add("correct");
+        else if (i === choice) b.classList.add("wrong");
+      });
+      if (ok) { correct++; streak++; } else { streak = 0; }
+      $("seenVal").textContent = seen;
+      $("correctVal").textContent = correct;
+      $("streakVal").textContent = streak;
+      $("explainHead").className = "head " + (ok ? "ok" : "no");
+      $("explainHead").textContent = ok ? "✓ Correct" : "✗ Correct answer: " + letters[cur.a];
+      $("explainBody").textContent = cur.why || "";
+      $("explainSrc").textContent = "📘 " + SRC + (cur.ref ? " · " + cur.ref : "");
+      $("explain").classList.remove("hidden");
+      $("nextWrap").classList.remove("hidden");
+    }
+
+    var toastTimer = null;
+    function toast(msg) {
+      var t = $("toast"); t.textContent = msg; t.classList.add("show");
+      clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove("show"); }, 2200);
+    }
+
+    $("startBtn").onclick = startStudy;
+    $("nextBtn").onclick = nextQuestion;
+    $("changeTopic").onclick = function (e) { e.preventDefault(); show("start"); };
+  })();
+  </script>
+</body>
+</html>
