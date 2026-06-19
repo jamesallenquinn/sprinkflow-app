@@ -1718,6 +1718,125 @@
     return candidates;
   }
 
+  // NFPA 13 (2025) Chapter 21 CMDA ceiling-only density/area for Group A plastic racks.
+  // Table 21.5.1.1 (Group A plastic in cartons, up to 25 ft) and Table 21.5.2 (exposed
+  // nonexpanded Group A). These replace the prior incorrect "25.9" figure references.
+  const CMDA_2025_GROUP_A_CARTON_RACK_ROWS = [
+    { sMin: 5, sMax: 10, clearMin: 0, clearMax: 5, clearMaxEx: true, ceilMax: 15, ceilMaxEx: true, density: 0.30 },
+    { sMin: 5, sMax: 10, clearMin: 5, clearMax: 10, ceilMax: 20, density: 0.45 },
+    { sMin: 10, sMinEx: true, sMax: 15, clearMin: 5, clearMax: 10, ceilMax: 22, density: 0.45 },
+    { sMin: 10, sMinEx: true, sMax: 15, clearMin: 0, clearMax: 10, ceilMax: 25, density: 0.60 },
+    { sMin: 15, sMinEx: true, sMax: 20, clearMin: 0, clearMax: 5, clearMaxEx: true, ceilMax: 25, ceilMaxEx: true, density: 0.60, footnotes: ["a"] },
+    { sMin: 15, sMinEx: true, sMax: 20, clearMin: 5, clearMax: 10, ceilMax: 27, density: 0.60 },
+    { sMin: 20, sMinEx: true, sMax: 25, clearMin: 0, clearMax: 10, ceilMax: 30, density: 0.80, footnotes: ["b", "c"] },
+    { sMin: 20, sMinEx: true, sMax: 25, clearMin: 5, clearMax: 10, ceilMax: 35, density: null, seeChapter25: true },
+  ];
+  const CMDA_2025_GROUP_A_TABLE_FOOTNOTES = {
+    a: "Table 21.5.1.1 note a: for single- and double-row racks only.",
+    b: "Table 21.5.1.1 note b: ceiling-only protection is not permitted for this configuration except where K-16.8 (K-240) storage spray sprinklers are installed.",
+    c: "Table 21.5.1.1 note c: for dry systems the operating area increases to 4500 ft2 (420 m2).",
+  };
+  const CMDA_2025_EXPOSED_NONEXP_GROUP_A_ROWS = [
+    { sMin: 0, sMax: 10, clearMin: 0, clearMax: 999, ceilMax: 20, density: 0.80, area: 2500 },
+  ];
+
+  function cmda2025RowApplies(row, storage, clearance, ceiling) {
+    const sOk = (row.sMinEx ? storage > row.sMin : storage >= row.sMin) && storage <= row.sMax;
+    const cOk = clearance >= (row.clearMin || 0) && (row.clearMaxEx ? clearance < row.clearMax : clearance <= row.clearMax);
+    const ceilOk = row.ceilMaxEx ? ceiling < row.ceilMax : ceiling <= row.ceilMax;
+    return sOk && cOk && ceilOk;
+  }
+
+  function buildGeneratedCmda2025GroupAPlasticRackCeilingCandidates(inputs) {
+    if (!is2025Edition(inputs) || inputs.systemType !== "CMDA") return [];
+    if (!["Single-Row Rack", "Double-Row Rack", "Multiple-Row Rack"].includes(inputs.arrangement)) return [];
+    const isCarton = inputs.commodity === "Cartoned Group A";
+    const isExposed = inputs.commodity === "Exposed Nonexpanded Group A";
+    if (!isCarton && !isExposed) return [];
+
+    const clearance = inputs.ceilingHeight - inputs.storageHeight;
+    const candidates = [];
+
+    if (isCarton) {
+      for (const row of CMDA_2025_GROUP_A_CARTON_RACK_ROWS) {
+        if (row.footnotes && row.footnotes.includes("a") && inputs.arrangement === "Multiple-Row Rack") continue;
+        if (!cmda2025RowApplies(row, inputs.storageHeight, clearance, inputs.ceilingHeight)) continue;
+        if (row.seeChapter25 || row.density == null) {
+          candidates.push({
+            id: `generated-2025-cmda-2151-seeCh25-${inputs.arrangement}-${row.ceilMax}`,
+            name: "Table 21.5.1.1 - refers to Chapter 25 for in-rack",
+            basis: "Ceiling-only density not tabulated for this storage/clearance; in-rack protection per Chapter 25 is required",
+            completeDesign: false,
+            sprinklerDemand: null,
+            hoseAllowance: null,
+            inRackDemand: 0,
+            total: null,
+            source: "Table 21.5.1.1 / 21.5.1.4 / Chapter 25",
+            tableTitle: "Table 21.5.1.1",
+            confidence: "table-derived",
+            notes: ["NFPA 13 2025 Table 21.5.1.1 (Group A plastic in cartons, racks)", "This storage/clearance row directs you to Chapter 25 in-rack protection", "Hose and total depend on the selected Chapter 25 option"],
+          });
+          continue;
+        }
+        const area = 2000;
+        const sprinklerDemand = row.density * area;
+        const { hoseAllowance, duration } = getHoseAllowanceForCmdaArea(area);
+        const notesFoot = (row.footnotes || []).map((f) => CMDA_2025_GROUP_A_TABLE_FOOTNOTES[f]).filter(Boolean);
+        candidates.push({
+          id: `generated-2025-cmda-2151-${inputs.arrangement}-s${row.sMax}-c${row.ceilMax}-d${row.density}`,
+          name: `Table 21.5.1.1 CMDA ceiling-only ${formatNumber(row.density, 2)} gpm/ft2`,
+          basis: `${formatNumber(row.density, 2)} gpm/ft2 over ${area} ft2 ceiling-only (no in-rack)`,
+          sprinklerDemand,
+          hoseAllowance,
+          inRackDemand: 0,
+          total: sprinklerDemand + hoseAllowance,
+          source: "Table 21.5.1.1 / 21.5.1.2 / 21.5.1.4 / 20.15.2.6",
+          tableTitle: "Table 21.5.1.1",
+          confidence: "table-derived",
+          notes: [
+            "NFPA 13 2025 Table 21.5.1.1 (Group A plastic commodities in cartons, single/double/multiple-row racks, up to 25 ft)",
+            "Ceiling-only control mode density/area",
+            `Storage up to ${row.sMax} ft; ceiling up to ${row.ceilMax} ft; clearance ${row.clearMaxEx ? "under" : "up to"} ${row.clearMax} ft`,
+            "Linear interpolation of density/area between storage heights with the same clearance is permitted (21.5.1.2); no interpolation between clearance (21.5.1.3)",
+            ...notesFoot,
+            `Hose duration ${duration} min`,
+          ],
+          preview: { commodity: inputs.commodity, arrangement: inputs.arrangement, density: row.density, area },
+        });
+      }
+    }
+
+    if (isExposed) {
+      for (const row of CMDA_2025_EXPOSED_NONEXP_GROUP_A_ROWS) {
+        if (!cmda2025RowApplies(row, inputs.storageHeight, clearance, inputs.ceilingHeight)) continue;
+        const area = row.area;
+        const sprinklerDemand = row.density * area;
+        const { hoseAllowance, duration } = getHoseAllowanceForCmdaArea(area);
+        candidates.push({
+          id: `generated-2025-cmda-2152-${inputs.arrangement}-s${row.sMax}-c${row.ceilMax}`,
+          name: `Table 21.5.2 CMDA ceiling-only ${formatNumber(row.density, 2)} gpm/ft2`,
+          basis: `${formatNumber(row.density, 2)} gpm/ft2 over ${area} ft2 ceiling-only (no in-rack)`,
+          sprinklerDemand,
+          hoseAllowance,
+          inRackDemand: 0,
+          total: sprinklerDemand + hoseAllowance,
+          source: "Table 21.5.2 / 20.15.2.6",
+          tableTitle: "Table 21.5.2",
+          confidence: "table-derived",
+          notes: [
+            "NFPA 13 2025 Table 21.5.2 (Exposed nonexpanded Group A plastics)",
+            "Ceiling-only control mode density/area",
+            `Storage up to ${row.sMax} ft; ceiling up to ${row.ceilMax} ft`,
+            "Confirm against the full Table 21.5.2 for taller storage rows not yet encoded",
+            `Hose duration ${duration} min`,
+          ],
+          preview: { commodity: inputs.commodity, arrangement: inputs.arrangement, density: row.density, area },
+        });
+      }
+    }
+    return candidates;
+  }
+
   function buildGeneratedCmdaClassRack2022TableCandidates(inputs) {
     if (!uses2022StorageTables(inputs.edition) || inputs.systemType !== "CMDA") return [];
     if (!["Single-Row Rack", "Double-Row Rack", "Multiple-Row Rack"].includes(inputs.arrangement)) return [];
@@ -4653,17 +4772,21 @@
   }
 
   function buildCandidatesForSystem(inputs) {
+    const ga2025CeilingRows = buildGeneratedCmda2025GroupAPlasticRackCeilingCandidates(inputs);
     const generatedSpecialRows = buildGeneratedSpecialStorageCandidates(inputs);
     if (generatedSpecialRows.length) {
       return generatedSpecialRows.sort(compareCandidates);
     }
     const generated25_6IndependentInRackRows = buildGenerated25_6IndependentInRackCandidates(inputs);
     if (generated25_6IndependentInRackRows.length) {
-      return generated25_6IndependentInRackRows.sort(compareCandidates);
+      return [...ga2025CeilingRows, ...generated25_6IndependentInRackRows].sort(compareCandidates);
     }
     const generatedAlternativeInRackRows = buildGeneratedAlternativeInRack2019Candidates(inputs);
     if (generatedAlternativeInRackRows.length) {
-      return generatedAlternativeInRackRows.sort(compareCandidates);
+      return [...ga2025CeilingRows, ...generatedAlternativeInRackRows].sort(compareCandidates);
+    }
+    if (ga2025CeilingRows.length) {
+      return ga2025CeilingRows.sort(compareCandidates);
     }
     const generatedCmdaClassRack2022TableRows = buildGeneratedCmdaClassRack2022TableCandidates(inputs);
     if (generatedCmdaClassRack2022TableRows.length) {
