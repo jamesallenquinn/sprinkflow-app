@@ -345,7 +345,7 @@
     var mode = "main", lightNum = 0, lightCleared = 0, lightDead = false;
     var score = 0, streak = 0, bestStreak = 0, correctCount = 0;
     var locked = false, tInt = null, tRemain = 0, tDur = PER_Q, fiftyUsed = false, skipUsed = false, pendingScore = null;
-    var LIGHT_STEP = 0.1, LIGHT_FLOOR = 2.0;                       // lightning: -0.1 s/question, floored at 2 s
+    var LIGHT_STEP = 0.2, LIGHT_FLOOR = 2.0;                       // lightning: -0.2 s/question, floored at 2 s
 
     function shuffle(a) { a = a.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
 
@@ -460,7 +460,7 @@
         streak++; if (streak > bestStreak) bestStreak = streak;
         var base = isLight ? 250 : 100;
         var rate = isLight ? 25 : 10;
-        var capSteps = isLight ? 11 : 5;                          // streak mult caps ×3.75 lightning / ×2.25 main
+        var capSteps = isLight ? 7 : 5;                           // streak mult caps ×2.75 lightning / ×2.25 main
         var timeBonus = Math.round(timeLeft * rate);
         var mult = 1 + Math.min(streak - 1, capSteps) * 0.25;
         var gained = Math.round((base + timeBonus) * mult);
@@ -554,7 +554,7 @@
     els.toBoardBtn.onclick = function () { show("start"); loadLeaderboard("lbList"); };
     els.postBtn.onclick = function () { if (session && session.token) doPost(); else openModal(); };
     els.howBtn.onclick = function () {
-      alert("How it works:\n\nMAIN ROUND (12 questions, 15s each)\n• 100 points per correct answer\n• + time bonus for answering fast\n• Streak multiplier up to ×2.25\n\n⚡ LIGHTNING ROUND (after question 12)\n• Endless sudden death — one wrong answer or timeout ends the game\n• Each question has 0.1s LESS time than the last\n• Worth more: 250 base + bigger time bonus, streak multiplier up to ×3.75\n\nLifelines (once each per game) — save them for lightning!\n• 50:50 removes two wrong answers\n• Skip jumps a question (resets your streak)\n\nSign in with your SprinkFlow account to post your best score to the global leaderboard.");
+      alert("How it works:\n\nMAIN ROUND (12 questions, 15s each)\n• 100 points per correct answer\n• + time bonus for answering fast\n• Streak multiplier up to ×2.25\n\n⚡ LIGHTNING ROUND (after question 12)\n• Endless sudden death — one wrong answer or timeout ends the game\n• Each question has 0.2s LESS time than the last\n• Worth more: 250 base + bigger time bonus, streak multiplier up to ×2.75\n\nLifelines (once each per game) — save them for lightning!\n• 50:50 removes two wrong answers\n• Skip jumps a question (resets your streak)\n\nSign in with your SprinkFlow account to post your best score to the global leaderboard.");
     };
 
     // ---- init ----
