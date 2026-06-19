@@ -1838,6 +1838,65 @@
     return candidates;
   }
 
+  // NFPA 13 (2019) Chapter 21 CMDA ceiling-only density/area for Group A plastic racks (Table 21.5.1.1).
+  // 2019's table DIFFERS from 2022/2025: different clearance bands and footnotes (a=requires K-11.2+,
+  // b=single/double-row only, c=requires K-16.8; no "dry->4500" note). 2019 has no Table 21.5.2.
+  const CMDA_2019_GROUP_A_CARTON_RACK_ROWS = [
+    { sMin: 5, sMax: 10, clearMin: 0, clearMax: 5, clearMaxEx: true, ceilMax: 15, ceilMaxEx: true, density: 0.30 },
+    { sMin: 5, sMax: 10, clearMin: 5, clearMax: 10, ceilMax: 20, density: 0.45 },
+    { sMin: 10, sMinEx: true, sMax: 15, clearMin: 5, clearMax: 999, ceilMax: 22, density: 0.45 },
+    { sMin: 10, sMinEx: true, sMax: 15, clearMin: 0, clearMax: 10, ceilMax: 25, density: 0.60 },
+    { sMin: 15, sMinEx: true, sMax: 20, clearMin: 0, clearMax: 5, clearMaxEx: true, ceilMax: 25, ceilMaxEx: true, density: 0.60, footnotes: ["a", "b"] },
+    { sMin: 15, sMinEx: true, sMax: 20, clearMin: 5, clearMax: 10, ceilMax: 27, density: 0.60, footnotes: ["a"] },
+    { sMin: 20, sMinEx: true, sMax: 25, clearMin: 0, clearMax: 5, clearMaxEx: true, ceilMax: 30, density: 0.80, footnotes: ["c"] },
+    // 20 ft / 5-10 clearance / 30 ft ceiling and 25 ft / 5-10 / 35 ft rows are blank (ceiling-only not
+    // tabulated) -> covered by the in-rack Figure 25.9.x options, so no ceiling-only candidate is emitted.
+  ];
+  const CMDA_2019_GROUP_A_TABLE_FOOTNOTES = {
+    a: "Table 21.5.1.1 (2019) note a: ceiling-only protection is not permitted for this configuration except where K-11.2 or larger spray sprinklers listed for storage use are installed.",
+    b: "Table 21.5.1.1 (2019) note b: for the protection of single- and double-row racks only.",
+    c: "Table 21.5.1.1 (2019) note c: ceiling-only protection is not permitted for this configuration except where K-16.8 spray sprinklers listed for storage use are installed.",
+  };
+
+  function buildGeneratedCmda2019GroupACartonRackCeilingCandidates(inputs) {
+    if (inputs.edition !== "2019" || inputs.systemType !== "CMDA") return [];
+    if (!["Single-Row Rack", "Double-Row Rack", "Multiple-Row Rack"].includes(inputs.arrangement)) return [];
+    if (inputs.commodity !== "Cartoned Group A") return [];
+
+    const clearance = inputs.ceilingHeight - inputs.storageHeight;
+    const candidates = [];
+    for (const row of CMDA_2019_GROUP_A_CARTON_RACK_ROWS) {
+      // 2019 footnote b restricts the row to single- and double-row racks
+      if (row.footnotes && row.footnotes.includes("b") && inputs.arrangement === "Multiple-Row Rack") continue;
+      if (!cmda2025RowApplies(row, inputs.storageHeight, clearance, inputs.ceilingHeight)) continue;
+      const area = 2000;
+      const sprinklerDemand = row.density * area;
+      const { hoseAllowance, duration } = getHoseAllowanceForCmdaArea(area);
+      const notesFoot = (row.footnotes || []).map((f) => CMDA_2019_GROUP_A_TABLE_FOOTNOTES[f]).filter(Boolean);
+      candidates.push({
+        id: `generated-2019-cmda-2151-${inputs.arrangement}-s${row.sMax}-c${row.ceilMax}-d${row.density}`,
+        name: `Table 21.5.1.1 CMDA ceiling-only ${formatNumber(row.density, 2)} gpm/ft2`,
+        basis: `${formatNumber(row.density, 2)} gpm/ft2 over ${area} ft2 ceiling-only (no in-rack)`,
+        sprinklerDemand,
+        hoseAllowance,
+        inRackDemand: 0,
+        total: sprinklerDemand + hoseAllowance,
+        source: "Table 21.5.1.1 / 21.5.1.2 / 21.5.1.4 / 20.12.2.6",
+        tableTitle: "Table 21.5.1.1",
+        confidence: "table-derived",
+        notes: [
+          "NFPA 13 2019 Table 21.5.1.1 (Group A plastic commodities in cartons, single/double/multiple-row racks, up to 25 ft)",
+          "Ceiling-only control mode density/area",
+          `Storage up to ${row.sMax} ft; ceiling up to ${row.ceilMax} ft; clearance ${row.clearMaxEx ? "under" : "up to"} ${row.clearMax === 999 ? "5 ft or greater" : row.clearMax + " ft"}`,
+          ...notesFoot,
+          `Hose duration ${duration} min`,
+        ],
+        preview: { commodity: inputs.commodity, arrangement: inputs.arrangement, density: row.density, area },
+      });
+    }
+    return candidates;
+  }
+
   function buildGeneratedCmdaClassRack2022TableCandidates(inputs) {
     if (!uses2022StorageTables(inputs.edition) || inputs.systemType !== "CMDA") return [];
     if (!["Single-Row Rack", "Double-Row Rack", "Multiple-Row Rack"].includes(inputs.arrangement)) return [];
@@ -4803,9 +4862,10 @@
     if (generatedCmdaClassRackCurveRows.length) {
       return generatedCmdaClassRackCurveRows.sort(compareCandidates);
     }
+    const ga2019CeilingRows = buildGeneratedCmda2019GroupACartonRackCeilingCandidates(inputs);
     const generatedCmdaGroupARackRows = buildGeneratedCmdaGroupARackCandidates(inputs);
-    if (generatedCmdaGroupARackRows.length) {
-      return generatedCmdaGroupARackRows.sort(compareCandidates);
+    if (generatedCmdaGroupARackRows.length || ga2019CeilingRows.length) {
+      return [...ga2019CeilingRows, ...generatedCmdaGroupARackRows].sort(compareCandidates);
     }
     const generatedCmdaClassSolidPile2022TableRows = buildGeneratedCmdaClassSolidPile2022TableCandidates(inputs);
     if (generatedCmdaClassSolidPile2022TableRows.length) {
