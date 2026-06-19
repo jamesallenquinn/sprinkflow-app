@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>NFPA 13 Speed Round — SprinkFlow</title>
+  <meta name="description" content="A fast NFPA 13 trivia game for fire sprinkler nerds. Beat the clock, build a streak, climb the global leaderboard." />
+  <meta name="theme-color" content="#0d1116" />
+  <link rel="manifest" href="../manifest.webmanifest" />
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="../assets/logo.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+  <style>
+    :root { --good:#3ddc97; --bad:#ff5a4f; }
+    body { overflow-x:hidden; }
+    .q-wrap { max-width:560px; margin:0 auto; padding:0 14px calc(28px + env(safe-area-inset-bottom,0px)); }
+
+    /* HUD */
+    .hud { display:flex; align-items:center; gap:10px; margin:6px 0 14px; }
+    .hud .pill { flex:1; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:8px 10px; text-align:center; }
+    .hud .pill .k { font:600 0.62rem/1 Inter; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+    .hud .pill .v { font:700 1.15rem/1.1 'Space Grotesk'; margin-top:4px; color:var(--ink); }
+    .hud .pill.score .v { color:var(--accent); }
+    .hud .pill.streak .v { color:var(--brand); }
+    .streak-fire { display:inline-block; transition:transform .2s; }
+    .streak-fire.pop { transform:scale(1.5); }
+
+    /* timer */
+    .timer { height:8px; border-radius:99px; background:var(--surface-soft); overflow:hidden; margin-bottom:16px; }
+    .timer > i { display:block; height:100%; width:100%; background:var(--grad-fire); transition:width .25s linear; }
+    .timer.warn > i { background:linear-gradient(120deg,#ff5a2f,#ff5a4f); }
+
+    /* progress dots */
+    .dots { display:flex; gap:5px; justify-content:center; margin-bottom:14px; flex-wrap:wrap; }
+    .dots i { width:8px; height:8px; border-radius:99px; background:var(--line); }
+    .dots i.on { background:var(--accent); }
+    .dots i.cur { background:var(--ink); transform:scale(1.3); }
+
+    /* question card */
+    .qcard { background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:20px 18px; margin-bottom:16px; box-shadow:0 8px 30px rgba(0,0,0,.25); }
+    .qcard .tag { font:600 0.66rem/1 Inter; letter-spacing:.08em; text-transform:uppercase; color:var(--water); }
+    .qcard h2 { font:600 1.22rem/1.35 'Space Grotesk'; margin:10px 0 0; color:var(--ink); }
+
+    /* choices */
+    .choices { display:grid; gap:10px; }
+    .choice { display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:var(--surface); border:1px solid var(--line); color:var(--ink);
+      border-radius:14px; padding:14px; font:500 1rem/1.3 Inter; cursor:pointer; transition:transform .08s, border-color .15s, background .15s; }
+    .choice:active { transform:scale(.985); }
+    .choice .badge { flex:none; width:30px; height:30px; border-radius:9px; display:grid; place-items:center; font:700 .95rem 'Space Grotesk'; background:var(--surface-soft); border:1px solid var(--line-strong); color:var(--muted); }
+    .choice.correct { border-color:var(--good); background:rgba(61,220,151,.12); }
+    .choice.correct .badge { background:var(--good); color:#06281b; border-color:var(--good); }
+    .choice.wrong { border-color:var(--bad); background:rgba(255,90,79,.12); }
+    .choice.wrong .badge { background:var(--bad); color:#2a0a08; border-color:var(--bad); }
+    .choice.dim { opacity:.4; }
+    .choice[disabled] { cursor:default; }
+
+    /* lifelines + reference */
+    .tools-row { display:flex; gap:10px; margin:14px 0 0; }
+    .lifeline { flex:1; border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:12px; padding:11px; font:600 .9rem Inter; cursor:pointer; }
+    .lifeline:disabled { opacity:.4; cursor:default; }
+    .ref { margin-top:14px; font:500 .85rem/1.4 Inter; color:var(--muted); background:var(--surface-soft); border:1px dashed var(--line-strong); border-radius:12px; padding:11px 12px; }
+    .ref b { color:var(--ink); }
+
+    /* big buttons */
+    .btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; border:0; border-radius:14px; padding:16px; font:700 1.05rem 'Space Grotesk'; cursor:pointer; }
+    .btn.primary { background:var(--grad-fire); color:#1a0d06; }
+    .btn.ghost { background:var(--surface); color:var(--ink); border:1px solid var(--line); font-weight:600; }
+    .btn + .btn { margin-top:10px; }
+    .next-wrap { margin-top:16px; }
+
+    /* hero / start */
+    .hero { text-align:center; padding:26px 6px 6px; }
+    .hero .flame { font-size:54px; line-height:1; filter:drop-shadow(0 6px 18px rgba(255,90,47,.45)); }
+    .hero h1 { font:700 1.85rem/1.1 'Space Grotesk'; margin:14px 0 6px; }
+    .hero h1 .grad { background:var(--grad-fire); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+    .hero p { color:var(--muted); margin:0 auto 18px; max-width:42ch; }
+    .who { display:flex; align-items:center; justify-content:center; gap:8px; font:500 .9rem Inter; color:var(--muted); margin-top:14px; min-height:22px; }
+    .who b { color:var(--accent); }
+    .signout { background:none; border:0; color:var(--water); font:600 .85rem Inter; cursor:pointer; text-decoration:underline; }
+
+    /* results */
+    .result { text-align:center; padding:18px 6px; }
+    .result .score-big { font:700 3.4rem/1 'Space Grotesk'; background:var(--grad-fw); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+    .result .sub { color:var(--muted); margin:6px 0 2px; }
+    .stat-row { display:flex; gap:10px; margin:18px 0; }
+    .stat-row .s { flex:1; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:12px; }
+    .stat-row .s .k { font:600 .62rem Inter; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+    .stat-row .s .v { font:700 1.3rem 'Space Grotesk'; margin-top:4px; }
+    .rankmsg { font:600 1rem Inter; color:var(--ok); min-height:22px; margin-bottom:6px; }
+
+    /* leaderboard */
+    .lb { background:var(--surface); border:1px solid var(--line); border-radius:18px; overflow:hidden; margin-top:6px; }
+    .lb h3 { font:700 1rem 'Space Grotesk'; margin:0; padding:14px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px; }
+    .lb-row { display:flex; align-items:center; gap:12px; padding:11px 16px; border-bottom:1px solid var(--line); }
+    .lb-row:last-child { border-bottom:0; }
+    .lb-row .rank { width:26px; font:700 1rem 'Space Grotesk'; color:var(--muted); text-align:center; }
+    .lb-row .rank.g1 { color:#ffd24a; } .lb-row .rank.g2 { color:#cfd6dd; } .lb-row .rank.g3 { color:#e0915a; }
+    .lb-row .nm { flex:1; font:600 .98rem Inter; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .lb-row .sc { font:700 1.05rem 'Space Grotesk'; color:var(--accent); }
+    .lb-row.me { background:rgba(255,176,58,.10); }
+    .lb-empty { padding:22px 16px; text-align:center; color:var(--muted); }
+
+    /* modal */
+    .modal-bk { position:fixed; inset:0; background:rgba(5,8,11,.7); backdrop-filter:blur(3px); display:none; align-items:flex-end; justify-content:center; z-index:60; }
+    .modal-bk.show { display:flex; }
+    .modal { width:100%; max-width:460px; background:var(--surface); border:1px solid var(--line); border-radius:22px 22px 0 0; padding:22px 18px calc(22px + env(safe-area-inset-bottom,0px)); }
+    @media(min-width:520px){ .modal-bk{ align-items:center; } .modal{ border-radius:22px; } }
+    .modal h3 { font:700 1.25rem 'Space Grotesk'; margin:0 0 4px; }
+    .modal p { color:var(--muted); margin:0 0 16px; font-size:.92rem; }
+    .field { margin-bottom:12px; }
+    .field label { display:block; font:600 .78rem Inter; color:var(--muted); margin-bottom:6px; }
+    .field input { width:100%; box-sizing:border-box; background:var(--bg); border:1px solid var(--line-strong); border-radius:12px; padding:13px; color:var(--ink); font:500 1rem Inter; }
+    .field input:focus { outline:2px solid var(--accent); outline-offset:0; }
+    .modal .err { color:var(--bad); font:500 .85rem Inter; min-height:20px; margin:2px 0 10px; }
+    .modal .muted-link { text-align:center; margin-top:14px; }
+    .modal .muted-link button { background:none; border:0; color:var(--muted); font:500 .85rem Inter; cursor:pointer; }
+    .hidden { display:none !important; }
+    .spin { display:inline-block; width:16px; height:16px; border:2px solid rgba(0,0,0,.25); border-top-color:#1a0d06; border-radius:50%; animation:sp .7s linear infinite; }
+    @keyframes sp { to { transform:rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <header class="app-bar">
+    <a class="back" href="../index.html" aria-label="Back">‹</a>
+    <div><div class="title">NFPA 13 Speed Round</div><div class="sub">Beat the clock. Climb the board.</div></div>
+  </header>
+
+  <main class="q-wrap">
+    <!-- START -->
+    <section id="screen-start">
+      <div class="hero">
+        <div class="flame">🔥</div>
+        <h1>NFPA 13 <span class="grad">Speed Round</span></h1>
+        <p>12 questions. 15 seconds each. Build a streak for bonus points and see if you can top the global leaderboard of sprinkler nerds.</p>
+        <button class="btn primary" id="playBtn">▶ Play</button>
+        <button class="btn ghost" id="howBtn" style="margin-top:10px">How scoring works</button>
+        <div class="who" id="whoLine">Not signed in — <span style="margin-left:4px"></span></div>
+      </div>
+
+      <div class="lb" id="lbBox" style="margin-top:20px">
+        <h3>🏆 Global Leaderboard</h3>
+        <div id="lbList"><div class="lb-empty">Loading…</div></div>
+      </div>
+    </section>
+
+    <!-- GAME -->
+    <section id="screen-game" class="hidden">
+      <div class="hud">
+        <div class="pill"><div class="k">Question</div><div class="v"><span id="qNum">1</span>/12</div></div>
+        <div class="pill score"><div class="k">Score</div><div class="v" id="scoreVal">0</div></div>
+        <div class="pill streak"><div class="k">Streak</div><div class="v"><span class="streak-fire" id="streakFire">🔥</span> <span id="streakVal">0</span></div></div>
+      </div>
+      <div class="timer" id="timerBar"><i id="timerFill"></i></div>
+      <div class="dots" id="dots"></div>
+
+      <div class="qcard">
+        <div class="tag" id="qTag">NFPA 13</div>
+        <h2 id="qText">—</h2>
+      </div>
+      <div class="choices" id="choices"></div>
+
+      <div class="tools-row">
+        <button class="lifeline" id="fiftyBtn">🎯 50:50</button>
+        <button class="lifeline" id="skipBtn">⏭ Skip</button>
+      </div>
+
+      <div class="ref hidden" id="refBox"></div>
+      <div class="next-wrap hidden" id="nextWrap"><button class="btn primary" id="nextBtn">Next →</button></div>
+    </section>
+
+    <!-- RESULT -->
+    <section id="screen-result" class="hidden">
+      <div class="result">
+        <div class="sub">Final score</div>
+        <div class="score-big" id="finalScore">0</div>
+        <div class="stat-row">
+          <div class="s"><div class="k">Correct</div><div class="v" id="finalCorrect" style="color:var(--good)">0/12</div></div>
+          <div class="s"><div class="k">Best streak</div><div class="v" id="finalStreak" style="color:var(--brand)">0</div></div>
+        </div>
+        <div class="rankmsg" id="rankMsg"></div>
+        <button class="btn primary" id="againBtn">↻ Play again</button>
+        <button class="btn ghost" id="postBtn" style="margin-top:10px">Sign in to post your score</button>
+        <button class="btn ghost" id="toBoardBtn" style="margin-top:10px">View leaderboard</button>
+      </div>
+      <div class="lb" id="lbBox2"><h3>🏆 Global Leaderboard</h3><div id="lbList2"><div class="lb-empty">Loading…</div></div></div>
+    </section>
+  </main>
+
+  <!-- SIGN-IN MODAL -->
+  <div class="modal-bk" id="modal">
+    <div class="modal">
+      <h3>Sign in to compete</h3>
+      <p>Use your SprinkFlow account. Your leaderboard name is shown publicly; your email is never shown.</p>
+      <form id="signinForm">
+        <div class="field"><label>SprinkFlow email</label><input id="emailInput" type="email" autocomplete="username" inputmode="email" placeholder="you@company.com" required /></div>
+        <div class="field"><label>Password</label><input id="passInput" type="password" autocomplete="current-password" placeholder="••••••••" required /></div>
+        <div class="field"><label>Leaderboard name (shown publicly)</label><input id="handleInput" type="text" maxlength="24" placeholder="e.g. SprinkNerd" /></div>
+        <div class="err" id="signinErr"></div>
+        <button class="btn primary" type="submit" id="signinSubmit">Sign in</button>
+      </form>
+      <div class="muted-link"><button id="modalClose">Maybe later</button></div>
+    </div>
+  </div>
+
+  <script src="./nfpa-quiz-questions.js"></script>
+  <script>
+  (function () {
+    "use strict";
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("../sw.js").catch(() => {});
+
+    // ---- Supabase (public anon key) ----
+    var SB_URL = "https://aebghirpjiwiergkafej.supabase.co";
+    var SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlYmdoaXJwaml3aWVyZ2thZmVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMjA0NTQsImV4cCI6MjA5NTg5NjQ1NH0.ogDc26YGo3AEAZZcPII_p3htPml4pjQa4vOyYAU1sSg";
+
+    var ROUND = 12, PER_Q = 15; // questions per round, seconds per question
+    var $ = function (id) { return document.getElementById(id); };
+    var els = {};
+    ["screen-start","screen-game","screen-result","playBtn","howBtn","whoLine","lbList","lbList2",
+     "qNum","scoreVal","streakVal","streakFire","timerBar","timerFill","dots","qTag","qText","choices",
+     "fiftyBtn","skipBtn","refBox","nextWrap","nextBtn","finalScore","finalCorrect","finalStreak",
+     "rankMsg","againBtn","postBtn","toBoardBtn","modal","signinForm","emailInput","passInput",
+     "handleInput","signinErr","signinSubmit","modalClose"].forEach(function (k) { els[k] = $(k); });
+
+    // ---- session (stored locally) ----
+    var session = null; // { token, userId, email }
+    try { session = JSON.parse(localStorage.getItem("nfpaQuizSession") || "null"); } catch (e) {}
+    function saveSession(s) { session = s; try { localStorage.setItem("nfpaQuizSession", JSON.stringify(s)); } catch (e) {} renderWho(); }
+    function clearSession() { session = null; try { localStorage.removeItem("nfpaQuizSession"); } catch (e) {} renderWho(); }
+    function getHandle() { return (localStorage.getItem("nfpaQuizHandle") || "").trim(); }
+    function setHandle(h) { try { localStorage.setItem("nfpaQuizHandle", (h || "").slice(0, 24)); } catch (e) {} }
+
+    function renderWho() {
+      if (session && session.email) {
+        var nm = getHandle() || session.email.split("@")[0];
+        els.whoLine.innerHTML = 'Signed in as <b>' + esc(nm) + '</b> &nbsp;<button class="signout" id="soBtn">sign out</button>';
+        var so = $("soBtn"); if (so) so.onclick = clearSession;
+        els.postBtn.textContent = "↑ Post score to global board";
+      } else {
+        els.whoLine.innerHTML = 'Not signed in &nbsp;<button class="signout" id="siBtn">sign in to compete</button>';
+        var si = $("siBtn"); if (si) si.onclick = openModal;
+        els.postBtn.textContent = "Sign in to post your score";
+      }
+    }
+    function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" })[c]; }); }
+
+    // ---- screens ----
+    function show(name) {
+      els["screen-start"].classList.add("hidden");
+      els["screen-game"].classList.add("hidden");
+      els["screen-result"].classList.add("hidden");
+      els["screen-" + name].classList.remove("hidden");
+      window.scrollTo(0, 0);
+    }
+
+    // ---- leaderboard ----
+    function loadLeaderboard(targetId) {
+      var target = $(targetId);
+      fetch(SB_URL + "/rest/v1/quiz_scores?select=display_name,best_score,games_played&order=best_score.desc&limit=20", {
+        headers: { apikey: SB_ANON, Authorization: "Bearer " + SB_ANON }
+      }).then(function (r) { return r.json(); }).then(function (rows) {
+        if (!Array.isArray(rows) || !rows.length) { target.innerHTML = '<div class="lb-empty">No scores yet. Be the first on the board! 🥇</div>'; return; }
+        var myName = (getHandle() || (session && session.email ? session.email.split("@")[0] : "")).toLowerCase();
+        target.innerHTML = rows.map(function (row, i) {
+          var rk = i + 1, g = rk <= 3 ? " g" + rk : "";
+          var medal = rk === 1 ? "🥇" : rk === 2 ? "🥈" : rk === 3 ? "🥉" : rk;
+          var me = myName && String(row.display_name).toLowerCase() === myName ? " me" : "";
+          return '<div class="lb-row' + me + '"><div class="rank' + g + '">' + medal + '</div>' +
+                 '<div class="nm">' + esc(row.display_name) + '</div>' +
+                 '<div class="sc">' + Number(row.best_score).toLocaleString() + '</div></div>';
+        }).join("");
+      }).catch(function () { target.innerHTML = '<div class="lb-empty">Could not load leaderboard (offline?).</div>'; });
+    }
+
+    function submitScore(score, onDone) {
+      if (!session || !session.token) { onDone(false, "not-signed-in"); return; }
+      var handle = getHandle() || session.email.split("@")[0];
+      fetch(SB_URL + "/rest/v1/rpc/submit_quiz_score", {
+        method: "POST",
+        headers: { apikey: SB_ANON, Authorization: "Bearer " + session.token, "Content-Type": "application/json" },
+        body: JSON.stringify({ p_display_name: handle, p_score: score })
+      }).then(function (r) {
+        if (r.status === 401 || r.status === 403) { clearSession(); onDone(false, "expired"); return; }
+        onDone(r.ok, r.ok ? "" : "error");
+      }).catch(function () { onDone(false, "offline"); });
+    }
+
+    // ---- sign-in modal ----
+    function openModal() { els.signinErr.textContent = ""; if (session && session.email) els.emailInput.value = session.email; els.handleInput.value = getHandle(); els.modal.classList.add("show"); }
+    function closeModal() { els.modal.classList.remove("show"); }
+    els.modalClose.onclick = closeModal;
+    els.modal.addEventListener("click", function (e) { if (e.target === els.modal) closeModal(); });
+
+    els.signinForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var email = els.emailInput.value.trim(), pass = els.passInput.value;
+      if (!email || !pass) return;
+      els.signinErr.textContent = "";
+      els.signinSubmit.disabled = true; els.signinSubmit.innerHTML = '<span class="spin"></span> Signing in…';
+      fetch(SB_URL + "/auth/v1/token?grant_type=password", {
+        method: "POST", headers: { apikey: SB_ANON, "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email, password: pass })
+      }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          if (!res.ok || !res.d.access_token) {
+            var msg = res.d && (res.d.error_description || res.d.msg || res.d.error) ? (res.d.error_description || res.d.msg || res.d.error) : "Sign-in failed. Check your email and password.";
+            if (/confirm/i.test(msg)) msg = "Please confirm your email first (check your inbox), then sign in.";
+            throw new Error(msg);
+          }
+          setHandle(els.handleInput.value.trim() || email.split("@")[0]);
+          saveSession({ token: res.d.access_token, userId: res.d.user && res.d.user.id, email: (res.d.user && res.d.user.email) || email });
+          closeModal();
+          // if we just finished a game, post immediately
+          if (pendingScore != null) doPost();
+        })
+        .catch(function (err) { els.signinErr.textContent = err.message || "Sign-in failed."; })
+        .then(function () { els.signinSubmit.disabled = false; els.signinSubmit.textContent = "Sign in"; });
+    });
+
+    // ---- game state ----
+    var deck = [], idx = 0, score = 0, streak = 0, bestStreak = 0, correctCount = 0;
+    var locked = false, tInt = null, tRemain = 0, fiftyUsed = false, skipUsed = false, pendingScore = null;
+
+    function shuffle(a) { a = a.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+
+    function startGame() {
+      var bank = (window.NFPA_QUIZ_QUESTIONS || []);
+      deck = shuffle(bank).slice(0, Math.min(ROUND, bank.length));
+      idx = 0; score = 0; streak = 0; bestStreak = 0; correctCount = 0; fiftyUsed = false; skipUsed = false; pendingScore = null;
+      els.scoreVal.textContent = "0"; els.streakVal.textContent = "0";
+      els.fiftyBtn.disabled = false; els.skipBtn.disabled = false;
+      buildDots();
+      show("game");
+      renderQ();
+    }
+
+    function buildDots() {
+      els.dots.innerHTML = deck.map(function (_, i) { return '<i data-i="' + i + '"></i>'; }).join("");
+    }
+    function paintDots() {
+      [].forEach.call(els.dots.children, function (d, i) {
+        d.className = i < idx ? "on" : (i === idx ? "cur" : "");
+      });
+    }
+
+    function renderQ() {
+      locked = false;
+      var q = deck[idx];
+      els.qNum.textContent = (idx + 1);
+      els.qTag.textContent = q.ref ? q.ref.split("—")[0].trim() : "NFPA 13";
+      els.qText.textContent = q.q;
+      els.refBox.classList.add("hidden"); els.nextWrap.classList.add("hidden");
+      els.fiftyBtn.disabled = fiftyUsed; els.skipBtn.disabled = skipUsed;
+      paintDots();
+      var letters = ["A", "B", "C", "D"];
+      els.choices.innerHTML = q.c.map(function (txt, i) {
+        return '<button class="choice" data-i="' + i + '"><span class="badge">' + letters[i] + '</span><span>' + esc(txt) + '</span></button>';
+      }).join("");
+      [].forEach.call(els.choices.children, function (b) { b.onclick = function () { pick(parseInt(b.dataset.i, 10)); }; });
+      startTimer();
+    }
+
+    function startTimer() {
+      tRemain = PER_Q;
+      els.timerBar.classList.remove("warn");
+      els.timerFill.style.width = "100%";
+      clearInterval(tInt);
+      var start = Date.now();
+      tInt = setInterval(function () {
+        var elapsed = (Date.now() - start) / 1000;
+        tRemain = Math.max(0, PER_Q - elapsed);
+        els.timerFill.style.width = (tRemain / PER_Q * 100) + "%";
+        if (tRemain <= 5) els.timerBar.classList.add("warn");
+        if (tRemain <= 0) { clearInterval(tInt); pick(-1); }
+      }, 100);
+    }
+
+    function pick(choice) {
+      if (locked) return;
+      locked = true;
+      clearInterval(tInt);
+      var q = deck[idx], correct = q.a;
+      var timeLeft = Math.max(0, tRemain);
+      var btns = els.choices.children;
+      [].forEach.call(btns, function (b) {
+        var i = parseInt(b.dataset.i, 10);
+        b.disabled = true;
+        if (i === correct) b.classList.add("correct");
+        else if (i === choice) b.classList.add("wrong");
+      });
+      if (choice === correct) {
+        correctCount++;
+        streak++; if (streak > bestStreak) bestStreak = streak;
+        var base = 100, timeBonus = Math.round(timeLeft * 10), mult = 1 + Math.min(streak - 1, 5) * 0.25;
+        var gained = Math.round((base + timeBonus) * mult);
+        score += gained;
+        bump(els.scoreVal); els.scoreVal.textContent = score.toLocaleString();
+        els.streakVal.textContent = streak;
+        els.streakFire.classList.add("pop"); setTimeout(function () { els.streakFire.classList.remove("pop"); }, 200);
+        els.refBox.innerHTML = '<b>+' + gained.toLocaleString() + '</b> &nbsp;(' + (mult > 1 ? "×" + mult.toFixed(2) + " streak · " : "") + timeBonus + ' time bonus)' + (q.ref ? '<br>' + esc(q.ref) : "");
+      } else {
+        streak = 0; els.streakVal.textContent = "0";
+        var why = choice === -1 ? "⏰ Time! " : "✗ ";
+        els.refBox.innerHTML = '<b>' + why + 'Answer: ' + ["A","B","C","D"][correct] + '</b>' + (q.ref ? ' — ' + esc(q.ref) : "");
+      }
+      els.refBox.classList.remove("hidden");
+      els.fiftyBtn.disabled = true; els.skipBtn.disabled = true;
+      els.nextBtn.textContent = (idx + 1 >= deck.length) ? "See results →" : "Next →";
+      els.nextWrap.classList.remove("hidden");
+    }
+
+    function bump(el) { el.style.transform = "scale(1.25)"; setTimeout(function () { el.style.transform = ""; }, 180); }
+
+    els.nextBtn.onclick = function () {
+      idx++;
+      if (idx >= deck.length) endGame();
+      else renderQ();
+    };
+
+    els.fiftyBtn.onclick = function () {
+      if (fiftyUsed || locked) return;
+      fiftyUsed = true; els.fiftyBtn.disabled = true;
+      var q = deck[idx], wrong = [];
+      for (var i = 0; i < 4; i++) if (i !== q.a) wrong.push(i);
+      wrong = shuffle(wrong).slice(0, 2);
+      [].forEach.call(els.choices.children, function (b) {
+        var i = parseInt(b.dataset.i, 10);
+        if (wrong.indexOf(i) >= 0) { b.classList.add("dim"); b.disabled = true; }
+      });
+    };
+
+    els.skipBtn.onclick = function () {
+      if (skipUsed || locked) return;
+      skipUsed = true; els.skipBtn.disabled = true;
+      clearInterval(tInt);
+      streak = 0; els.streakVal.textContent = "0";
+      idx++;
+      if (idx >= deck.length) endGame(); else renderQ();
+    };
+
+    function endGame() {
+      els.finalScore.textContent = score.toLocaleString();
+      els.finalCorrect.textContent = correctCount + "/" + deck.length;
+      els.finalStreak.textContent = bestStreak;
+      els.rankMsg.textContent = "";
+      pendingScore = score;
+      show("result");
+      loadLeaderboard("lbList2");
+      if (session && session.token) doPost();
+    }
+
+    function doPost() {
+      if (pendingScore == null) return;
+      els.rankMsg.style.color = "var(--muted)";
+      els.rankMsg.textContent = "Posting your score…";
+      var s = pendingScore;
+      submitScore(s, function (ok, reason) {
+        if (ok) {
+          els.rankMsg.style.color = "var(--ok)";
+          els.rankMsg.textContent = "✓ Score posted to the global board!";
+          renderWho();
+          loadLeaderboard("lbList2");
+        } else if (reason === "not-signed-in") {
+          els.rankMsg.textContent = "";
+          openModal();
+        } else if (reason === "expired") {
+          els.rankMsg.style.color = "var(--accent)";
+          els.rankMsg.textContent = "Session expired — sign in again to post.";
+          openModal();
+        } else {
+          els.rankMsg.style.color = "var(--accent)";
+          els.rankMsg.textContent = "Couldn't post (offline?). Your score is saved locally.";
+        }
+      });
+    }
+
+    // ---- wire start/result buttons ----
+    els.playBtn.onclick = startGame;
+    els.againBtn.onclick = startGame;
+    els.toBoardBtn.onclick = function () { show("start"); loadLeaderboard("lbList"); };
+    els.postBtn.onclick = function () { if (session && session.token) doPost(); else openModal(); };
+    els.howBtn.onclick = function () {
+      alert("Scoring:\n\n• 100 points per correct answer\n• + up to 150 time bonus (answer fast!)\n• Streak multiplier grows with consecutive correct answers (up to ×2.25)\n\nLifelines (once each per game):\n• 50:50 removes two wrong answers\n• Skip jumps a question (resets your streak)\n\nSign in with your SprinkFlow account to post your best score to the global leaderboard.");
+    };
+
+    // ---- init ----
+    renderWho();
+    loadLeaderboard("lbList");
+  })();
+  </script>
+</body>
+</html>
