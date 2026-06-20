@@ -83,6 +83,8 @@
     .sg-hollybtn.armed { animation:hbpulse .9s ease-in-out infinite; }
     @keyframes hbpulse { 50% { box-shadow:0 0 0 4px rgba(255,176,58,.18); } }
     .sg-hollybtn[hidden] { display:none; }
+    .sg-prompt { position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:6; background:var(--accent); color:#1a0d06; font:700 .82rem 'Space Grotesk'; padding:8px 14px; border-radius:999px; box-shadow:0 4px 14px rgba(0,0,0,.4); animation:hbpulse 1s ease-in-out infinite; white-space:nowrap; }
+    .sg-prompt[hidden] { display:none; }
   </style>
 </head>
 <body>
@@ -107,6 +109,7 @@
       <canvas id="game" width="360" height="430"></canvas>
       <button id="pauseBtn" class="sg-pausebtn" aria-label="Pause" hidden>❚❚</button>
       <button id="hollywoodBtn" class="sg-hollybtn" aria-label="Hollywood Scene" hidden>🎬 0</button>
+      <div id="selectPrompt" class="sg-prompt" hidden>👆 Tap a dusty sprinkler to fix</div>
 
       <div class="sg-ov" id="pauseOv">
         <div class="ic">❚❚</div>
@@ -175,11 +178,13 @@
     // --- hydraulics: each head flows Q = K·√P; supply pressure sags as total flow rises ---
     var KLADDER = [5.6, 8.0, 11.2, 14.0, 16.8, 22.4, 25.2];   // K-factor per upgrade tier
     var P_STATIC = 7;                          // psi at no flow, no pump (weak supply)
-    var SUPPLY_C = 4 / Math.pow(50, 1.85);     // sag: ~3 psi residual at 50 gpm
-    var PUMP_MAX = 3;                          // fire-pump tiers, each ~+30 psi @ 100 gpm
+    var PUMP_MAX = 3;                          // fire-pump tiers; maxed pump ≈ 175 psi @ 1000 gpm (for K25.2)
+    var PUMP_HEAD = 79.33;                     // churn pressure added per pump tier (0→7, 3→245)
+    var DROOP_C = 0.099, DROOP_N = 0.95;       // supply droop: P = churn − DROOP_C·Q^DROOP_N
     var DMG_PER_GPM = 2.0, TANK_DRAIN = 1.2, TANK_REGEN = 26, BOSS_WAVE = 15;
-    function pumpBoost(Q) { if (pumpLevel <= 0) return 0; var f = 1.4 - 0.4 * (Q / 100); if (f < 0.5) f = 0.5; return pumpLevel * 30 * f; }
-    function supplyP(Q) { var p = P_STATIC - SUPPLY_C * Math.pow(Q, 1.85) + pumpBoost(Q); return p < 0 ? 0 : p; }
+    // supply = static + pump churn, drooping with flow; ~3 psi @ 50 gpm with no pump,
+    // ~175 psi @ 1000 gpm at full pump (the operating point for three K25.2 heads).
+    function supplyP(Q) { var p = (P_STATIC + pumpLevel * PUMP_HEAD) - DROOP_C * Math.pow(Q, DROOP_N); return p < 0 ? 0 : p; }
     function headFlow(s, P) { return KLADDER[s.kTier] * Math.sqrt(P > 0 ? P : 0); }
     function solveOp(act) {
       var P = supplyP(0), i, Q;
@@ -241,6 +246,7 @@
       $("waveVal").textContent = bossAlive ? "BOSS" : n;
       hud();
       $("upgradeOv").classList.remove("show"); $("startOv").classList.remove("show"); $("pauseOv").classList.remove("show");
+      $("selectPrompt").hidden = true;
       $("pauseBtn").hidden = false;
       updateHollywoodBtn();
     }
@@ -363,12 +369,12 @@
       { e: "🎬", t: "Hollywood Scene", d: "Stored: all heads blast 5s, no water used", apply: function () { hollywoodCharges++; updateHollywoodBtn(); } }
     ];
     function categoryOffer(cat) {
-      if (cat === "unlock") return { e: "🔓", t: "Unlock head", d: "Wake a dusty K5.6 sprinkler", apply: applyUnlock };
+      if (cat === "unlock") return { e: "🔓", t: "Unlock head", d: "Pick a dusty sprinkler to fix", selectHead: true };
       if (cat === "kfactor") return { e: "📈", t: "Bigger K-factor", d: "Step a head up the K ladder: more GPM", apply: applyUpgrade };
       if (cat === "supply") {
         var pump = nextSupplyPump && pumpLevel < PUMP_MAX;
         return pump
-          ? { e: "⚙️", t: "Fire pump", d: pumpLevel === 0 ? "Add a fire pump: +30 psi @ 100 gpm" : "Boost pump to tier " + (pumpLevel + 1), apply: function () { applyPump(); nextSupplyPump = !nextSupplyPump; } }
+          ? { e: "⚙️", t: "Fire pump", d: pumpLevel === 0 ? "Add a fire pump — stronger supply pressure" : (pumpLevel + 1 >= PUMP_MAX ? "Max pump: ~175 psi @ 1000 gpm for K25.2" : "Boost pump to tier " + (pumpLevel + 1) + ": more pressure"), apply: function () { applyPump(); nextSupplyPump = !nextSupplyPump; } }
           : { e: "🛢️", t: "Bigger tank", d: "+90 gal capacity: spray longer", apply: function () { applyCapacity(); nextSupplyPump = !nextSupplyPump; } };
       }
       var sp = SPECIALS[Math.floor(Math.random() * SPECIALS.length)];
@@ -390,13 +396,25 @@
         var card = document.createElement("div");
         card.className = "sg-card" + (o.special ? " special" : "");
         card.innerHTML = '<div class="e">' + o.e + '</div><div class="t">' + o.t + '</div><div class="d">' + o.d + '</div>' + (o.special ? '<div class="sg-badge">SPECIAL</div>' : '');
-        card.onclick = function () { if (state !== "upgrade") return; o.apply(); afterChoice(); };
+        card.onclick = function () { if (state !== "upgrade") return; if (o.selectHead) beginSelectHead(); else { o.apply(); afterChoice(); } };
         box.appendChild(card);
       });
       $("upTitle").textContent = "Wave " + wave + " cleared!";
       $("upgradeOv").classList.add("show");
     }
     function afterChoice() { startWave(wave + 1); }
+    // Unlock-a-head: enter a "pick the sprinkler" mode; the tap lands in the pointer handler.
+    function beginSelectHead() {
+      state = "selectHead";
+      $("upgradeOv").classList.remove("show");
+      $("selectPrompt").hidden = false;
+    }
+    function selectHeadAt(tx, ty) {
+      if (state !== "selectHead") return;
+      var best = null, bd = 1e9;
+      for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (s.state !== "locked") continue; var d = Math.hypot(tx - s.x, ty - s.y); if (d < bd) { bd = d; best = s; } }
+      if (best && bd < gap * 0.7) { best.state = "active"; best.kTier = 0; best.q = 0; best.flash = 0.6; $("selectPrompt").hidden = true; afterChoice(); }
+    }
     function updateHollywoodBtn() {
       var b = $("hollywoodBtn");
       var show = hollywoodCharges > 0 && state === "playing";
@@ -418,6 +436,11 @@
     function drawSprinkler(s) {
       var x = s.x, y = s.y, r = gap * 0.32 * (0.5 + 0.5 * ((s.kTier || 0) / (KLADDER.length - 1)));
       var active = s.state === "active";
+      // "pick a head to fix" highlight on dusty/locked heads
+      if (state === "selectHead" && s.state === "locked") {
+        ctx.save(); ctx.setLineDash([5, 4]); ctx.lineWidth = 3; ctx.strokeStyle = "#ffb03a";
+        ctx.beginPath(); ctx.arc(x, y, r + 8, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      }
       // spray field while flowing (alpha tracks GPM)
       if (active && s.q > 0) {
         var R = sprayRadius(s), aff = Math.max(0.05, Math.min(0.18, s.q * 0.012)), g = ctx.createRadialGradient(x, y, 0, x, y, R);
@@ -527,7 +550,11 @@
     var last = 0;
     function loop(ts) { nowT = ts; if (!last) last = ts; var dt = Math.min(0.05, (ts - last) / 1000); last = ts; update(dt); render(ts); requestAnimationFrame(loop); }
 
-    canvas.addEventListener("pointerdown", function (e) { e.preventDefault(); holding = true; });
+    canvas.addEventListener("pointerdown", function (e) {
+      e.preventDefault();
+      if (state === "selectHead") { var rect = canvas.getBoundingClientRect(); selectHeadAt(e.clientX - rect.left, e.clientY - rect.top); return; }
+      holding = true;
+    });
     window.addEventListener("pointerup", function () { holding = false; });
     canvas.addEventListener("pointercancel", function () { holding = false; });
 

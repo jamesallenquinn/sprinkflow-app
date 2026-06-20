@@ -22,11 +22,12 @@
       <div class="title">SprinkFlow Tools</div>
       <div class="sub">Fire sprinkler calculators &amp; references</div>
     </div>
+    <button class="acct-btn" id="acctBtn" hidden>Sign in</button>
   </header>
 
   <section class="launcher-hero">
-    <h1>Field tools, <span class="grad">in your pocket.</span></h1>
-    <p>Quick calculators and code references for fire sprinkler designers. Works offline once installed.</p>
+    <h1>Fire sprinkler tools, <span class="grad">code &amp; games.</span></h1>
+    <p>Field calculators, NFPA code references, study questions, and a few games — built for sprinkler designers. Works offline once installed.</p>
   </section>
 
   <div class="install-tip" id="installTip" hidden>
@@ -120,6 +121,30 @@
     </section>
   </main>
 
+  <div class="acct-bk" id="acctModal" hidden>
+    <div class="acct-card" role="dialog" aria-modal="true">
+      <h3>Your SprinkFlow account</h3>
+      <div class="acct-meta">
+        <div class="acct-row"><span>Name</span><b id="acctName">—</b></div>
+        <div class="acct-row"><span>Email</span><b id="acctEmail">—</b></div>
+        <div class="acct-row"><span>Member since</span><b id="acctSince">…</b></div>
+      </div>
+      <h4>Your best scores</h4>
+      <div class="acct-scores" id="acctScores">Loading…</div>
+      <h4>Change password</h4>
+      <div class="acct-pw">
+        <input id="acctPw" type="password" placeholder="New password (min 6)" autocomplete="new-password" />
+        <button id="acctPwBtn">Update</button>
+      </div>
+      <div class="acct-msg" id="acctMsg"></div>
+      <div class="acct-actions">
+        <button class="acct-signout" id="acctSignout">Sign out</button>
+        <button class="acct-closebtn" id="acctClose">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./tools/sprinkflow-auth.js"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
@@ -127,6 +152,70 @@
     // show install tip only when not already installed (standalone)
     const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
     if (!standalone) document.getElementById("installTip").hidden = false;
+
+    // ---- account (shared SprinkFlow sign-in) ----
+    var SF = window.SFAuth, $ = (id) => document.getElementById(id);
+    function refreshAcctBtn() {
+      var b = $("acctBtn"); b.hidden = false;
+      if (SF && SF.isSignedIn()) { b.textContent = "👤 " + SF.displayName(); b.classList.add("in"); }
+      else { b.textContent = "Sign in"; b.classList.remove("in"); }
+    }
+    $("acctBtn").onclick = function () {
+      if (SF && SF.isSignedIn()) openAcct();
+      else if (SF) SF.openSignIn({ onSuccess: refreshAcctBtn });
+    };
+    if (SF) SF.onChange(refreshAcctBtn);
+    refreshAcctBtn();
+
+    var GAMES = [
+      { t: "NFPA 13 Speed Round", table: "quiz_scores", col: "best_score", unit: "pts" },
+      { t: "Sprinkler Siege", table: "siege_scores", col: "best_score", unit: "pts" },
+      { t: "Contain the Blaze", table: "blaze_scores", col: "best_score", unit: "pts" },
+      { t: "SprinkWord", table: "sprinkword_scores", col: "best_streak", unit: "🔥 streak" },
+      { t: "Fire Sprinkler Study", table: "study_scores", col: "best_streak", unit: "🔥 streak" }
+    ];
+    function openAcct() {
+      var s = SF && SF.session(); if (!s) { SF.openSignIn({ onSuccess: refreshAcctBtn }); return; }
+      $("acctName").textContent = SF.displayName();
+      $("acctEmail").textContent = s.email || "—";
+      $("acctSince").textContent = "…";
+      $("acctMsg").textContent = ""; $("acctMsg").className = "acct-msg"; $("acctPw").value = "";
+      $("acctModal").hidden = false;
+      fetch(SF.SB_URL + "/auth/v1/user", { headers: { apikey: SF.SB_ANON, Authorization: "Bearer " + s.token } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (u) {
+          $("acctSince").textContent = (u && u.created_at)
+            ? new Date(u.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "—";
+        }).catch(function () { $("acctSince").textContent = "—"; });
+      var box = $("acctScores"); box.innerHTML = "Loading…"; var uid = s.userId;
+      Promise.all(GAMES.map(function (g) {
+        if (!uid) return Promise.resolve(null);
+        return SF.read(g.table + "?select=" + g.col + "&user_id=eq." + uid)
+          .then(function (rows) { return (rows && rows[0]) ? rows[0][g.col] : null; }).catch(function () { return null; });
+      })).then(function (vals) {
+        box.innerHTML = GAMES.map(function (g, i) {
+          var v = vals[i];
+          return '<div class="acct-score-row"><span>' + g.t + '</span><b>' + (v == null ? "—" : (Number(v).toLocaleString() + " " + g.unit)) + '</b></div>';
+        }).join("");
+      });
+    }
+    function closeAcct() { $("acctModal").hidden = true; }
+    $("acctClose").onclick = closeAcct;
+    $("acctModal").addEventListener("click", function (e) { if (e.target === this) closeAcct(); });
+    $("acctSignout").onclick = function () { if (SF) SF.signOut(); closeAcct(); refreshAcctBtn(); };
+    $("acctPwBtn").onclick = function () {
+      var pw = $("acctPw").value, msg = $("acctMsg"), btn = this;
+      if (pw.length < 6) { msg.className = "acct-msg err"; msg.textContent = "Password must be at least 6 characters."; return; }
+      var s = SF && SF.session(); if (!s) return;
+      btn.disabled = true; msg.className = "acct-msg"; msg.textContent = "Updating…";
+      fetch(SF.SB_URL + "/auth/v1/user", { method: "PUT", headers: { apikey: SF.SB_ANON, Authorization: "Bearer " + s.token, "Content-Type": "application/json" }, body: JSON.stringify({ password: pw }) })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          if (res.ok) { msg.className = "acct-msg ok"; msg.textContent = "✓ Password updated."; $("acctPw").value = ""; }
+          else { msg.className = "acct-msg err"; msg.textContent = (res.d && (res.d.msg || res.d.error_description || res.d.error)) || "Could not update password."; }
+        }).catch(function () { msg.className = "acct-msg err"; msg.textContent = "Network error."; })
+        .then(function () { btn.disabled = false; });
+    };
   </script>
 </body>
 </html>

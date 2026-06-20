@@ -73,6 +73,31 @@ a { color: inherit; text-decoration: none; }
 .ft-tag { display: inline-block; font: 700 0.58rem Inter, sans-serif; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 2px; }
 .uc-badge { position: absolute; top: 10px; right: 10px; z-index: 1; font: 700 0.56rem Inter, sans-serif; text-transform: uppercase; letter-spacing: 0.04em; color: #1a0d06; background: var(--accent); border-radius: 999px; padding: 3px 9px; }
 
+/* account button + modal */
+.app-bar .acct-btn { margin-left: auto; flex: 0 0 auto; max-width: 44vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: var(--surface-soft); border: 1px solid var(--line); color: var(--ink); font: 600 0.82rem Inter, sans-serif; padding: 8px 13px; border-radius: 999px; cursor: pointer; }
+.app-bar .acct-btn.in { color: var(--accent); border-color: var(--line-strong); }
+.acct-bk { position: fixed; inset: 0; background: rgba(5,8,11,0.72); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); display: flex; align-items: flex-end; justify-content: center; z-index: 80; }
+.acct-bk[hidden] { display: none; }
+.acct-card { width: 100%; max-width: 460px; max-height: 90vh; overflow-y: auto; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 22px 22px 0 0; padding: 22px 18px calc(22px + env(safe-area-inset-bottom, 0px)); }
+@media (min-width: 520px) { .acct-bk { align-items: center; padding: 16px; } .acct-card { border-radius: 22px; } }
+.acct-card h3 { font: 700 1.25rem "Space Grotesk", sans-serif; margin: 0 0 14px; }
+.acct-card h4 { font: 700 0.72rem Inter, sans-serif; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 18px 0 8px; }
+.acct-meta, .acct-scores { display: flex; flex-direction: column; gap: 1px; background: var(--line); border-radius: 12px; overflow: hidden; }
+.acct-row, .acct-score-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 11px 14px; background: var(--surface); font: 500 0.9rem Inter, sans-serif; }
+.acct-row span, .acct-score-row span { color: var(--muted); }
+.acct-row b { font-weight: 600; text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.acct-score-row b { color: var(--accent); font-family: "Space Grotesk", sans-serif; white-space: nowrap; }
+.acct-pw { display: flex; gap: 8px; }
+.acct-pw input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line-strong); border-radius: 12px; padding: 12px; color: var(--ink); font: 500 1rem Inter, sans-serif; }
+.acct-pw button { flex: 0 0 auto; border: 0; border-radius: 12px; padding: 0 16px; background: var(--surface-soft); color: var(--ink); font: 600 0.9rem Inter, sans-serif; cursor: pointer; }
+.acct-msg { min-height: 18px; font: 500 0.85rem Inter, sans-serif; margin: 8px 0 0; color: var(--muted); }
+.acct-msg.ok { color: var(--ok); } .acct-msg.err { color: #ff5a4f; }
+.acct-actions { display: flex; gap: 10px; margin-top: 20px; }
+.acct-signout { flex: 1; border: 1px solid var(--line-strong); background: transparent; color: #ff5a4f; border-radius: 12px; padding: 13px; font: 600 0.92rem Inter, sans-serif; cursor: pointer; }
+.acct-closebtn { flex: 1; border: 0; border-radius: 12px; padding: 13px; background: linear-gradient(120deg, #ff5a2f, #ffb03a); color: #1a0d06; font: 700 0.95rem "Space Grotesk", sans-serif; cursor: pointer; }
+
 /* generic tool page */
 .tool-page { padding: 18px 18px calc(40px + env(safe-area-inset-bottom, 0px)); max-width: 640px; margin: 0 auto; }
 .field { display: grid; gap: 7px; margin-bottom: 16px; }
