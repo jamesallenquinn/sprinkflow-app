@@ -362,7 +362,7 @@
     var hazard = null, hzPump = false, hzTankMult = 1, hzSpeed = 1, hzReach = 1;
     function capW() { return Math.round(maxWater * hzTankMult); }    // effective tank cap (Main Break shrinks it)
     // class-typed resistance: Class B (grease) fires only take real damage from Foam
-    function resist(ty, e) { if (e && e.cls === "B") return ty === "foam" ? 1 : (e.boss ? 0.3 : 0.1); return 1; }   // boss less punishing (no hard wall without foam)
+    function resist(ty, e) { if (e && e.cls === "B") return ty === "foam" ? 1 : (e.boss ? 0.35 : 0.2); return 1; }   // grease: foam best, others chip ~20%   // boss less punishing (no hard wall without foam)
     var LASER_INTERVAL = 0.42, LASER_SPEED = 2.4;   // laser fires a projectile every LASER_INTERVAL s at LASER_SPEED·S/s; Fast Response shortens interval + speeds the bolt
     var WATER_BUFF = 1.15;          // +15% water supply throughout (start, upgrades, refill)
     var SPECIAL_WATER_BONUS = 120;  // tank bump when a special head is installed — ~most of its auto-spray draw, intentionally a touch short
@@ -488,13 +488,13 @@
       integrity = Math.min(100, integrity + 12);
       waveDmg = 0; waveCombatT = 0;             // reset the running Avg. DPS each wave
       if (bossPending) { bossPending = false; bossAlive = true; spawnBoss(); spawnQueue = 0; }
-      else { bossAlive = false; spawnQueue = 4 + n * 2; }
+      else { bossAlive = false; spawnQueue = currentAct >= 2 ? 4 + Math.round(n * 1.6) : 4 + n * 2; }   // Act 2: fewer enemies per wave
       waveSpawnTotal = spawnQueue || 1;
       // Act 2 hazards — one per (non-boss) wave
       hazard = null; hzPump = false; hzTankMult = 1; hzSpeed = 1; hzReach = 1;
       if (currentAct >= 2 && !bossAlive) {
         hazard = HAZARDS[Math.floor(Math.random() * HAZARDS.length)];
-        if (hazard.id === "outage") hzPump = true; else if (hazard.id === "main") hzTankMult = 0.6; else if (hazard.id === "highrise") hzSpeed = 1.3; else if (hazard.id === "night") hzReach = 0.8;
+        if (hazard.id === "outage") hzPump = true; else if (hazard.id === "main") hzTankMult = 0.7; else if (hazard.id === "highrise") hzSpeed = 1.2; else if (hazard.id === "night") hzReach = 0.85;
       }
       $("hazardInd").hidden = !hazard; if (hazard) $("hazardInd").textContent = hazard.name + " · " + hazard.desc;
       water = capW();
@@ -544,8 +544,8 @@
       var e = { x: x, y: y, boss: false, t: Math.random() * 9, hit: 0, type: type, minTier: 0, coreDmg: 12, splits: false };
       if (type === "elo") { e.hp = base * 1.7; e.spd = (20 + wave * 1.7) * (S / 400); e.sz = S * 0.062; e.minTier = 2; e.coreDmg = 16; }
       else if (type === "splitter") { e.hp = base * 0.85; e.spd = (24 + wave * 2.2) * (S / 400); e.sz = S * 0.055; e.splits = true; e.coreDmg = 9; }
-      else if (type === "grease") { e.hp = base * 1.5; e.spd = (22 + wave * 1.6) * (S / 400); e.sz = S * 0.058; e.cls = "B"; e.coreDmg = 14; }
-      else if (type === "backdraft") { e.hp = base * 3.4; e.spd = (12 + wave * 0.9) * (S / 400); e.sz = S * 0.088; e.coreDmg = 20; e.flashCd = 3 + Math.random() * 2; e.flashT = 0; }
+      else if (type === "grease") { e.hp = base * 1.3; e.spd = (22 + wave * 1.6) * (S / 400); e.sz = S * 0.058; e.cls = "B"; e.coreDmg = 13; }
+      else if (type === "backdraft") { e.hp = base * 2.9; e.spd = (12 + wave * 0.9) * (S / 400); e.sz = S * 0.088; e.coreDmg = 18; e.flashCd = 3.5 + Math.random() * 2; e.flashT = 0; }
       else { e.hp = base; e.spd = (26 + wave * 2.4) * (S / 400); e.sz = S * 0.05; }
       e.max = e.hp; enemies.push(e);
     }
@@ -636,7 +636,7 @@
         var e = enemies[i];
         var dx = W / 2 - e.x, dy = H / 2 - e.y, dist = Math.hypot(dx, dy) || 1;
         if (e.type === "backdraft") { e.flashT = (e.flashT || 0) + dt; if (!e.flashing && e.flashT >= (e.flashCd || 4)) { e.flashing = true; e.flashLeft = 2.5; e.flashT = 0; } if (e.flashing) { e.flashLeft -= dt; if (e.flashLeft <= 0) e.flashing = false; } }   // backdraft flashover
-        var spd = e.spd * hzSpeed; if (e.slowT > 0) { spd *= 0.5; e.slowT -= dt; } if (e.flashing) spd *= (e.boss ? 2 : 3);   // foam slow; flashover speed burst; High-Rise hazard
+        var spd = e.spd * hzSpeed; if (e.slowT > 0) { spd *= 0.5; e.slowT -= dt; } if (e.flashing) spd *= (e.boss ? 1.8 : 2.2);   // foam slow; flashover speed burst; High-Rise hazard
         e.x += (dx / dist) * spd * dt; e.y += (dy / dist) * spd * dt; e.t += dt;
         // reached core
         if (dist < coreR + e.sz * 0.4) {
