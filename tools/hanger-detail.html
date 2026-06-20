@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="theme-color" content="#1b1f24" />
+<title>Hanger Detail — SprinkFlow</title>
+<link rel="manifest" href="../manifest.webmanifest" />
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="../assets/logo.png" />
+<style>
+  :root{
+    --bg:#1b1f24; --panel:#23282f; --panel2:#2c333b; --line:#3a424c;
+    --ink:#e8edf2; --muted:#9aa6b2; --accent:#4da3ff; --accent2:#2b6cb0;
+    --good:#34c759; --tap:56px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; height:100%; overflow:hidden; background:var(--bg);
+    color:var(--ink); font-family:Arial, Helvetica, sans-serif;
+    -webkit-user-select:none; user-select:none; touch-action:none;}
+  #app{display:flex; flex-direction:column; height:100%;}
+
+  /* Top bar */
+  header{display:flex; align-items:center; gap:8px; padding:8px 10px;
+    background:var(--panel); border-bottom:1px solid var(--line); flex:0 0 auto;}
+  header .title{font-size:15px; font-weight:bold; letter-spacing:.3px;}
+  header .spacer{flex:1;}
+  .iconbtn{height:40px; min-width:40px; padding:0 12px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--ink); border-radius:9px; font-size:13px;
+    font-weight:bold; display:inline-flex; align-items:center; gap:6px;}
+  .iconbtn:active{background:#39424d;}
+  .iconbtn.primary{background:var(--accent2); border-color:var(--accent2);}
+
+  /* Canvas area */
+  #stage{position:relative; flex:1 1 auto; min-height:0; overflow:hidden;
+    background:
+      radial-gradient(circle at 1px 1px, rgba(255,255,255,.045) 1px, transparent 0) 0 0/22px 22px,
+      var(--bg);}
+  canvas{position:absolute; inset:0; width:100%; height:100%; display:block;}
+
+  /* Hint pill */
+  #hint{position:absolute; top:10px; left:50%; transform:translateX(-50%);
+    background:rgba(10,12,15,.86); border:1px solid var(--line); color:var(--ink);
+    padding:8px 14px; border-radius:20px; font-size:13px; font-weight:bold;
+    max-width:88%; text-align:center; pointer-events:none; transition:opacity .2s;}
+
+  /* Zoom controls */
+  .zoomctl{position:absolute; right:10px; bottom:10px; display:flex; flex-direction:column; gap:6px;}
+  .zoomctl button{width:40px; height:40px; border:1px solid var(--line); background:rgba(35,40,47,.9);
+    color:var(--ink); border-radius:10px; font-size:20px; font-weight:bold; line-height:1; display:flex;
+    align-items:center; justify-content:center;}
+  .zoomctl button:active{background:var(--accent2);}
+
+  /* Bottom toolbar */
+  footer{flex:0 0 auto; background:var(--panel); border-top:1px solid var(--line);
+    padding:8px 8px calc(8px + env(safe-area-inset-bottom));}
+  .tools{display:flex; gap:6px;}
+  .tool{flex:1; height:var(--tap); border:1px solid var(--line); background:var(--panel2);
+    color:var(--ink); border-radius:11px; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:2px; font-size:11px; font-weight:bold;}
+  .tool .ic{font-size:19px; line-height:1;}
+  .tool[aria-disabled="true"]{opacity:.38;}
+  .tool.active{background:var(--accent2); border-color:var(--accent); box-shadow:0 0 0 2px rgba(77,163,255,.25) inset;}
+  .tool .done{position:absolute; transform:translate(16px,-15px); color:var(--good); font-size:13px;}
+  .toolwrap{position:relative; flex:1; display:flex;}
+
+  /* Bottom sheet */
+  .sheet-back{position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; z-index:30;}
+  .sheet-back.show{display:block;}
+  .sheet{position:absolute; left:0; right:0; bottom:0; background:var(--panel);
+    border-top-left-radius:18px; border-top-right-radius:18px; padding:14px 14px calc(18px + env(safe-area-inset-bottom));
+    border-top:1px solid var(--line); transform:translateY(100%); transition:transform .22s ease;}
+  .sheet-back.show .sheet{transform:translateY(0);}
+  .sheet h3{margin:2px 0 12px; font-size:15px;}
+  .sheet .sub{color:var(--muted); font-weight:normal; font-size:12px; margin-left:6px;}
+  .opt{display:flex; align-items:center; gap:12px; width:100%; padding:13px;
+    border:1px solid var(--line); background:var(--panel2); color:var(--ink);
+    border-radius:12px; margin-bottom:8px; font-size:14px; font-weight:bold; text-align:left;}
+  .opt small{display:block; color:var(--muted); font-weight:normal; font-size:12px; margin-top:2px;}
+  .opt .gico{font-size:24px; width:30px; text-align:center;}
+  .opt[disabled]{opacity:.4;}
+  .opt.sel{border-color:var(--accent); box-shadow:0 0 0 2px rgba(77,163,255,.25) inset;}
+  .chips{display:flex; flex-wrap:wrap; gap:8px;}
+  .chip{padding:10px 14px; border:1px solid var(--line); background:var(--panel2);
+    color:var(--ink); border-radius:20px; font-size:14px; font-weight:bold;}
+  .chip.sel{background:var(--accent2); border-color:var(--accent);}
+  .sheet .row{display:flex; gap:8px; margin-top:6px;}
+  .sheet .ghost{flex:1; height:46px; border:1px solid var(--line); background:transparent;
+    color:var(--muted); border-radius:11px; font-size:14px; font-weight:bold;}
+  .field{margin:4px 0 14px;}
+  .field label{display:block; font-size:12px; color:var(--muted); margin-bottom:5px;}
+  .field input{width:100%; height:44px; background:var(--panel2); border:1px solid var(--line);
+    color:var(--ink); border-radius:10px; padding:0 12px; font-size:15px; font-family:inherit;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <a class="iconbtn" href="../index.html" aria-label="Back to SprinkFlow" style="text-decoration:none;">‹</a>
+    <span class="title">Hanger Detail</span>
+    <span class="spacer"></span>
+    <button class="iconbtn" id="btnEdit">✎ Title</button>
+    <button class="iconbtn" id="btnUndo">↺ Reset</button>
+    <button class="iconbtn primary" id="btnExport">⤓ PNG</button>
+  </header>
+
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="hint">Tap <b>Pipe</b> to pick a size, then tap the canvas to place it.</div>
+    <div class="zoomctl">
+      <button id="btnZoomOut" title="Zoom out">−</button>
+      <button id="btnFit" title="Fit to screen">⤢</button>
+      <button id="btnZoomIn" title="Zoom in">+</button>
+    </div>
+  </div>
+
+  <footer>
+    <div class="tools" id="tools">
+      <div class="toolwrap"><button class="tool" data-tool="pipe"><span class="ic">⬤</span>Pipe<span class="done" data-done="pipe" hidden>✓</span></button></div>
+      <div class="toolwrap"><button class="tool" data-tool="ring" aria-disabled="true"><span class="ic">◎</span>Ring<span class="done" data-done="ring" hidden>✓</span></button></div>
+      <div class="toolwrap"><button class="tool" data-tool="structure"><span class="ic">▤</span>Structure<span class="done" data-done="structure" hidden>✓</span></button></div>
+      <div class="toolwrap"><button class="tool" data-tool="fastener" aria-disabled="true"><span class="ic">⚓</span>Fastener<span class="done" data-done="fastener" hidden>✓</span></button></div>
+    </div>
+  </footer>
+</div>
+
+<!-- Bottom sheets -->
+<div class="sheet-back" id="sheetBack">
+  <div class="sheet" id="sheet"></div>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   DETAIL-SPACE coordinate system (virtual). Everything is drawn
+   in these units, then fit-transformed to the screen and to the
+   export bitmap so the two always match.
+   ============================================================ */
+const W = 760, H = 1040;          // virtual detail canvas
+const AXIS = 300;                  // vertical center axis (x) of the assembly
+const DECK_TOP = 120, DECK_BOT0 = 196; // base concrete deck band (at detailScale=1)
+const TITLE_TOP = 852;             // title block band top
+
+/* ---- Catalog (v1: concrete-deck path; others stubbed for filtering) ---- */
+const STRUCTURES = {
+  concrete: { name:"Concrete Deck", ico:"▤", on:true,
+    keynote:"STRUCTURAL CONCRETE DECK (BY OTHERS)",
+    fasteners:["dropin","wedge"] },
+  woodbeam: { name:"Wood Beam", ico:"▦", on:false, fasteners:["lag","throughbolt"] },
+  steelbeam:{ name:"Steel Beam", ico:"▥", on:false, fasteners:["beamclamp","cclamp"] },
+  barjoist: { name:"Steel Bar Joist", ico:"◿", on:false, fasteners:["topclip"] },
+  steelbar: { name:"Steel Bar / Angle", ico:"▱", on:false, fasteners:["beamclamp"] },
+};
+const FASTENERS = {
+  dropin:{ name:"Hilti HDI Drop-In Anchor", on:true },   // note built dynamically (rod size)
+  wedge:{ name:"Wedge Anchor", on:false, note:'1/2"Ø x 3-1/4" MIN. EMBED WEDGE ANCHOR, ICC-ES LISTED' },
+  lag:{ name:"Lag Screw" }, throughbolt:{ name:"Through-Bolt" },
+  beamclamp:{ name:"Beam Clamp" }, cclamp:{ name:"C-Clamp w/ Retaining Strap" },
+  topclip:{ name:"Top-Chord Clip" },
+};
+
+/* ---- Pipe sizes: NPS -> outside diameter (in) ---- */
+const PIPES = [
+  {nps:'1"',od:1.315},{nps:'1¼"',od:1.66},{nps:'1½"',od:1.9},
+  {nps:'2"',od:2.375},{nps:'2½"',od:2.875},{nps:'3"',od:3.5},
+  {nps:'4"',od:4.5},{nps:'6"',od:6.625},{nps:'8"',od:8.625},
+];
+const PX_PER_IN = 13;   // base drawing scale: detail-units per inch of real pipe (at detailScale=1)
+// Detail zoom: scales the drawing content (deck/pipe/ring/rod/fastener) within the
+// fixed sheet. Sheet border, title block, and keynote bubbles do NOT scale.
+function E(){ return PX_PER_IN * state.detailScale; }                       // effective px/inch
+function deckBot(){ return DECK_TOP + (DECK_BOT0-DECK_TOP)*state.detailScale; }
+
+/* ---- Real TOLCO Fig. 200 ring-hanger geometry traced from mfr DXF (inches,
+   bore centered at origin, y-up). Injected from catalogs/ring_hanger_dxf. ---- */
+const RINGS = {"5\"": {"lines": [[0.208, 4.987, 0.208, 5.403], [-0.208, 5.403, -0.208, 4.987], [-0.208, 4.987, 0.208, 4.987], [-0.208, 4.987, -0.25, 4.945], [0.25, 4.945, 0.208, 4.987], [-0.208, 5.403, 0.208, 5.403], [0.208, 5.403, 0.25, 5.445], [-0.25, 5.445, -0.208, 5.403], [-0.281, 5.445, 0.281, 5.445], [0.281, 5.445, 0.281, 6.07], [-0.281, 6.07, -0.281, 5.445], [-0.338, 6.07, 0.338, 6.07], [0.338, 5.398, 0.338, 6.07], [0.338, 5.293, 0.338, 5.398], [0.338, 5.23, 0.338, 5.293], [0.338, 5.125, 0.338, 5.23], [-0.338, 5.23, -0.338, 5.125], [-0.338, 5.293, -0.338, 5.23], [-0.338, 5.398, -0.338, 5.293], [-0.338, 6.07, -0.338, 5.398], [-0.406, 5.398, -0.406, 5.293], [0.406, 5.293, 0.406, 5.398], [-0.406, 5.23, -0.406, 5.125], [0.406, 5.125, 0.406, 5.23], [-0.45, 4.945, 0.45, 4.945], [0.45, 4.945, 0.45, 5.125], [-0.45, 5.125, -0.45, 4.945], [-0.688, 5.398, -0.688, 5.293], [-0.688, 5.293, 0.64, 5.293], [-0.688, 5.398, 0.707, 5.398], [-0.642, 5.125, 0.688, 5.125], [-0.708, 5.23, 0.688, 5.23], [0.688, 5.125, 0.688, 5.23], [-0.775, 5.188, -2.676, 1.312], [2.697, 1.268, 0.775, 5.355], [0.708, 5.25, 2.602, 1.224], [-2.581, 1.266, -0.71, 5.083], [-0.552, 5.398, -0.552, 5.293], [0.552, 5.23, 0.552, 5.125], [-0.25, 4.945, -0.25, 5.445], [0.25, 4.945, 0.25, 5.445]], "arcs": [[-0.0, 0.0, 2.98, 153.88, 25.187], [0.707, 5.323, 0.075, 25.187, 90.0], [0.64, 5.218, 0.075, 25.187, 90.0], [0.0, 0.0, 2.875, 153.88, 25.187], [-0.642, 5.05, 0.075, 90.0, 153.88], [-0.708, 5.155, 0.075, 90.0, 153.88]], "topY": 6.07, "boreR": 2.875}, "6\"": {"lines": [[0.208, 5.143, 0.208, 5.56], [-0.208, 5.56, -0.208, 5.143], [-0.208, 5.143, 0.208, 5.143], [-0.208, 5.143, -0.25, 5.102], [0.25, 5.102, 0.208, 5.143], [-0.208, 5.56, 0.208, 5.56], [0.208, 5.56, 0.25, 5.602], [-0.25, 5.602, -0.208, 5.56], [-0.281, 5.602, 0.281, 5.602], [0.281, 5.602, 0.281, 6.227], [-0.281, 6.227, -0.281, 5.602], [-0.338, 6.227, 0.338, 6.227], [0.338, 5.555, 0.338, 6.227], [0.338, 5.45, 0.338, 5.555], [0.338, 5.387, 0.338, 5.45], [0.338, 5.282, 0.338, 5.387], [-0.338, 5.387, -0.338, 5.282], [-0.338, 5.45, -0.338, 5.387], [-0.338, 5.555, -0.338, 5.45], [-0.338, 6.227, -0.338, 5.555], [-0.531, 5.555, -0.531, 5.449], [0.531, 5.449, 0.531, 5.555], [-0.531, 5.387, -0.531, 5.282], [0.531, 5.282, 0.531, 5.387], [-0.55, 5.102, 0.55, 5.102], [0.55, 5.102, 0.55, 5.282], [-0.55, 5.282, -0.55, 5.102], [-0.813, 5.555, -0.813, 5.45], [-0.813, 5.45, 0.787, 5.449], [-0.813, 5.555, 0.848, 5.555], [-0.789, 5.282, 0.813, 5.282], [-0.849, 5.387, 0.813, 5.387], [0.813, 5.282, 0.813, 5.387], [-0.914, 5.35, -3.022, 1.789], [3.056, 1.729, 0.914, 5.516], [0.852, 5.411, 2.965, 1.677], [-2.931, 1.735, -0.854, 5.245], [-0.612, 5.555, -0.612, 5.45], [0.612, 5.387, 0.612, 5.282], [-0.25, 5.102, -0.25, 5.602], [0.25, 5.102, 0.25, 5.602]], "arcs": [[-0.0, -0.0, 3.511, 149.376, 29.5], [0.848, 5.479, 0.075, 29.5, 90.0], [0.787, 5.374, 0.075, 29.5, 90.0], [-0.0, -0.0, 3.406, 149.376, 29.5], [-0.789, 5.207, 0.075, 90.0, 149.376], [-0.849, 5.312, 0.075, 90.0, 149.376]], "topY": 6.227, "boreR": 3.406}, "1-1/2\"": {"lines": [[0.154, 2.087, 0.154, 2.395], [-0.154, 2.395, -0.154, 2.087], [-0.154, 2.087, 0.154, 2.087], [-0.154, 2.087, -0.188, 2.054], [0.188, 2.054, 0.154, 2.087], [-0.154, 2.395, 0.154, 2.395], [0.154, 2.395, 0.188, 2.429], [-0.188, 2.429, -0.154, 2.395], [-0.195, 2.429, 0.195, 2.429], [0.195, 2.429, 0.195, 2.929], [-0.195, 2.929, -0.195, 2.429], [-1.035, 0.207, -0.973, 0.517], [0.975, 0.517, 1.036, 0.202], [-0.25, 2.929, 0.25, 2.929], [0.25, 2.297, 0.25, 2.929], [0.25, 2.257, 0.25, 2.297], [0.25, 2.244, 0.25, 2.257], [0.25, 2.204, 0.25, 2.244], [-0.25, 2.244, -0.25, 2.204], [-0.25, 2.257, -0.25, 2.244], [-0.25, 2.297, -0.25, 2.257], [-0.25, 2.929, -0.25, 2.297], [-0.266, 2.244, -0.266, 2.204], [0.266, 2.204, 0.266, 2.244], [-0.266, 2.297, -0.266, 2.257], [0.266, 2.257, 0.266, 2.297], [-0.438, 2.257, 0.543, 2.257], [0.576, 2.297, -0.438, 2.297], [0.438, 2.244, -0.576, 2.244], [-0.544, 2.204, 0.438, 2.204], [-0.638, 2.193, -0.973, 0.517], [0.605, 2.207, 0.997, 0.194], [-0.973, 0.517, -1.049, 0.441], [-1.049, 0.441, -1.094, 0.219], [1.095, 0.213, 1.051, 0.441], [1.051, 0.441, 0.975, 0.517], [0.975, 0.517, 0.638, 2.247], [-0.996, 0.199, -0.605, 2.153], [-0.344, 2.054, 0.344, 2.054], [0.343, 2.054, 0.343, 2.204], [-0.343, 2.204, -0.343, 2.054], [0.306, 2.297, 0.306, 2.257], [-0.438, 2.297, -0.438, 2.257], [-0.306, 2.204, -0.306, 2.244], [0.438, 2.204, 0.438, 2.244], [-0.188, 2.054, -0.188, 2.429], [0.188, 2.054, 0.188, 2.429]], "arcs": [[-0.0, -0.0, 1.056, 168.698, 11.018], [0.576, 2.234, 0.063, 11.018, 90.0], [0.543, 2.194, 0.063, 11.018, 90.0], [-0.0, 0.0, 1.016, 168.698, 11.018], [-0.0, -0.0, 1.115, 168.698, 11.018], [-0.544, 2.14, 0.063, 90.0, 168.698], [-0.576, 2.18, 0.063, 90.0, 168.698]], "topY": 2.929, "boreR": 1.016}, "1-1/4\"": {"lines": [[0.154, 1.947, 0.154, 2.254], [-0.154, 2.254, -0.154, 1.947], [-0.154, 1.947, 0.154, 1.947], [-0.154, 1.947, -0.188, 1.913], [0.188, 1.913, 0.154, 1.947], [-0.154, 2.254, 0.154, 2.254], [0.154, 2.254, 0.188, 2.288], [-0.188, 2.288, -0.154, 2.254], [-0.195, 2.288, 0.195, 2.288], [0.195, 2.288, 0.195, 2.788], [-0.195, 2.788, -0.195, 2.288], [-0.901, 0.125, -0.852, 0.483], [0.853, 0.483, 0.902, 0.121], [-0.25, 2.788, 0.25, 2.788], [0.25, 2.157, 0.25, 2.788], [0.25, 2.117, 0.25, 2.157], [0.25, 2.103, 0.25, 2.117], [0.25, 2.063, 0.25, 2.103], [-0.25, 2.103, -0.25, 2.063], [-0.25, 2.117, -0.25, 2.103], [-0.25, 2.157, -0.25, 2.117], [-0.25, 2.788, -0.25, 2.157], [-0.266, 2.103, -0.266, 2.063], [0.266, 2.063, 0.266, 2.103], [-0.266, 2.157, -0.266, 2.117], [0.266, 2.117, 0.266, 2.157], [-0.438, 2.117, 0.538, 2.117], [0.573, 2.157, -0.438, 2.157], [0.438, 2.103, -0.573, 2.103], [-0.538, 2.063, 0.438, 2.063], [-0.636, 2.049, -0.852, 0.483], [0.6, 2.062, 0.862, 0.116], [-0.852, 0.483, -0.922, 0.413], [-0.922, 0.413, -0.961, 0.133], [0.961, 0.129, 0.923, 0.413], [0.923, 0.413, 0.853, 0.483], [0.853, 0.483, 0.635, 2.102], [-0.862, 0.119, -0.601, 2.009], [-0.344, 1.913, 0.344, 1.913], [0.343, 1.913, 0.343, 2.063], [-0.343, 2.063, -0.343, 1.913], [0.306, 2.157, 0.306, 2.117], [-0.438, 2.157, -0.438, 2.117], [-0.306, 2.063, -0.306, 2.103], [0.438, 2.063, 0.438, 2.103], [-0.188, 1.913, -0.188, 2.288], [0.188, 1.913, 0.188, 2.288]], "arcs": [[-0.0, 0.0, 0.91, 172.131, 7.662], [0.573, 2.094, 0.063, 7.662, 90.0], [0.538, 2.054, 0.063, 7.662, 90.0], [-0.0, -0.0, 0.87, 172.131, 7.662], [-0.0, -0.0, 0.97, 172.131, 7.662], [-0.538, 2.0, 0.063, 90.0, 172.131], [-0.573, 2.04, 0.063, 90.0, 172.131]], "topY": 2.788, "boreR": 0.87}, "1\"": {"lines": [[0.154, 1.722, 0.154, 2.029], [-0.154, 2.029, -0.154, 1.722], [-0.154, 1.722, 0.154, 1.722], [-0.154, 1.722, -0.188, 1.688], [0.188, 1.688, 0.154, 1.722], [-0.154, 2.029, 0.154, 2.029], [0.154, 2.029, 0.188, 2.063], [-0.188, 2.063, -0.154, 2.029], [-0.195, 2.063, 0.195, 2.063], [0.195, 2.063, 0.195, 2.563], [-0.195, 2.563, -0.195, 2.063], [-0.777, 0.064, -0.747, 0.433], [0.748, 0.433, 0.778, 0.062], [-0.25, 2.563, 0.25, 2.563], [0.25, 1.932, 0.25, 2.563], [0.25, 1.892, 0.25, 1.932], [0.25, 1.878, 0.25, 1.892], [0.25, 1.838, 0.25, 1.878], [-0.25, 1.878, -0.25, 1.838], [-0.25, 1.892, -0.25, 1.878], [-0.25, 1.932, -0.25, 1.892], [-0.25, 2.563, -0.25, 1.932], [-0.266, 1.878, -0.266, 1.838], [0.266, 1.838, 0.266, 1.878], [-0.266, 1.932, -0.266, 1.892], [0.266, 1.892, 0.266, 1.932], [-0.438, 1.892, 0.533, 1.892], [0.57, 1.932, -0.438, 1.932], [0.438, 1.878, -0.57, 1.878], [-0.533, 1.838, 0.438, 1.838], [-0.633, 1.82, -0.747, 0.433], [0.596, 1.834, 0.738, 0.059], [-0.747, 0.433, -0.813, 0.368], [-0.813, 0.368, -0.837, 0.069], [0.837, 0.067, 0.813, 0.368], [0.813, 0.368, 0.748, 0.433], [0.748, 0.433, 0.633, 1.874], [-0.738, 0.061, -0.596, 1.78], [-0.344, 1.688, 0.344, 1.688], [0.343, 1.688, 0.343, 1.838], [-0.343, 1.838, -0.343, 1.688], [0.306, 1.932, 0.306, 1.892], [-0.438, 1.932, -0.438, 1.892], [-0.306, 1.838, -0.306, 1.878], [0.438, 1.838, 0.438, 1.878], [-0.188, 1.688, -0.188, 2.063], [0.188, 1.688, 0.188, 2.063]], "arcs": [[0.0, -0.0, 0.78, 175.293, 4.572], [0.57, 1.869, 0.063, 4.572, 90.0], [0.533, 1.829, 0.063, 4.572, 90.0], [0.0, 0.0, 0.74, 175.293, 4.572], [0.0, -0.0, 0.84, 175.293, 4.572], [-0.533, 1.775, 0.063, 90.0, 175.293], [-0.57, 1.815, 0.063, 90.0, 175.293]], "topY": 2.563, "boreR": 0.74}, "2-1/2\"": {"lines": [[0.195, 3.381, 0.195, 3.881], [-0.195, 3.881, -0.195, 3.381], [0.208, 3.048, 0.208, 3.34], [-0.208, 3.34, -0.208, 3.048], [-0.25, 3.381, 0.25, 3.381], [-0.208, 3.34, 0.208, 3.34], [0.208, 3.34, 0.25, 3.381], [-0.25, 3.381, -0.208, 3.34], [-0.208, 3.048, 0.208, 3.048], [-0.208, 3.048, -0.25, 3.006], [0.25, 3.006, 0.208, 3.048], [-0.338, 3.881, 0.338, 3.881], [0.338, 3.369, 0.338, 3.881], [0.338, 3.294, 0.338, 3.369], [0.338, 3.232, 0.338, 3.294], [0.338, 3.156, 0.338, 3.232], [-0.338, 3.232, -0.338, 3.156], [-0.338, 3.294, -0.338, 3.232], [-0.338, 3.369, -0.338, 3.294], [-0.338, 3.881, -0.338, 3.369], [-0.344, 3.369, -0.344, 3.294], [0.344, 3.294, 0.344, 3.369], [-0.344, 3.232, -0.344, 3.156], [0.344, 3.156, 0.344, 3.232], [-0.45, 3.006, 0.45, 3.006], [0.45, 3.006, 0.45, 3.156], [-0.45, 3.156, -0.45, 3.006], [-0.612, 3.156, 0.668, 3.156], [-0.668, 3.232, 0.668, 3.232], [0.668, 3.156, 0.668, 3.232], [-0.668, 3.369, -0.668, 3.294], [-0.668, 3.294, 0.61, 3.294], [-0.668, 3.369, 0.667, 3.369], [-0.74, 3.178, -1.541, 0.453], [1.547, 0.434, 0.739, 3.315], [0.682, 3.24, 1.475, 0.413], [-1.469, 0.432, -0.684, 3.103], [-0.532, 3.369, -0.532, 3.294], [0.532, 3.232, 0.532, 3.156], [-0.25, 3.006, -0.25, 3.381], [0.25, 3.006, 0.25, 3.381]], "arcs": [[0.0, -0.0, 1.607, 163.609, 15.657], [0.667, 3.295, 0.075, 15.657, 90.0], [0.61, 3.219, 0.075, 15.657, 90.0], [0.0, -0.0, 1.532, 163.609, 15.657], [-0.612, 3.082, 0.075, 90.0, 163.609], [-0.668, 3.156, 0.075, 90.0, 163.609]], "topY": 3.881, "boreR": 1.532}, "2\"": {"lines": [[0.154, 2.339, 0.154, 2.647], [-0.154, 2.647, -0.154, 2.339], [-0.154, 2.339, 0.154, 2.339], [-0.154, 2.339, -0.188, 2.305], [0.188, 2.305, 0.154, 2.339], [-0.154, 2.647, 0.154, 2.647], [0.154, 2.647, 0.188, 2.68], [-0.188, 2.68, -0.154, 2.647], [-0.195, 2.68, 0.195, 2.68], [0.195, 2.68, 0.195, 3.18], [-0.195, 3.18, -0.195, 2.68], [-1.222, 0.336, -1.156, 0.577], [1.158, 0.576, 1.224, 0.329], [-0.25, 3.18, 0.25, 3.18], [0.25, 2.55, 0.25, 3.18], [0.25, 2.51, 0.25, 2.55], [0.25, 2.495, 0.25, 2.51], [0.25, 2.455, 0.25, 2.495], [-0.25, 2.495, -0.25, 2.455], [-0.25, 2.51, -0.25, 2.495], [-0.25, 2.55, -0.25, 2.51], [-0.25, 3.18, -0.25, 2.55], [-0.266, 2.495, -0.266, 2.455], [0.266, 2.455, 0.266, 2.495], [-0.266, 2.55, -0.266, 2.51], [0.266, 2.51, 0.266, 2.55], [-0.438, 2.51, 0.549, 2.51], [0.58, 2.55, -0.438, 2.55], [0.438, 2.495, -0.58, 2.495], [-0.55, 2.455, 0.438, 2.455], [-0.641, 2.449, -1.156, 0.577], [0.61, 2.463, 1.186, 0.318], [-1.156, 0.577, -1.242, 0.491], [-1.242, 0.491, -1.28, 0.352], [1.282, 0.344, 1.243, 0.491], [1.243, 0.491, 1.158, 0.576], [1.158, 0.576, 0.641, 2.503], [-1.184, 0.326, -0.61, 2.409], [-0.344, 2.305, 0.344, 2.305], [0.343, 2.305, 0.343, 2.455], [-0.343, 2.455, -0.343, 2.305], [0.306, 2.55, 0.306, 2.51], [-0.438, 2.55, -0.438, 2.51], [-0.306, 2.455, -0.306, 2.495], [0.438, 2.455, 0.438, 2.495], [-0.188, 2.305, -0.188, 2.68], [0.188, 2.305, 0.188, 2.68]], "arcs": [[0.0, -0.0, 1.268, 164.617, 15.026], [0.58, 2.486, 0.063, 15.026, 90.0], [0.549, 2.446, 0.063, 15.026, 90.0], [-0.0, -0.0, 1.228, 164.617, 15.026], [0.0, 0.0, 1.327, 164.617, 15.026], [-0.55, 2.393, 0.063, 90.0, 164.617], [-0.58, 2.433, 0.063, 90.0, 164.617]], "topY": 3.18, "boreR": 1.228}, "3-1/2\"": {"lines": [[0.195, 4.444, 0.195, 4.944], [-0.195, 4.944, -0.195, 4.444], [0.208, 4.111, 0.208, 4.402], [-0.208, 4.402, -0.208, 4.111], [-0.25, 4.444, 0.25, 4.444], [-0.208, 4.402, 0.208, 4.402], [0.208, 4.402, 0.25, 4.444], [-0.25, 4.444, -0.208, 4.402], [-0.208, 4.111, 0.208, 4.111], [-0.208, 4.111, -0.25, 4.069], [0.25, 4.069, 0.208, 4.111], [-0.338, 4.944, 0.338, 4.944], [0.338, 4.432, 0.338, 4.944], [0.338, 4.357, 0.338, 4.432], [0.338, 4.294, 0.338, 4.357], [0.338, 4.219, 0.338, 4.294], [-0.338, 4.294, -0.338, 4.219], [-0.338, 4.357, -0.338, 4.294], [-0.338, 4.432, -0.338, 4.357], [-0.338, 4.944, -0.338, 4.432], [-0.344, 4.432, -0.344, 4.357], [0.344, 4.357, 0.344, 4.432], [-0.344, 4.294, -0.344, 4.219], [0.344, 4.219, 0.344, 4.294], [-0.45, 4.069, 0.45, 4.069], [0.45, 4.069, 0.45, 4.219], [-0.45, 4.219, -0.45, 4.069], [-0.688, 4.432, -0.688, 4.357], [-0.688, 4.357, 0.627, 4.357], [-0.688, 4.432, 0.68, 4.432], [-0.629, 4.219, 0.688, 4.219], [-0.681, 4.294, 0.688, 4.294], [0.688, 4.219, 0.688, 4.294], [-0.752, 4.245, -2.036, 0.748], [2.045, 0.723, 0.751, 4.382], [0.698, 4.307, 1.974, 0.698], [-1.966, 0.722, -0.699, 4.17], [-0.552, 4.432, -0.552, 4.357], [0.552, 4.294, 0.552, 4.219], [-0.25, 4.069, -0.25, 4.444], [0.25, 4.069, 0.25, 4.444]], "arcs": [[-0.0, 0.0, 2.169, 159.832, 19.473], [0.68, 4.357, 0.075, 19.473, 90.0], [0.627, 4.282, 0.075, 19.473, 90.0], [-0.0, 0.0, 2.094, 159.832, 19.473], [-0.629, 4.144, 0.075, 90.0, 159.832], [-0.681, 4.219, 0.075, 90.0, 159.832]], "topY": 4.944, "boreR": 2.094}, "3\"": {"lines": [[0.195, 3.319, 0.195, 3.819], [-0.195, 3.819, -0.195, 3.319], [0.208, 2.986, 0.208, 3.277], [-0.208, 3.277, -0.208, 2.986], [-0.25, 3.319, 0.25, 3.319], [-0.208, 3.277, 0.208, 3.277], [0.208, 3.277, 0.25, 3.319], [-0.25, 3.319, -0.208, 3.277], [-0.208, 2.986, 0.208, 2.986], [-0.208, 2.986, -0.25, 2.944], [0.25, 2.944, 0.208, 2.986], [-0.338, 3.819, 0.338, 3.819], [0.338, 3.307, 0.338, 3.819], [0.338, 3.232, 0.338, 3.307], [0.338, 3.169, 0.338, 3.232], [0.338, 3.094, 0.338, 3.169], [-0.338, 3.169, -0.338, 3.094], [-0.338, 3.232, -0.338, 3.169], [-0.338, 3.307, -0.338, 3.232], [-0.338, 3.819, -0.338, 3.307], [-0.344, 3.307, -0.344, 3.232], [0.344, 3.232, 0.344, 3.307], [-0.344, 3.169, -0.344, 3.094], [0.344, 3.094, 0.344, 3.169], [-0.45, 2.944, 0.45, 2.944], [0.45, 2.944, 0.45, 3.094], [-0.45, 3.094, -0.45, 2.944], [-0.688, 3.307, -0.688, 3.232], [-0.688, 3.232, 0.638, 3.232], [-0.688, 3.307, 0.689, 3.307], [-0.64, 3.094, 0.688, 3.094], [-0.69, 3.169, 0.688, 3.169], [0.688, 3.094, 0.688, 3.169], [-0.759, 3.123, -1.766, 0.75], [1.781, 0.715, 0.758, 3.26], [0.708, 3.185, 1.711, 0.687], [-1.697, 0.721, -0.709, 3.048], [-0.552, 3.307, -0.552, 3.232], [0.552, 3.169, 0.552, 3.094], [-0.25, 2.944, -0.25, 3.319], [0.25, 2.944, 0.25, 3.319]], "arcs": [[0.0, 0.0, 1.919, 156.999, 21.888], [0.689, 3.232, 0.075, 21.888, 90.0], [0.638, 3.157, 0.075, 21.888, 90.0], [-0.0, -0.0, 1.844, 156.999, 21.888], [-0.64, 3.019, 0.075, 90.0, 156.999], [-0.69, 3.094, 0.075, 90.0, 156.999]], "topY": 3.819, "boreR": 1.844}, "4\"": {"lines": [[0.195, 4.506, 0.195, 5.006], [-0.195, 5.006, -0.195, 4.506], [0.208, 4.173, 0.208, 4.464], [-0.208, 4.464, -0.208, 4.173], [-0.25, 4.506, 0.25, 4.506], [-0.208, 4.464, 0.208, 4.464], [0.208, 4.464, 0.25, 4.506], [-0.25, 4.506, -0.208, 4.464], [-0.208, 4.173, 0.208, 4.173], [-0.208, 4.173, -0.25, 4.131], [0.25, 4.131, 0.208, 4.173], [-0.338, 5.006, 0.338, 5.006], [0.338, 4.494, 0.338, 5.006], [0.338, 4.419, 0.338, 4.494], [0.338, 4.356, 0.338, 4.419], [0.338, 4.281, 0.338, 4.356], [-0.338, 4.356, -0.338, 4.281], [-0.338, 4.419, -0.338, 4.356], [-0.338, 4.494, -0.338, 4.419], [-0.338, 5.006, -0.338, 4.494], [-0.406, 4.494, -0.406, 4.419], [0.406, 4.419, 0.406, 4.494], [-0.406, 4.356, -0.406, 4.281], [0.406, 4.281, 0.406, 4.356], [-0.45, 4.131, 0.45, 4.131], [0.45, 4.131, 0.45, 4.281], [-0.45, 4.281, -0.45, 4.131], [-0.688, 4.494, -0.688, 4.419], [-0.688, 4.419, 0.642, 4.419], [-0.688, 4.494, 0.692, 4.494], [-0.643, 4.281, 0.688, 4.281], [-0.692, 4.356, 0.688, 4.356], [0.688, 4.281, 0.688, 4.356], [-0.761, 4.311, -2.218, 0.966], [2.231, 0.934, 0.761, 4.448], [0.711, 4.373, 2.162, 0.905], [-2.149, 0.936, -0.712, 4.236], [-0.552, 4.494, -0.552, 4.419], [0.552, 4.356, 0.552, 4.281], [-0.25, 4.131, -0.25, 4.506], [0.25, 4.131, 0.25, 4.506]], "arcs": [[0.0, 0.0, 2.419, 156.468, 22.71], [0.692, 4.419, 0.075, 22.71, 90.0], [0.642, 4.344, 0.075, 22.71, 90.0], [0.0, 0.0, 2.344, 156.468, 22.71], [-0.643, 4.206, 0.075, 90.0, 156.468], [-0.692, 4.281, 0.075, 90.0, 156.468]], "topY": 5.006, "boreR": 2.344}};
+// map our NPS labels -> ring catalog keys (8" falls back to 6")
+const RING_KEY = {'1"':'1"','1¼"':'1-1/4"','1½"':'1-1/2"','2"':'2"','2½"':'2-1/2"','3"':'3"','4"':'4"','6"':'6"','8"':'6"'};
+function ringData(npsIndex){
+  const i = (npsIndex==null && state.pipe) ? state.pipe.npsIndex : npsIndex;
+  if(i==null) return null;
+  return RINGS[RING_KEY[PIPES[i].nps]] || null;
+}
+
+/* ============================================================
+   State
+   ============================================================ */
+const state = {
+  pipe:null,            // {x, y, npsIndex}
+  ring:false,
+  rodToPipe:false,      // extend the rod past the ring socket to the top of the pipe
+  structure:null,       // key
+  fastener:null,        // key
+  detailScale:1,        // zoom of the drawing content within the fixed sheet
+  keynotePos:{},        // per-keynote bubble position {at:{x,y}} (movable)
+  keynoteArrow:{},      // per-keynote arrow-tip position {at:{x,y}} (movable; default = component)
+  title:"PIPE HANGER DETAIL — CONCRETE DECK",
+  detailNo:"1",
+};
+let keynoteHit = [];    // {at,x,y,r} bubbles for drag hit-testing, rebuilt each draw
+let activeTool = null;
+let pendingNps = 6;     // pipe size (NPS index) used when placing a new pipe; default 4"
+
+/* ============================================================
+   Canvas / DPI fit
+   ============================================================ */
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let view = {scale:1, ox:0, oy:0, dpr:1};   // fits the whole fixed sheet to the screen
+
+function fitCanvas(){
+  const stage = document.getElementById('stage');
+  const dpr = window.devicePixelRatio || 1;
+  const w = stage.clientWidth, h = stage.clientHeight;
+  cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
+  // fit virtual W×H (the fixed sheet) into w×h with margin
+  const m = 10;
+  const s = Math.min((w-2*m)/W, (h-2*m)/H);
+  view = { scale:s, ox:(w - W*s)/2, oy:(h - H*s)/2, dpr };
+  draw();
+}
+window.addEventListener('resize', fitCanvas);
+
+// Detail zoom: scales the DRAWING content within the fixed sheet (not the page).
+// Pipe Y is rescaled around the deck top so sizes + spacing zoom uniformly.
+function setDetailScale(ds){
+  ds = clamp(ds, 0.45, 2.4);
+  if(state.pipe){
+    const k = ds/state.detailScale;
+    state.pipe.y = DECK_TOP + (state.pipe.y - DECK_TOP)*k;
+  }
+  state.detailScale = ds;
+  if(state.pipe){
+    const [yMin,yMax]=pipeYRange(state.pipe.npsIndex);
+    state.pipe.y = clamp(state.pipe.y, yMin, yMax);
+  }
+  draw();
+}
+document.getElementById('btnZoomIn').onclick =()=> setDetailScale(state.detailScale*1.18);
+document.getElementById('btnZoomOut').onclick=()=> setDetailScale(state.detailScale*0.85);
+document.getElementById('btnFit').onclick    =()=> setDetailScale(1);
+
+function toDetail(clientX, clientY){
+  const r = cv.getBoundingClientRect();
+  const x = (clientX - r.left - view.ox)/view.scale;
+  const y = (clientY - r.top  - view.oy)/view.scale;
+  return {x,y};
+}
+
+/* ============================================================
+   DRAWING — all primitives in detail space.
+   render(g) draws the whole detail; used for both screen + export.
+   ============================================================ */
+function render(g, opts){
+  opts = opts || {};
+  // paper
+  if(opts.paper){ g.fillStyle="#ffffff"; g.fillRect(0,0,W,H); }
+  g.lineJoin="round"; g.lineCap="round";
+  g.textBaseline="alphabetic";
+
+  drawBorder(g);
+  drawStructure(g);
+  drawFastener(g);
+  drawRod(g);            // rod BEHIND the ring so the ring hanger reads as in front
+  drawRingAndPipe(g);
+  drawKeynotes(g);
+  drawTitleBlock(g);
+
+  if(!opts.paper) drawGhostHelpers(g);
+}
+
+function ink(g, w){ g.strokeStyle="#111418"; g.lineWidth=w; }
+function L(g,x1,y1,x2,y2){ g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.stroke(); }
+
+function drawBorder(g){
+  ink(g,2.2); g.strokeRect(28,28,W-56,H-56);
+}
+
+/* ---------- Structure: concrete deck with hatch ---------- */
+// deterministic PRNG so the aggregate scatter is stable across redraws
+function mulberry32(a){
+  return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15, 1|a);
+    t=t+Math.imul(t^t>>>7, 61|t)^t; return ((t^t>>>14)>>>0)/4294967296; };
+}
+function drawStructure(g){
+  if(state.structure!=='concrete') return;
+  const x0=70, x1=W-70, yT=DECK_TOP, yB=deckBot();
+  g.save();
+  g.beginPath(); g.rect(x0,yT,x1-x0,yB-yT); g.clip();
+  g.fillStyle="#ffffff"; g.fillRect(x0,yT,x1-x0,yB-yT);
+  // concrete aggregate symbol (AutoCAD AR-CONC style): fine sand stipple +
+  // small "x" marks + OUTLINED aggregate triangles. Stable via seeded PRNG.
+  const rnd=mulberry32(20260619);
+  const area=(x1-x0)*(yB-yT);
+  const rx=()=> x0+(x1-x0)*rnd();
+  // 1) fine sand stipple (light, dense)
+  g.fillStyle="#aab2bb";
+  for(let i=0, n=Math.round(area/300); i<n; i++){
+    g.beginPath(); g.arc(rx(), yT+3+(yB-yT-6)*rnd(), 0.5+rnd()*0.5, 0, 7); g.fill();
+  }
+  // 2) small x marks
+  g.strokeStyle="#6f7884"; g.lineWidth=0.8;
+  for(let i=0, n=Math.round(area/3000); i<n; i++){
+    const px=rx(), py=yT+6+(yB-yT-12)*rnd(), s=2+rnd()*1.4;
+    g.beginPath(); g.moveTo(px-s,py-s); g.lineTo(px+s,py+s); g.moveTo(px-s,py+s); g.lineTo(px+s,py-s); g.stroke();
+  }
+  // 3) outlined aggregate triangles (sparse, varied size + rotation)
+  g.strokeStyle="#5c6671"; g.lineWidth=0.9;
+  for(let i=0, n=Math.round(area/5200); i<n; i++){
+    const px=rx(), py=yT+8+(yB-yT-16)*rnd(), s=4+rnd()*4, rot=rnd()*6.283;
+    g.beginPath();
+    for(let k=0;k<3;k++){ const a=rot+k*2.0944, ax=px+Math.cos(a)*s, ay=py+Math.sin(a)*s; if(k)g.lineTo(ax,ay); else g.moveTo(ax,ay); }
+    g.closePath(); g.stroke();
+  }
+  g.restore();
+  // top + bottom edges (bottom heavier = structural underside)
+  ink(g,1.4); L(g,x0,yT,x1,yT);
+  ink(g,2.4); L(g,x0,yB,x1,yB);
+}
+
+/* ---------- Fastener (wedge anchor) + all-thread rod ---------- */
+function rodSize(){
+  // NFPA 13 hanger-rod diameter by pipe size (3/8" through 4", 1/2" above)
+  if(!state.pipe) return '3/8"';
+  return PIPES[state.pipe.npsIndex].od <= 4.5 ? '3/8"' : '1/2"';
+}
+
+function geom(){
+  const p = state.pipe;
+  if(!p) return null;
+  const od = PIPES[p.npsIndex].od;
+  const pipeR = od*E()/2;   // true scale, no floor (rod is the size reference)
+  const rd = ringData(p.npsIndex);
+  // top of the swivel socket (where the rod lands) from the real ring geometry, in px
+  const ringTopPx = rd ? rd.topY*E() : (pipeR + 30);
+  const ringR = rd ? rd.boreR*E() : (pipeR + 11);  // bore radius (for hit-test/keynote)
+  // rod end: ring socket top, or — when "extend rod to top of pipe" is on — the
+  // top of the pipe OD; no ring → just above the pipe
+  const bossTop = state.ring
+    ? (state.rodToPipe ? (p.y - pipeR) : (p.y - ringTopPx))
+    : (p.y - pipeR - 24);
+  // drop-in is flush in the deck (rod enters underside); wedge protrudes with a nut
+  const rodTop = (state.fastener==='wedge') ? deckBot() + 6 : deckBot();
+  return {p, pipeR, ringR, bossTop, rodTop, nutY:rodTop, od, rd, ringTopPx};
+}
+
+function drawFastener(g){
+  const G = geom(); if(!G) return;
+  const x = state.pipe.x;
+
+  if(state.fastener==='dropin' && state.structure==='concrete'){
+    drawDropIn(g, x);
+  } else if(state.fastener==='wedge' && state.structure==='concrete'){
+    // embedded wedge anchor body (kept for future)
+    const db=deckBot();
+    ink(g,2.0);
+    L(g, x, DECK_TOP+14, x, db);
+    ink(g,1.6);
+    g.beginPath(); g.moveTo(x-5,DECK_TOP+30); g.lineTo(x,DECK_TOP+20); g.lineTo(x+5,DECK_TOP+30); g.stroke();
+    g.beginPath(); g.moveTo(x-5,DECK_TOP+40); g.lineTo(x,DECK_TOP+30); g.lineTo(x+5,DECK_TOP+40); g.stroke();
+    ink(g,2.0);
+    L(g, x-13, db, x+13, db);
+    g.fillStyle="#ffffff";
+    g.beginPath(); g.rect(x-8, db, 16, 12); g.fill(); g.stroke();
+    L(g, x-8, db+6, x+8, db+6);
+  }
+}
+
+// All-thread rod, drawn BEFORE the ring so the ring occludes it (ring in front).
+// Rod width is drawn to true scale (3/8" or 1/2") off the pipe/ring scale.
+function rodHwPx(){
+  const dia = (rodSize()==='1/2"') ? 0.5 : 0.375;   // rod diameter, inches
+  return dia*E()/2;                                  // true half-width, px (scales with detail)
+}
+function drawRod(g){
+  const G = geom(); if(!G || !state.fastener) return;
+  drawAllThread(g, state.pipe.x, G.rodTop, G.bossTop, !state.ring, rodHwPx());
+}
+
+// Hilti HDI drop-in anchor: hollow internally-threaded sleeve, set flush in deck.
+// Rod threads up into it from the underside (no protruding nut/washer).
+function drawDropIn(g, x){
+  const aw=Math.max(6, rodHwPx()*2.4), ty=DECK_TOP+10, by=deckBot(); // sized off the rod
+  ink(g,1.6); g.fillStyle="#ffffff";
+  g.beginPath(); g.rect(x-aw, ty, aw*2, by-ty); g.fill(); g.stroke();
+  // setting shoulder / lip at top corners
+  const sh=Math.min(4, aw*0.4);
+  ink(g,0.9);
+  L(g, x-aw+sh, ty, x-aw+sh, ty+5); L(g, x-aw, ty+5, x-aw+sh, ty+5);
+  L(g, x+aw-sh, ty, x+aw-sh, ty+5); L(g, x+aw, ty+5, x+aw-sh, ty+5);
+  // internal expansion-slot lines
+  const slot=aw*0.5;
+  L(g, x-slot, ty+10, x-slot, by-6);
+  L(g, x+slot, ty+10, x+slot, by-6);
+}
+
+function drawAllThread(g, x, y1, y2, drawNut, hw){
+  if(y2<=y1) return;
+  hw = hw || 5; // true half-width of rod in px
+  ink(g,1.2);
+  L(g, x-hw, y1, x-hw, y2);
+  L(g, x+hw, y1, x+hw, y2);
+  // horizontal thread crests (pitch scales with rod size)
+  ink(g,0.6);
+  const sp = Math.max(2.4, hw*1.9);
+  for(let y=y1+sp; y<y2-1; y+=sp){ L(g, x-hw, y, x+hw, y); }
+  if(drawNut){ // standalone hex nut (only when no ring assembly below)
+    const nw=hw*1.9, nh=hw*2.3;
+    ink(g,1.4); g.fillStyle="#ffffff";
+    g.beginPath(); g.rect(x-nw, y2, nw*2, nh); g.fill(); g.stroke();
+    L(g, x-nw, y2+nh/2, x+nw, y2+nh/2);
+  }
+}
+
+/* ---------- Ring hanger (real TOLCO Fig. 200 traced geometry) + pipe ---------- */
+// Bore center maps to (cx,cy); inches->px via PX_PER_IN; DXF y-up flipped to
+// canvas y-down. Lines drawn directly, arcs sampled as polylines (robust to flip).
+function drawRealRing(g, cx, cy, rd){
+  const sc = E();
+  const TX = (x)=> cx + x*sc, TY = (y)=> cy - y*sc;
+  ink(g, 1.8);
+  g.beginPath();
+  for(const ln of rd.lines){ g.moveTo(TX(ln[0]),TY(ln[1])); g.lineTo(TX(ln[2]),TY(ln[3])); }
+  g.stroke();
+  g.beginPath();
+  for(const ar of rd.arcs){
+    let acx=ar[0], acy=ar[1], r=ar[2], s=ar[3], e=ar[4];
+    if(e<=s) e+=360;
+    const sweep=e-s, n=Math.max(8, Math.round(sweep/4));
+    for(let k=0;k<=n;k++){
+      const t=(s+sweep*k/n)*Math.PI/180;
+      const px=TX(acx + r*Math.cos(t)), py=TY(acy + r*Math.sin(t));
+      if(k===0) g.moveTo(px,py); else g.lineTo(px,py);
+    }
+  }
+  g.stroke();
+}
+
+// Pipe cut in section: outer wall (OD) + inner wall (ID) with the cut wall
+// hatched; the bore stays clear.
+function drawPipeSection(g, cx, cy, rOD){
+  const wall = Math.max(3.5, Math.min(9, rOD*0.16));
+  const rID = Math.max(2, rOD - wall);
+  // clean white base under the pipe
+  g.fillStyle="#ffffff"; g.beginPath(); g.arc(cx, cy, rOD, 0, 7); g.fill();
+  // hatch the wall (annulus between OD and ID)
+  g.save();
+  g.beginPath();
+  g.arc(cx, cy, rOD, 0, Math.PI*2);
+  g.moveTo(cx+rID, cy);
+  g.arc(cx, cy, rID, 0, Math.PI*2);
+  g.clip('evenodd');
+  ink(g,0.6);
+  const y0=cy-rOD, y1=cy+rOD, x0=cx-rOD, x1=cx+rOD, span=(y1-y0);
+  for(let xx=x0-span; xx<x1; xx+=5){ L(g, xx, y1, xx+span, y0); }
+  g.restore();
+  // wall outlines
+  ink(g,2.4); g.beginPath(); g.arc(cx, cy, rOD, 0, 7); g.stroke();
+  ink(g,1.6); g.beginPath(); g.arc(cx, cy, rID, 0, 7); g.stroke();
+}
+
+function drawRingAndPipe(g){
+  const G = geom(); if(!G) return;
+  const cx = state.pipe.x, cy = state.pipe.y, rP = G.pipeR;
+  if(state.ring && G.rd){
+    drawRealRing(g, cx, cy, G.rd);   // real TOLCO ring wraps the bore
+  }
+  drawPipeSection(g, cx, cy, rP);     // pipe section sits inside the bore
+}
+
+/* ---------- Keynotes + leaders + legend ---------- */
+function activeKeynotes(){
+  const list=[];
+  if(state.structure==='concrete') list.push({n:0,t:STRUCTURES.concrete.keynote, at:'deck'});
+  if(state.fastener) list.push({n:0,t:fastenerNote(), at:'fastener'});
+  if(state.fastener) list.push({n:0,t:`${rodSize()}Ø ALL-THREAD HANGER ROD`, at:'rod'});
+  if(state.ring) list.push({n:0,t:'ADJUSTABLE SWIVEL RING HANGER, UL LISTED', at:'ring'});
+  if(state.pipe){
+    const nps = PIPES[state.pipe.npsIndex].nps;
+    list.push({n:0,t:`${nps} SPRINKLER PIPE`, at:'pipe'});
+  }
+  list.forEach((k,i)=>k.n=i+1);
+  return list;
+}
+
+function fastenerNote(){
+  if(state.fastener==='dropin')
+    return `${rodSize()}Ø HILTI HDI DROP-IN ANCHOR, ICC-ES ESR-3779, EMBED PER MFR`;
+  return FASTENERS[state.fastener].note || FASTENERS[state.fastener].name.toUpperCase();
+}
+
+function keynoteAnchor(at){
+  const G = geom();
+  const x = state.pipe ? state.pipe.x : AXIS;
+  switch(at){
+    case 'deck': return {x:x+40, y:DECK_TOP+(deckBot()-DECK_TOP)/2};
+    case 'fastener': return {x:x+11, y:DECK_TOP+(deckBot()-DECK_TOP)/2};
+    case 'rod': return G ? {x:x, y:(G.nutY+G.bossTop)/2} : {x,y:400};
+    case 'ring': return G ? {x:x-G.ringR, y:state.pipe.y-G.ringR*0.5} : {x,y:600};
+    case 'pipe': return G ? {x:x+G.pipeR, y:state.pipe.y} : {x,y:640};
+  }
+  return {x,y:400};
+}
+
+function drawKeynotes(g){
+  const keys = activeKeynotes();
+  keynoteHit = [];
+  if(!keys.length) return;
+  const gutterX = W-150, R = 13;
+  g.font="bold 19px Arial";
+  keys.forEach((k,i)=>{
+    const a = state.keynoteArrow[k.at] || keynoteSafe(k.at); // arrow tip (movable; default = component)
+    const def = {x:gutterX, y:250 + i*46};             // default gutter slot
+    const pos = state.keynotePos[k.at] || def;
+    const bx = pos.x, byy = pos.y;
+    // leader from bubble edge to the arrow tip
+    const dx=a.x-bx, dy=a.y-byy, dl=Math.hypot(dx,dy)||1;
+    const sx=bx+dx/dl*R, sy=byy+dy/dl*R;
+    ink(g,1.0); g.beginPath(); g.moveTo(sx,sy); g.lineTo(a.x,a.y); g.stroke();
+    arrow(g, sx, sy, a.x, a.y);                         // arrowhead at the tip
+    // bubble
+    ink(g,1.8); g.fillStyle="#ffffff";
+    g.beginPath(); g.arc(bx, byy, R, 0, 7); g.fill(); g.stroke();
+    g.fillStyle="#111418"; g.textAlign="center"; g.textBaseline="middle";
+    g.fillText(String(k.n), bx, byy+1);
+    g.textBaseline="alphabetic";
+    keynoteHit.push({kind:'bubble', at:k.at, x:bx, y:byy, r:R});
+    keynoteHit.push({kind:'arrow', at:k.at, x:a.x, y:a.y, r:9});
+  });
+}
+// guard against undefined geom for anchors
+function keynoteSafe(at){ try{ return keynoteAnchor(at);}catch(e){ return {x:AXIS,y:400}; } }
+
+function arrow(g, x1,y1,x2,y2){
+  const ang=Math.atan2(y2-y1,x2-x1), s=7;
+  ink(g,1.0); g.fillStyle="#111418";
+  g.beginPath();
+  g.moveTo(x2,y2);
+  g.lineTo(x2-s*Math.cos(ang-0.4), y2-s*Math.sin(ang-0.4));
+  g.lineTo(x2-s*Math.cos(ang+0.4), y2-s*Math.sin(ang+0.4));
+  g.closePath(); g.fill();
+}
+
+/* ---------- Title block + keynote legend ---------- */
+function drawTitleBlock(g){
+  ink(g,2.0);
+  L(g, 28, TITLE_TOP, W-28, TITLE_TOP);
+  // Keynote legend (left)
+  const keys = activeKeynotes();
+  g.textAlign="left"; g.fillStyle="#111418";
+  g.font="bold 14px Arial";
+  g.fillText("KEYNOTES", 44, TITLE_TOP+20);
+  let ly = TITLE_TOP+40;
+  for(const k of keys){
+    // small bubble
+    ink(g,1.3); g.fillStyle="#ffffff";
+    g.beginPath(); g.arc(50, ly-4, 8, 0, 7); g.fill(); g.stroke();
+    g.fillStyle="#111418"; g.textAlign="center"; g.font="bold 11px Arial";
+    g.fillText(String(k.n), 50, ly);
+    g.textAlign="left"; g.font="11px Arial";
+    g.fillText(k.t, 64, ly);
+    ly += 19;
+  }
+  // Title (right block)
+  const tbx = W-300;
+  ink(g,1.4); L(g, tbx, TITLE_TOP, tbx, H-28);
+  g.textAlign="left"; g.fillStyle="#111418";
+  g.font="bold 17px Arial";
+  wrapText(g, state.title, tbx+16, TITLE_TOP+30, 250, 20);
+  g.font="11px Arial"; g.fillStyle="#444";
+  g.fillText("SCALE: NTS", tbx+16, H-58);
+  g.font="bold 12px Arial"; g.fillStyle="#111418";
+  g.fillText("DETAIL  "+state.detailNo, tbx+16, H-40);
+  // small detail tag bubble
+  ink(g,1.8); g.fillStyle="#ffffff";
+  g.beginPath(); g.arc(W-52, H-50, 16, 0, 7); g.fill(); g.stroke();
+  g.fillStyle="#111418"; g.textAlign="center"; g.font="bold 15px Arial";
+  g.fillText(state.detailNo, W-52, H-45);
+  g.textAlign="left";
+}
+
+function wrapText(g, text, x, y, maxW, lh){
+  const words=text.split(/\s+/); let line=""; let yy=y;
+  for(const w of words){
+    const test=line?line+" "+w:w;
+    if(g.measureText(test).width>maxW && line){ g.fillText(line,x,yy); line=w; yy+=lh; }
+    else line=test;
+  }
+  if(line) g.fillText(line,x,yy);
+}
+
+/* ---------- On-screen-only ghosts to guide placement ---------- */
+function drawGhostHelpers(g){
+  if(!state.pipe){
+    g.save();
+    g.strokeStyle="rgba(120,170,255,.55)"; g.setLineDash([6,6]); g.lineWidth=1.4;
+    g.beginPath(); g.arc(AXIS, 560, 34, 0, 7); g.stroke();
+    g.setLineDash([]);
+    g.fillStyle="rgba(150,180,220,.85)"; g.font="13px Arial"; g.textAlign="center";
+    g.fillText("pipe goes here", AXIS, 612);
+    g.textAlign="left"; g.restore();
+  }
+}
+
+/* ============================================================
+   draw() — screen render through the fit transform
+   ============================================================ */
+function draw(){
+  ctx.save();
+  ctx.setTransform(view.dpr,0,0,view.dpr,0,0);
+  ctx.clearRect(0,0,cv.width,cv.height);
+  // paper sheet
+  ctx.translate(view.ox, view.oy); ctx.scale(view.scale, view.scale);
+  // drop shadow + white sheet
+  ctx.save();
+  ctx.shadowColor="rgba(0,0,0,.45)"; ctx.shadowBlur=18; ctx.shadowOffsetY=6;
+  ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,W,H);
+  ctx.restore();
+  render(ctx, {paper:false});
+  ctx.restore();
+}
+
+/* ============================================================
+   Interaction
+   ============================================================ */
+let drag=null;
+const pointers=new Map();   // pointerId -> {x,y} in canvas CSS px (for pinch)
+let pinch=null;
+cv.addEventListener('pointerdown', onDown);
+cv.addEventListener('pointermove', onMove);
+cv.addEventListener('pointerup', onUp);
+cv.addEventListener('pointercancel', onUp);
+cv.addEventListener('wheel', e=>{
+  e.preventDefault();
+  setDetailScale(state.detailScale * Math.exp(-e.deltaY*0.0015));
+}, {passive:false});
+
+function canvasPt(e){ const r=cv.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+function startPinch(){
+  drag=null;
+  const p=[...pointers.values()];
+  pinch={ d0:Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y) || 1, ds0:state.detailScale };
+}
+
+function onDown(e){
+  cv.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, canvasPt(e));
+  if(pointers.size===2){ startPinch(); return; }   // two fingers => pinch zoom/pan
+  if(pointers.size>2) return;
+
+  const d = toDetail(e.clientX, e.clientY);
+  // place pipe
+  if(activeTool==='pipe'){
+    const idx = state.pipe ? state.pipe.npsIndex : pendingNps;
+    const [yMin,yMax] = pipeYRange(idx);
+    const y = clamp(d.y, yMin, yMax);
+    const x = clamp(d.x, 90, W-200);
+    if(!state.pipe) state.pipe={x, y, npsIndex:pendingNps};
+    else { state.pipe.x=x; state.pipe.y=y; }
+    setTool(null); updateUI(); draw(); flash("Pipe placed. Add a Ring, Structure, then Fastener.");
+    return;
+  }
+  // drag a keynote bubble or its arrow tip (both movable; leader connects them)
+  for(const kb of keynoteHit){
+    const pad = kb.kind==='arrow' ? 6 : 10;
+    if(Math.hypot(d.x-kb.x, d.y-kb.y) < kb.r+pad){
+      drag={type:'keynote', kind:kb.kind, at:kb.at, dx:d.x-kb.x, dy:d.y-kb.y};
+      return;
+    }
+  }
+  // otherwise: drag existing pipe assembly
+  if(state.pipe){
+    const G=geom();
+    const dx=d.x-state.pipe.x, dy=d.y-state.pipe.y;
+    if(Math.hypot(dx,dy) < (G?G.ringR:30)+18){ drag={type:'pipe',dx,dy}; }
+  }
+}
+function onMove(e){
+  if(pointers.has(e.pointerId)) pointers.set(e.pointerId, canvasPt(e));
+  // pinch => scale the detail drawing (two pointers)
+  if(pointers.size>=2 && pinch){
+    const p=[...pointers.values()];
+    const d=Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y) || 1;
+    setDetailScale(pinch.ds0 * (d/pinch.d0));
+    return;
+  }
+  if(!drag) return;
+  const d=toDetail(e.clientX,e.clientY);
+  if(drag.type==='keynote'){
+    if(drag.kind==='arrow')
+      state.keynoteArrow[drag.at]={x:clamp(d.x-drag.dx,32,W-32), y:clamp(d.y-drag.dy,32,H-32)};
+    else
+      state.keynotePos[drag.at]={x:clamp(d.x-drag.dx,40,W-40), y:clamp(d.y-drag.dy,40,TITLE_TOP-12)};
+    draw(); return;
+  }
+  if(!state.pipe) return;
+  const [yMin,yMax] = pipeYRange(state.pipe.npsIndex);
+  state.pipe.x=clamp(d.x-drag.dx, 90, W-200);
+  state.pipe.y=clamp(d.y-drag.dy, yMin, yMax);
+  draw();
+}
+function onUp(e){
+  pointers.delete(e.pointerId);
+  if(pointers.size<2) pinch=null;
+  if(pointers.size===0) drag=null;
+}
+
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+
+// valid vertical range for the pipe center so the full hanger fits below the deck
+function pipeYRange(npsIndex){
+  const rP = PIPES[npsIndex].od*E()/2;
+  const rd = ringData(npsIndex);
+  const top = rd ? rd.topY*E() : (rP + 30);
+  return [deckBot() + 45 + top, TITLE_TOP - rP - 14];
+}
+
+/* ============================================================
+   Tool buttons + sheets
+   ============================================================ */
+const tools = document.getElementById('tools');
+tools.addEventListener('click', e=>{
+  const b=e.target.closest('.tool'); if(!b) return;
+  if(b.getAttribute('aria-disabled')==='true') return;
+  const t=b.dataset.tool;
+  if(t==='pipe'){ openPipe(); }
+  if(t==='ring'){ openRing(); }
+  if(t==='structure'){ openStructure(); }
+  if(t==='fastener'){ openFastener(); }
+});
+
+function setTool(t){
+  activeTool=t;
+  [...document.querySelectorAll('.tool')].forEach(el=>el.classList.toggle('active', el.dataset.tool===t));
+  if(t==='pipe') flash("Tap the canvas to place the pipe.");
+}
+
+/* ---- sheets ---- */
+const sheetBack=document.getElementById('sheetBack');
+const sheet=document.getElementById('sheet');
+function showSheet(html){ sheet.innerHTML=html; sheetBack.classList.add('show'); }
+function hideSheet(){ sheetBack.classList.remove('show'); }
+sheetBack.addEventListener('click', e=>{ if(e.target===sheetBack) hideSheet(); });
+
+function openRing(){
+  if(!state.pipe){ flash("Place a pipe first, then add the ring."); return; }
+  showSheet(`
+    <h3>Ring Hanger <span class="sub">tap to place around pipe</span></h3>
+    <button class="opt ${state.ring?'sel':''}" data-act="ring-swivel">
+      <span class="gico">◎</span>
+      <span>Adjustable Swivel Ring<small>TOLCO Fig. 200 — wraps the pipe, threaded socket takes the rod</small></span>
+    </button>
+    <button class="opt ${state.rodToPipe?'sel':''}" data-act="rod-extend">
+      <span class="gico">${state.rodToPipe?'☑':'☐'}</span>
+      <span>Extend rod to top of pipe<small>Rod continues past the ring socket down to the top of the pipe</small></span>
+    </button>
+    <div class="row"><button class="ghost" data-act="close">Done</button></div>
+  `);
+  sheet.querySelector('[data-act="ring-swivel"]').onclick=()=>{ state.ring=true; updateUI(); draw(); openRing(); flash("Ring added."); };
+  sheet.querySelector('[data-act="rod-extend"]').onclick=()=>{ state.rodToPipe=!state.rodToPipe; draw(); openRing(); };
+  sheet.querySelector('[data-act="close"]').onclick=hideSheet;
+}
+
+function openStructure(){
+  const items=Object.entries(STRUCTURES).map(([k,s])=>`
+    <button class="opt ${state.structure===k?'sel':''}" ${s.on?'':'disabled'} data-k="${k}">
+      <span class="gico">${s.ico}</span>
+      <span>${s.name}${s.on?'':' <small>coming soon</small>'}</span>
+    </button>`).join('');
+  showSheet(`<h3>Structure <span class="sub">what you're hanging from</span></h3>${items}
+    <div class="row"><button class="ghost" data-act="close">Cancel</button></div>`);
+  sheet.querySelectorAll('.opt[data-k]').forEach(b=> b.onclick=()=>{
+    const k=b.dataset.k; if(!STRUCTURES[k].on) return;
+    state.structure=k;
+    // reset fastener if not valid for this structure
+    if(state.fastener && !STRUCTURES[k].fasteners.includes(state.fastener)) state.fastener=null;
+    hideSheet(); updateUI(); draw(); flash("Structure set. Now choose a Fastener.");
+  });
+  sheet.querySelector('[data-act="close"]').onclick=hideSheet;
+}
+
+function openFastener(){
+  if(!state.structure){ flash("Pick a Structure first — fasteners depend on it."); return; }
+  const valid=STRUCTURES[state.structure].fasteners;
+  const items=valid.map(k=>{
+    const f=FASTENERS[k]; const on=!!f.on; // v1: only the drop-in is fully drawn
+    return `<button class="opt ${state.fastener===k?'sel':''}" ${on?'':'disabled'} data-k="${k}">
+      <span class="gico">⚓</span>
+      <span>${f.name}${on?'':' <small>coming soon</small>'}</span></button>`;
+  }).join('');
+  showSheet(`<h3>Fastener <span class="sub">for ${STRUCTURES[state.structure].name}</span></h3>${items}
+    <div class="row"><button class="ghost" data-act="close">Cancel</button></div>`);
+  sheet.querySelectorAll('.opt[data-k]').forEach(b=> b.onclick=()=>{
+    if(b.disabled) return;
+    state.fastener=b.dataset.k; hideSheet(); updateUI(); draw();
+    flash("Fastener placed — rod auto-connected to the pipe. Tap ⤓ PNG to export.");
+  });
+  sheet.querySelector('[data-act="close"]').onclick=hideSheet;
+}
+
+/* pipe size: long-press pipe tool? simpler: tapping placed pipe opens size via Ring-less control.
+   We add a size button in the Pipe sheet flow: tap Pipe tool when pipe exists -> size sheet */
+function openPipe(){
+  const cur = state.pipe ? state.pipe.npsIndex : pendingNps;
+  const chips=PIPES.map((p,i)=>`<button class="chip ${cur===i?'sel':''}" data-i="${i}">${p.nps}</button>`).join('');
+  const placeLabel = state.pipe ? 'Move pipe (tap canvas)' : 'Tap canvas to place pipe';
+  showSheet(`
+    <h3>Pipe <span class="sub">size updates the ring hanger too</span></h3>
+    <div style="font-size:12px;color:var(--muted);margin:0 0 7px 2px;">Pipe size (NPS)</div>
+    <div class="chips">${chips}</div>
+    <div class="row">
+      <button class="ghost" data-act="place">${placeLabel}</button>
+      <button class="ghost" data-act="close">Done</button>
+    </div>
+  `);
+  sheet.querySelectorAll('.chip').forEach(c=> c.onclick=()=>{
+    const i=+c.dataset.i;
+    pendingNps=i;
+    if(state.pipe){
+      state.pipe.npsIndex=i;
+      const [yMin,yMax]=pipeYRange(i);
+      state.pipe.y=clamp(state.pipe.y, yMin, yMax);
+    }
+    updateUI(); draw(); openPipe();
+  });
+  sheet.querySelector('[data-act="place"]').onclick=()=>{ hideSheet(); setTool('pipe'); };
+  sheet.querySelector('[data-act="close"]').onclick=hideSheet;
+}
+
+/* ============================================================
+   UI state sync (enable/disable + checkmarks)
+   ============================================================ */
+function updateUI(){
+  const ring=document.querySelector('[data-tool="ring"]');
+  const fast=document.querySelector('[data-tool="fastener"]');
+  ring.setAttribute('aria-disabled', state.pipe?'false':'true');
+  fast.setAttribute('aria-disabled', state.structure?'false':'true');
+  setDone('pipe', !!state.pipe);
+  setDone('ring', state.ring);
+  setDone('structure', !!state.structure);
+  setDone('fastener', !!state.fastener);
+}
+function setDone(t,v){ const el=document.querySelector(`[data-done="${t}"]`); if(el) el.hidden=!v; }
+
+let hintTimer=null;
+function flash(msg){
+  const h=document.getElementById('hint'); h.innerHTML=msg; h.style.opacity='1';
+  clearTimeout(hintTimer);
+  hintTimer=setTimeout(()=>{ h.style.opacity = state.fastener? '0':'1'; }, 3200);
+}
+
+/* ============================================================
+   Header buttons
+   ============================================================ */
+document.getElementById('btnUndo').onclick=()=>{
+  if(!confirm("Reset the whole detail?")) return;
+  state.pipe=null; state.ring=false; state.rodToPipe=false; state.structure=null; state.fastener=null;
+  state.keynotePos={}; state.keynoteArrow={}; state.detailScale=1;
+  setTool(null); updateUI(); draw();
+  flash("Tap <b>Pipe</b> to pick a size, then tap the canvas to place it.");
+};
+document.getElementById('btnEdit').onclick=()=>{
+  showSheet(`<h3>Detail Title</h3>
+    <div class="field"><label>Title</label><input id="tIn" value="${escapeAttr(state.title)}"></div>
+    <div class="field"><label>Detail number</label><input id="nIn" value="${escapeAttr(state.detailNo)}"></div>
+    <div class="row"><button class="ghost" data-act="close">Cancel</button>
+    <button class="opt" style="justify-content:center;margin:0;" data-act="save">Save</button></div>`);
+  sheet.querySelector('[data-act="save"]').onclick=()=>{
+    state.title=(document.getElementById('tIn').value||state.title).toUpperCase();
+    state.detailNo=document.getElementById('nIn').value||state.detailNo;
+    hideSheet(); draw();
+  };
+  sheet.querySelector('[data-act="close"]').onclick=hideSheet;
+};
+function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
+
+/* ============================================================
+   Export PNG (hi-res, white paper)
+   ============================================================ */
+document.getElementById('btnExport').onclick=()=>{
+  if(!state.pipe){ flash("Add a pipe before exporting."); return; }
+  const scale=3;
+  const ex=document.createElement('canvas');
+  ex.width=W*scale; ex.height=H*scale;
+  const eg=ex.getContext('2d');
+  eg.scale(scale,scale);
+  render(eg,{paper:true});
+  ex.toBlob(blob=>{
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const name=(state.title.replace(/[^a-z0-9]+/gi,'_').slice(0,40)||'hanger_detail');
+    a.href=url; a.download=name+'.png';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),4000);
+  },'image/png');
+  flash("PNG exported ✓");
+};
+
+/* ============================================================
+   Boot
+   ============================================================ */
+updateUI();
+fitCanvas();
+</script>
+</body>
+</html>
