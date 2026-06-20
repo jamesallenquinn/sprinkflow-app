@@ -681,13 +681,37 @@
       ctx.fillStyle = "#fff"; var stray = [[-0.30, 0.40, 0.07], [-0.36, 0.50, 0.05], [0.40, 0.38, 0.06]];
       for (i = 0; i < stray.length; i++) { ctx.beginPath(); ctx.arc(x + stray[i][0] * r, y + stray[i][1] * r, stray[i][2] * r, 0, Math.PI * 2); ctx.fill(); }
     }
+    // lawn head — dark segmented body w/ green accents + a side nozzle barrel that points along s.aim (lines up with the spray cone). Whole head rotates with aim.
     function drawLawnHead(x, y, r, s) {
-      ctx.fillStyle = brass(ctx, x, y, r, ["#3a4046", "#15181c"]); ctx.beginPath(); ctx.arc(x, y, r * 0.85, 0, Math.PI * 2); ctx.fill();
-      ctx.lineWidth = Math.max(1, r * 0.06); ctx.strokeStyle = "#05070a"; ctx.stroke();
-      ctx.fillStyle = "#0a0d10"; ctx.beginPath(); ctx.arc(x, y, r * 0.3, 0, Math.PI * 2); ctx.fill();
-      var a = s.aim || 0; ctx.strokeStyle = "#9aa6b2"; ctx.lineWidth = Math.max(2, r * 0.16); ctx.lineCap = "round";
-      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * r * 0.95, y + Math.sin(a) * r * 0.95); ctx.stroke();
-      ctx.fillStyle = "#cdd2d6"; ctx.beginPath(); ctx.arc(x + Math.cos(a) * r * 0.95, y + Math.sin(a) * r * 0.95, r * 0.13, 0, Math.PI * 2); ctx.fill();
+      var aim = s.aim || 0, k;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(aim);
+      // --- nozzle barrel (drawn first so the body edge overlaps its base), points +x = aim ---
+      ctx.lineJoin = "round";
+      ctx.fillStyle = "#26282d"; ctx.strokeStyle = "#08090b"; ctx.lineWidth = Math.max(1.5, r * 0.06);
+      ctx.beginPath(); ctx.rect(r * 0.78, -r * 0.3, r * 0.42, r * 0.6); ctx.fill(); ctx.stroke();          // elbow block
+      ctx.fillStyle = "#34383e"; ctx.beginPath(); ctx.rect(r * 1.14, -r * 0.2, r * 0.5, r * 0.4); ctx.fill(); ctx.stroke();  // barrel
+      ctx.fillStyle = "#8fd14a"; ctx.fillRect(r * 1.2, -r * 0.2, r * 0.08, r * 0.4);                        // green band
+      ctx.fillStyle = brass(ctx, r * 1.7, 0, r * 0.2, ["#c9ced3", "#6a6f76"]); ctx.beginPath(); ctx.arc(r * 1.7, 0, r * 0.19, 0, Math.PI * 2); ctx.fill(); ctx.lineWidth = Math.max(1, r * 0.04); ctx.strokeStyle = "#1a1c20"; ctx.stroke();  // chrome tip
+      ctx.fillStyle = "#0a0c0e"; ctx.beginPath(); ctx.arc(r * 1.72, 0, r * 0.08, 0, Math.PI * 2); ctx.fill();  // outlet hole
+      // --- dark round body ---
+      ctx.fillStyle = brass(ctx, 0, 0, r, ["#3a3d42", "#1a1c20"]); ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = Math.max(2, r * 0.07); ctx.strokeStyle = "#08090b"; ctx.stroke();
+      // outer segmented ring
+      ctx.fillStyle = "#33363b"; ctx.beginPath(); ctx.arc(0, 0, r * 0.96, 0, Math.PI * 2); ctx.arc(0, 0, r * 0.66, 0, Math.PI * 2, true); ctx.fill();
+      ctx.strokeStyle = "#0c0e10"; ctx.lineWidth = Math.max(1.5, r * 0.045);
+      for (k = 0; k < 6; k++) { var ga = k * Math.PI / 3 + Math.PI / 6; ctx.beginPath(); ctx.moveTo(Math.cos(ga) * r * 0.66, Math.sin(ga) * r * 0.66); ctx.lineTo(Math.cos(ga) * r * 0.96, Math.sin(ga) * r * 0.96); ctx.stroke(); }
+      for (k = 0; k < 4; k++) { ctx.save(); ctx.rotate(k * Math.PI / 2); ctx.fillStyle = "#8fd14a"; ctx.fillRect(r * 0.75, -r * 0.13, r * 0.12, r * 0.26); ctx.restore(); }  // outer green tabs
+      // inner green ring + tabs
+      ctx.lineWidth = Math.max(2, r * 0.055); ctx.strokeStyle = "#7ec43a"; ctx.beginPath(); ctx.arc(0, 0, r * 0.6, 0, Math.PI * 2); ctx.stroke();
+      for (k = 0; k < 4; k++) { ctx.save(); ctx.rotate(k * Math.PI / 2); ctx.fillStyle = "#8fd14a"; ctx.fillRect(r * 0.54, -r * 0.07, r * 0.13, r * 0.14); ctx.restore(); }
+      // inner dark disc
+      ctx.fillStyle = brass(ctx, 0, 0, r * 0.56, ["#34373c", "#202327"]); ctx.beginPath(); ctx.arc(0, 0, r * 0.55, 0, Math.PI * 2); ctx.fill();
+      // 8 green radial slots
+      for (k = 0; k < 8; k++) { ctx.save(); ctx.rotate(k * Math.PI / 4); ctx.fillStyle = "#7ec43a"; ctx.fillRect(r * 0.3, -r * 0.025, r * 0.14, r * 0.05); ctx.restore(); }
+      // center hub
+      ctx.fillStyle = brass(ctx, 0, 0, r * 0.22, ["#3e4248", "#24272b"]); ctx.beginPath(); ctx.arc(0, 0, r * 0.2, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = Math.max(1, r * 0.035); ctx.strokeStyle = "#0c0e10"; ctx.stroke();
+      ctx.restore();
     }
     // corridor head — elongated notched white deflector + center orifice, stretched along the firing axis (matches owner art)
     function drawCorridorHead(x, y, r, s) {
