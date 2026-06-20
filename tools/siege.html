@@ -780,7 +780,7 @@
     var selectKind = null, pendingType = "standard";
     var PICK_PROMPT = { ec: "👆 Tap a head for Extended Coverage", hp: "👆 Tap a head for High Pressure (300 psi)", kf: "👆 Tap a head to power up (K‑factor)", fr: "👆 Tap a head for Fast Response" };
     function selectEligible(s) {
-      if (selectKind === "unlock") return s.state === "locked";
+      if (selectKind === "unlock" || selectKind === "place") return s.state === "locked";
       if (s.state !== "active") return false;
       if (selectKind === "ec") return !s.ec && typeOf(s) !== "laser";   // lasers have infinite range — no EC
       if (selectKind === "hp") return !s.hp;
@@ -841,11 +841,10 @@
       });
     }
     function buildPlace(ty, cost) {
-      var slot = nearestToCenter(function (sl) { return sl.state === "locked"; });
-      if (!slot || coins < cost) return;
-      coins -= cost; pendingType = ty; placeUnlock(slot); hud();
-      if (ty === "lawn") { $("buildOv").classList.remove("show"); beginLawnRotate(slot); }   // aim it; OK returns to build
-      else renderBuild();
+      if (coins < cost || lockedCount() === 0) return;
+      pendingType = ty; pendingCost = cost; selectKind = "place"; state = "select";
+      $("buildOv").classList.remove("show");
+      $("selectPrompt").textContent = "👆 Tap a slot to place " + TYPE_INFO[ty].n + " (💰" + cost + ")"; $("selectPrompt").hidden = false;
     }
     function resumeFromBuild() {
       $("buildOv").classList.remove("show"); state = "playing"; last = 0;
@@ -886,15 +885,13 @@
       tx = W / 2 + (tx - W / 2) / viewScale; ty = H / 2 + (ty - H / 2) / viewScale;   // screen → world
       var best = null, bd = 1e9;
       for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (!selectEligible(s)) continue; var d = Math.hypot(tx - s.x, ty - s.y); if (d < bd) { bd = d; best = s; } }
-      if (best && bd < gap * 0.7) {
-        if (selectKind === "unlock") {
-          placeUnlock(best); selectKind = null; $("selectPrompt").hidden = true;
-          if (best.type === "lawn") { beginLawnRotate(best); return; }   // aim it before the wave starts
-          afterChoice(); return;
-        }
-        applyPickTo(best, selectKind);
-        selectKind = null; $("selectPrompt").hidden = true; afterChoice();
+      var hit = best && bd < gap * 0.7;
+      if (selectKind === "place") {                         // building: tap a slot to place (tap elsewhere cancels)
+        if (hit && coins >= pendingCost) { coins -= pendingCost; placeUnlock(best); hud(); selectKind = null; $("selectPrompt").hidden = true; if (best.type === "lawn") beginLawnRotate(best); else openBuild(); }
+        else { selectKind = null; $("selectPrompt").hidden = true; openBuild(); }   // cancel → back to build panel
+        return;
       }
+      if (hit) { applyPickTo(best, selectKind); selectKind = null; $("selectPrompt").hidden = true; afterChoice(); }   // upgrade picks (ec/hp/kf/fr)
     }
     function updateHollywoodBtn() { updateAbar(); }
     function updateAbar() {
