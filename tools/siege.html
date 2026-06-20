@@ -123,6 +123,9 @@
     #buildChoices .bcard .t { font:700 .82rem 'Space Grotesk',sans-serif; margin-top:3px; }
     #buildChoices .bcard .c { font:700 .8rem Inter,sans-serif; color:#ffd24a; margin-top:4px; }
     #buildChoices .bcard.dim { opacity:.4; }
+    .sg-how { max-width:360px; text-align:left; max-height:46vh; overflow-y:auto; }
+    .sg-how p { color:var(--muted); font-size:.9rem; line-height:1.5; margin:0 0 10px; }
+    .sg-how b { color:var(--ink); }
     .sg-prompt { position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:6; background:var(--accent); color:#1a0d06; font:700 .82rem 'Space Grotesk'; padding:8px 14px; border-radius:999px; box-shadow:0 4px 14px rgba(0,0,0,.4); animation:hbpulse 1s ease-in-out infinite; white-space:nowrap; }
     .sg-prompt[hidden] { display:none; }
     .sg-lowwater { position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:6; background:var(--bad,#ff5a4f); color:#1a0606; font:800 .8rem 'Space Grotesk'; letter-spacing:.03em; padding:7px 14px; border-radius:999px; box-shadow:0 4px 14px rgba(0,0,0,.4); animation:hbpulse .8s ease-in-out infinite; white-space:nowrap; }
@@ -195,12 +198,23 @@
       <div class="sg-ov show" id="startOv">
         <div class="ic">💦</div>
         <h1>Sprinkler <span class="grad">Siege</span></h1>
-        <p>You're the brass upright in the center. <b>Tap and hold</b> to spray — but the supply is weak (~7 psi static), so residual pressure drops as more heads open. Put out fires to earn <b>coins</b> and <b>level up</b> — leveling unlocks stronger sprinkler types (laser last, ~level 5). Tap <b>🔧 Build</b> to spend coins placing them, and grab end-of-wave upgrade cards. <b>Green splitters</b> break into two when doused; from wave 10, <b>blue ELO flames</b> shrug off small heads — only K11.2+ can put them out. Hold the line to wave 15 to face the boss.</p>
+        <p>Defend the core. Hold the line.</p>
         <div class="sg-opts">
           <label class="sg-toggle"><input type="checkbox" id="easyToggle"><span>🍃 Easy Mode</span></label>
           <label class="sg-toggle" id="autoWrap" hidden><input type="checkbox" id="autoToggle"><span>👆 Auto‑pick upgrades</span></label>
         </div>
         <button class="sg-btn" id="playBtn">▶ Start the siege</button>
+        <button class="sg-btn ghost" id="howBtn" style="margin-top:10px">📖 How to play</button>
+      </div>
+
+      <div class="sg-ov" id="howOv">
+        <h1>How to <span class="grad">play</span></h1>
+        <div class="sg-how">
+          <p>You're the brass upright in the center. <b>Tap and hold</b> to spray — but the supply is weak (~7 psi static), so residual pressure drops as more heads open.</p>
+          <p>Put out fires to earn <b>coins</b> and <b>level up</b>. Leveling unlocks stronger sprinkler types (laser last, ~level 5). Tap <b>🔧 Build</b> to spend coins placing them in a slot, and grab the end-of-wave <b>upgrade cards</b> (K-factor, supply, specials).</p>
+          <p><b>Green splitters</b> break into two when doused; from wave 10, <b>blue ELO flames</b> shrug off small heads — only K11.2+ can put them out. Hold to wave 15 for the boss — then <b>Act 2</b> brings grease fires (only foam works), ember swarms, backdraft, and hazards.</p>
+        </div>
+        <button class="sg-btn" id="howClose" style="margin-top:14px">Got it</button>
       </div>
 
       <div class="sg-ov" id="upgradeOv">
@@ -333,6 +347,7 @@
     var DROOP_N = 0.95;                        // supply droop exponent: P = static − C·Q^DROOP_N (C derived per level to hit residual@ratedQ)
     var DMG_PER_GPM = 2.0, TANK_DRAIN = 1.2, TANK_REGEN = 26, BOSS_WAVE = 15, ACT2_BOSS_WAVE = 25, MAX_ACT = 2;
     function bossWaveFor(a) { return a >= 2 ? ACT2_BOSS_WAVE : BOSS_WAVE; }
+    var ENEMY_HP = 0.85;   // global enemy-HP multiplier (−15%)
     // Act 2 per-wave hazards
     var HAZARDS = [
       { id: "outage", name: "⚡ Power Outage", desc: "Fire pump offline" },
@@ -515,7 +530,7 @@
       type = type || pickType();
       var ang = Math.random() * Math.PI * 2, m = S * 0.62 / viewScale;
       var x = W / 2 + Math.cos(ang) * m, y = H / 2 + Math.sin(ang) * m;
-      var base = 26 + wave * 13;
+      var base = (26 + wave * 13) * ENEMY_HP;
       if (type === "ember") {                                 // a cluster of small fast sparks
         var n = 4 + Math.floor(Math.random() * 3);
         for (var k = 0; k < n; k++) { var a2 = ang + (Math.random() - 0.5) * 0.7, mm = m * (0.88 + Math.random() * 0.24); enemies.push({ x: W / 2 + Math.cos(a2) * mm, y: H / 2 + Math.sin(a2) * mm, hp: base * 0.32, max: base * 0.32, spd: (34 + wave * 2.6) * (S / 400), sz: S * 0.034, boss: false, t: Math.random() * 9, hit: 0, type: "ember", minTier: 0, coreDmg: 5, splits: false }); }
@@ -535,8 +550,8 @@
     }
     function spawnBoss() {
       var ang = Math.random() * Math.PI * 2, m = S * 0.62 / viewScale, cx = W / 2 + Math.cos(ang) * m, cy = H / 2 + Math.sin(ang) * m;
-      if (currentAct >= 2) enemies.push({ x: cx, y: cy, hp: 6500, max: 6500, spd: 14 * (S / 400), sz: S * 0.15, boss: true, conflag: true, t: 0, mt: 0, type: "boss", minTier: 0, coreDmg: 30, splits: false });   // The Conflagration (multi-phase)
-      else enemies.push({ x: cx, y: cy, hp: 2600, max: 2600, spd: 16 * (S / 400), sz: S * 0.13, boss: true, t: 0, mt: 0, type: "boss", minTier: 0, coreDmg: 28, splits: false });
+      if (currentAct >= 2) { var bh2 = Math.round(6500 * ENEMY_HP); enemies.push({ x: cx, y: cy, hp: bh2, max: bh2, spd: 14 * (S / 400), sz: S * 0.15, boss: true, conflag: true, t: 0, mt: 0, type: "boss", minTier: 0, coreDmg: 30, splits: false }); }   // The Conflagration (multi-phase)
+      else { var bh1 = Math.round(2600 * ENEMY_HP); enemies.push({ x: cx, y: cy, hp: bh1, max: bh1, spd: 16 * (S / 400), sz: S * 0.13, boss: true, t: 0, mt: 0, type: "boss", minTier: 0, coreDmg: 28, splits: false }); }
     }
 
     function update(dt) {
@@ -1434,6 +1449,8 @@
     $("rotOkBtn").onclick = confirmRotate;
     $("buildBtn").onclick = function () { if (state === "playing") openBuild(); };
     $("buildDone").onclick = resumeFromBuild;
+    $("howBtn").onclick = function () { $("howOv").classList.add("show"); };
+    $("howClose").onclick = function () { $("howOv").classList.remove("show"); };
     $("pauseBtn").onclick = function () { if (state === "playing") pauseGame(); else if (state === "paused") resumeGame(); };
     $("resumeBtn").onclick = resumeGame;
     $("pauseRestartBtn").onclick = newGame;
