@@ -97,6 +97,18 @@
     .sg-hollybtn.armed { animation:hbpulse .9s ease-in-out infinite; }
     @keyframes hbpulse { 50% { box-shadow:0 0 0 4px rgba(255,176,58,.18); } }
     .sg-hollybtn[hidden] { display:none; }
+    /* WoW-style action bar (usable abilities) at bottom center */
+    .sg-abar { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); z-index:6; display:flex; gap:10px; }
+    .sg-abar[hidden] { display:none; }
+    .sg-ability { position:relative; width:52px; height:52px; border-radius:12px; border:1px solid var(--line-strong); background:rgba(13,17,22,.82); backdrop-filter:blur(2px); color:var(--ink); font-size:1.5rem; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; }
+    .sg-ability:active { transform:scale(.94); }
+    .sg-ability[hidden] { display:none; }
+    .sg-ability.ready { border-color:var(--accent); animation:hbpulse 1.1s ease-in-out infinite; }
+    .sg-ability.active { border-color:var(--ok); box-shadow:0 0 14px rgba(61,220,151,.7); }
+    .sg-ability .cd { position:absolute; inset:0; border-radius:11px; display:flex; align-items:center; justify-content:center; font:800 1.05rem 'Space Grotesk',sans-serif; color:#fff; text-shadow:0 1px 3px #000; pointer-events:none; }
+    .sg-ability .cd[hidden] { display:none; }
+    .sg-ability .badge { position:absolute; bottom:0; right:4px; font:800 .64rem Inter; color:var(--accent); text-shadow:0 1px 2px #000; pointer-events:none; }
+    .sg-ability .badge[hidden] { display:none; }
     .sg-prompt { position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:6; background:var(--accent); color:#1a0d06; font:700 .82rem 'Space Grotesk'; padding:8px 14px; border-radius:999px; box-shadow:0 4px 14px rgba(0,0,0,.4); animation:hbpulse 1s ease-in-out infinite; white-space:nowrap; }
     .sg-prompt[hidden] { display:none; }
     .sg-lowwater { position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:6; background:var(--bad,#ff5a4f); color:#1a0606; font:800 .8rem 'Space Grotesk'; letter-spacing:.03em; padding:7px 14px; border-radius:999px; box-shadow:0 4px 14px rgba(0,0,0,.4); animation:hbpulse .8s ease-in-out infinite; white-space:nowrap; }
@@ -141,7 +153,10 @@
     <div class="sg-stage">
       <canvas id="game" width="360" height="430"></canvas>
       <button id="pauseBtn" class="sg-pausebtn" aria-label="Pause" hidden>❚❚</button>
-      <button id="hollywoodBtn" class="sg-hollybtn" aria-label="Hollywood Scene" hidden>🎬 0</button>
+      <div class="sg-abar" id="abar" hidden>
+        <button class="sg-ability" id="overloadBtn" aria-label="Overload Fire Pump">⚡<div class="cd" id="overloadCdEl" hidden></div></button>
+        <button class="sg-ability" id="hollywoodBtn" aria-label="Hollywood Scene" hidden>🎬<div class="badge" id="hollyBadge"></div></button>
+      </div>
       <div id="selectPrompt" class="sg-prompt" hidden>👆 Tap a dusty sprinkler to fix</div>
       <div id="dpsMeter" class="sg-dps" hidden><b id="dpsNum">0</b> DPS</div>
       <div id="lowWater" class="sg-lowwater" hidden>💧 LOW WATER!</div>
@@ -214,6 +229,7 @@
     var easyMode = false, autoPick = false;   // Easy Mode (locked at game start): +50% dmg, -50% dmg taken, +50% water, upgrade hints; autoPick auto-selects
     // special upgrades: refill rate ×, spray reach ×, integrity shield pool, Hollywood charges/timer
     var tankFillMult = 1, shield = 0, hollywoodCharges = 0, hollywoodT = 0;
+    var overloadT = 0, overloadCd = 0;   // Overload Fire Pump: 15s ×1.5 damage, 60s cooldown
     // combat feedback: floating text, integrity hit-flash, live damage-per-second
     var floats = [], hurtT = 0, dpsNow = 0, dpsShown = 0;
     function spawnFloat(x, y, text, color, scale) { if (floats.length > 40) floats.shift(); floats.push({ x: x, y: y, vy: -34, life: 0.85, max: 0.85, text: text, color: color, sc: scale || 1 }); }
@@ -451,6 +467,9 @@
       if (anyFire && !hw) { water -= drainQ * TANK_DRAIN * dt; if (water < 0) water = 0; }
       else if (!anyFire) { water += TANK_REGEN * tankFillMult * dt * (easyMode ? 1.5 : 1); if (water > maxWater) water = maxWater; }
       if (hollywoodT > 0) { hollywoodT -= dt; if (hollywoodT <= 0) updateHollywoodBtn(); }
+      if (overloadT > 0) overloadT = Math.max(0, overloadT - dt);
+      if (overloadCd > 0) overloadCd = Math.max(0, overloadCd - dt);
+      updateAbar();
       dryFlash = anyFire && !hw && water <= 0;
       var spraying = anyFire;
       for (i2 = 0; i2 < act.length; i2++) { var hh = act[i2], tt = typeOf(hh); if (tt === "lawn") hh.aim = (hh.aim || 0) + dt * 1.1; else if (tt === "foam") hh.foamOpen = (hh.foamOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.foamOpen || 0)) * Math.min(1, dt * 8); else if (tt === "moon") hh.moonOpen = (hh.moonOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.moonOpen || 0)) * Math.min(1, dt * 8); }  // lawn sweeps; foam & moon open/close
@@ -463,7 +482,7 @@
       // --- weapons pass: each firing head applies its type's damage / effect ---
       for (var ei = 0; ei < enemies.length; ei++) enemies[ei].dmgFrame = 0;
       for (var fh = 0; fh < firing.length; fh++) {
-        var s = firing[fh], ty = typeOf(s), per = s.q * DMG_PER_GPM * TYPE_INFO[ty].dmg * moonBuff(s) * (easyMode ? 1.5 : 1), em, j;
+        var s = firing[fh], ty = typeOf(s), per = s.q * DMG_PER_GPM * TYPE_INFO[ty].dmg * moonBuff(s) * (easyMode ? 1.5 : 1) * (overloadT > 0 ? 1.5 : 1), em, j;
         if (ty === "moon") { for (j = 0; j < enemies.length; j++) if (inRange(s, enemies[j])) { integrity = Math.min(100, integrity + s.q * 0.05 * dt); break; } continue; }
         if (ty === "laser") {                                  // single-target: nearest in range
           var tgt = null, bd = 1e9; for (j = 0; j < enemies.length; j++) { em = enemies[j]; if (!canHit(s, em)) continue; var dd = Math.hypot(em.x - s.x, em.y - s.y); if (dd < bd) { bd = dd; tgt = em; } }
@@ -584,7 +603,7 @@
     function waveComplete() {
       if (wave >= BOSS_WAVE && !bossAlive) { bossPending = true; startWave(wave + 1); return; }
       state = "upgrade";
-      $("pauseBtn").hidden = true; $("hollywoodBtn").hidden = true;
+      $("pauseBtn").hidden = true; $("abar").hidden = true;
       // tank + special always in the pool; unlock/kfactor when applicable. Fire pump is its own RARE category (final tier extra-rare).
       var others = ["tank", "special"];
       if (lockedCount() > 0) others.push("unlock");
@@ -675,20 +694,35 @@
         best.flash = 0.6; selectKind = null; $("selectPrompt").hidden = true; afterChoice();
       }
     }
-    function updateHollywoodBtn() {
-      var b = $("hollywoodBtn");
-      var show = hollywoodCharges > 0 && state === "playing";
-      b.hidden = !show; b.textContent = "🎬 " + hollywoodCharges;
-      b.classList.toggle("armed", show && hollywoodT <= 0);
+    function updateHollywoodBtn() { updateAbar(); }
+    function updateAbar() {
+      var bar = $("abar"); if (!bar) return;
+      if (state !== "playing") { bar.hidden = true; return; }
+      bar.hidden = false;
+      // Overload Fire Pump: active (green + buff secs) → cooldown (radial sweep + secs) → ready (armed)
+      var ob = $("overloadBtn"), oc = $("overloadCdEl"), active = overloadT > 0;
+      ob.classList.toggle("active", active);
+      ob.classList.toggle("ready", overloadCd <= 0);
+      if (active) { oc.hidden = false; oc.style.background = "none"; oc.style.color = "#7ef2b0"; oc.textContent = Math.ceil(overloadT); }
+      else if (overloadCd > 0) { oc.hidden = false; oc.style.background = "conic-gradient(rgba(6,9,12,.62) " + (overloadCd / 60 * 360) + "deg, rgba(6,9,12,0) 0)"; oc.style.color = "#fff"; oc.textContent = Math.ceil(overloadCd); }
+      else { oc.hidden = true; }
+      // Hollywood Scene: shown only when you hold charges
+      var hb = $("hollywoodBtn"), hbg = $("hollyBadge"), hshow = hollywoodCharges > 0;
+      hb.hidden = !hshow;
+      if (hshow) { hb.classList.toggle("ready", hollywoodT <= 0); hb.classList.toggle("active", hollywoodT > 0); hbg.hidden = false; hbg.textContent = hollywoodCharges; }
     }
     function activateHollywood() {
       if (state !== "playing" || hollywoodCharges <= 0 || hollywoodT > 0) return;
-      hollywoodCharges--; hollywoodT = 5; updateHollywoodBtn();
+      hollywoodCharges--; hollywoodT = 5; updateAbar();
+    }
+    function activateOverload() {
+      if (state !== "playing" || overloadCd > 0) return;   // ready only when cooldown elapsed
+      overloadT = 15; overloadCd = 60; updateAbar();
     }
 
-    function gameOver() { state = "over"; $("pauseBtn").hidden = true; $("hollywoodBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); pendingScore = score; $("overOv").classList.add("show"); mountLb("overOv", "againBtn"); }
-    function win() { state = "win"; $("pauseBtn").hidden = true; $("hollywoodBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("winScore").textContent = score.toLocaleString(); pendingScore = score; $("winOv").classList.add("show"); mountLb("winOv", "winAgainBtn"); }
-    function pauseGame() { if (state !== "playing") return; state = "paused"; holding = false; $("pauseOv").classList.add("show"); $("hollywoodBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; }
+    function gameOver() { state = "over"; $("pauseBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); pendingScore = score; $("overOv").classList.add("show"); mountLb("overOv", "againBtn"); }
+    function win() { state = "win"; $("pauseBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("winScore").textContent = score.toLocaleString(); pendingScore = score; $("winOv").classList.add("show"); mountLb("winOv", "winAgainBtn"); }
+    function pauseGame() { if (state !== "playing") return; state = "paused"; holding = false; $("pauseOv").classList.add("show"); $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; }
     function resumeGame() { if (state !== "paused") return; state = "playing"; last = 0; $("pauseOv").classList.remove("show"); $("easyInd").hidden = !easyMode; updateHollywoodBtn(); }
 
     // ---- rendering ----
@@ -1054,9 +1088,9 @@
     function reset() {
       for (var i = 0; i < slots.length; i++) { var ctr = slots[i].c === 1 && slots[i].r === 1; slots[i].state = ctr ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].hurt = 0; slots[i].ec = false; slots[i].hp = false; slots[i].type = ctr ? "standard" : null; slots[i].aim = 0; }
       enemies = []; particles = []; floats = []; foamPiles = []; score = 0; integrity = 100; maxWater = Math.round(330 * (easyMode ? 1.5 : 1)); water = maxWater; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
-      tankFillMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0; selectKind = null; hurtT = 0; dpsNow = 0; dpsShown = 0;
+      tankFillMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0; overloadT = 0; overloadCd = 0; selectKind = null; hurtT = 0; dpsNow = 0; dpsShown = 0;
       viewScale = 1; zoomTarget = 1;
-      updatePumpIcons(); $("dpsMeter").hidden = true;
+      updatePumpIcons(); $("dpsMeter").hidden = true; $("abar").hidden = true;
     }
     function newGame() {
       easyMode = !!($("easyToggle") && $("easyToggle").checked);          // locked for the whole run
@@ -1076,6 +1110,7 @@
     $("againBtn").onclick = newGame;
     $("winAgainBtn").onclick = newGame;
     $("hollywoodBtn").onclick = activateHollywood;
+    $("overloadBtn").onclick = activateOverload;
     $("pauseBtn").onclick = function () { if (state === "playing") pauseGame(); else if (state === "paused") resumeGame(); };
     $("resumeBtn").onclick = resumeGame;
     $("pauseRestartBtn").onclick = newGame;
