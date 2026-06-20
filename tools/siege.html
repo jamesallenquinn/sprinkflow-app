@@ -105,7 +105,7 @@
         <div class="sg-choices">
           <div class="sg-card" id="cardUnlock"><div class="e">🔓</div><div class="t">Unlock head</div><div class="d">Wake a dusty K5.6 sprinkler</div></div>
           <div class="sg-card" id="cardWater"><div class="e">📈</div><div class="t">Bigger K-factor</div><div class="d">Step a head up the K ladder: more GPM</div></div>
-          <div class="sg-card" id="cardPump"><div class="e">⚙️</div><div class="t">Fire pump</div><div class="d" id="pumpDesc">Add a fire pump: +30 psi @ 100 gpm</div></div>
+          <div class="sg-card" id="cardSupply"><div class="e">⚙️</div><div class="t">Fire pump</div><div class="d" id="supplyDesc">Add a fire pump: +30 psi @ 100 gpm</div></div>
         </div>
       </div>
 
@@ -141,7 +141,7 @@
     var state = "start";  // start | playing | upgrade | over | win
     var wave = 1, score = 0, integrity = 100, water = 0, maxWater = 100, holding = false;
     var spawnQueue = 0, spawnT = 0, bossPending = false, bossAlive = false;
-    var pumpLevel = 0, dryFlash = false, nowT = 0;
+    var pumpLevel = 0, tankLevel = 0, nextSupplyPump = true, pendingSupplyPump = true, dryFlash = false, nowT = 0;
     var W = 360, H = 430, S = 360, dpr = 1, gap = 70, coreR = 30, colXs = [], rowYs = [];
 
     // --- hydraulics: each head flows Q = K·√P; supply pressure sags as total flow rises ---
@@ -179,6 +179,7 @@
     function lockedCount() { return slots.filter(function (s) { return s.state === "locked"; }).length; }
     function upgradeableCount() { return slots.filter(function (s) { return s.state === "active" && s.kTier < KLADDER.length - 1; }).length; }
     function sprayRadius(s) { var f = s.q || 0; return gap * Math.max(0.55, Math.min(1.6, 0.5 + 0.12 * Math.sqrt(f))); }
+    function coverageRadius(s) { var qn = KLADDER[s.kTier] * Math.sqrt(supplyP(0)); return gap * Math.max(0.55, Math.min(1.6, 0.5 + 0.12 * Math.sqrt(qn))); }
     function sprayDps(s) { return (s.q || 0) * DMG_PER_GPM; }
 
     function nearestToCenter(filterFn) {
@@ -198,7 +199,8 @@
       var s = nearestToCenter(function (sl) { return sl.state === "active" && sl.kTier < KLADDER.length - 1; });
       if (s) { s.kTier++; s.flash = 0.6; maxWater += 20; }
     }
-    function applyPump() { if (pumpLevel < PUMP_MAX) { pumpLevel++; maxWater += 40; for (var i = 0; i < slots.length; i++) if (slots[i].state === "active") slots[i].flash = 0.6; } }
+    function applyPump() { if (pumpLevel < PUMP_MAX) { pumpLevel++; for (var i = 0; i < slots.length; i++) if (slots[i].state === "active") slots[i].flash = 0.6; } }
+    function applyCapacity() { tankLevel++; maxWater += 60; water = maxWater; for (var i = 0; i < slots.length; i++) if (slots[i].state === "active") slots[i].flash = 0.6; }
 
     function startWave(n) {
       wave = n; state = "playing";
@@ -303,18 +305,22 @@
 
     function waveComplete() {
       if (wave >= BOSS_WAVE && !bossAlive) { bossPending = true; startWave(wave + 1); return; }
-      var canUnlock = lockedCount() > 0, canUp = upgradeableCount() > 0, canPump = pumpLevel < PUMP_MAX;
-      if (!canUnlock && !canUp && !canPump) { startWave(wave + 1); return; }
+      var canUnlock = lockedCount() > 0, canUp = upgradeableCount() > 0;
       state = "upgrade";
       $("pauseBtn").hidden = true;
-      $("cardUnlock").hidden = !canUnlock; $("cardWater").hidden = !canUp; $("cardPump").hidden = !canPump;
-      $("pumpDesc").textContent = pumpLevel === 0 ? "Add a fire pump: +30 psi @ 100 gpm" : "Boost pump to tier " + (pumpLevel + 1) + ": more pressure";
+      $("cardUnlock").hidden = !canUnlock; $("cardWater").hidden = !canUp;
+      // supply card alternates: pressure (fire pump) ↔ capacity (bigger tank)
+      pendingSupplyPump = nextSupplyPump && pumpLevel < PUMP_MAX;
+      var sc = $("cardSupply");
+      if (pendingSupplyPump) { sc.querySelector(".e").textContent = "⚙️"; sc.querySelector(".t").textContent = "Fire pump"; $("supplyDesc").textContent = pumpLevel === 0 ? "Add a fire pump: +30 psi @ 100 gpm" : "Boost pump to tier " + (pumpLevel + 1) + ": more pressure"; }
+      else { sc.querySelector(".e").textContent = "🛢️"; sc.querySelector(".t").textContent = "Bigger tank"; $("supplyDesc").textContent = "+60 gal capacity: spray longer between refills"; }
+      sc.hidden = false;
       $("upTitle").textContent = "Wave " + wave + " cleared!";
       $("upgradeOv").classList.add("show");
     }
     function chooseUnlock() { applyUnlock(); afterChoice(); }
     function chooseWater() { applyUpgrade(); afterChoice(); }
-    function choosePump() { applyPump(); afterChoice(); }
+    function chooseSupply() { if (pendingSupplyPump) applyPump(); else applyCapacity(); nextSupplyPump = !nextSupplyPump; afterChoice(); }
     function afterChoice() { startWave(wave + 1); }
 
     function gameOver() { state = "over"; $("pauseBtn").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); $("overOv").classList.add("show"); }
@@ -332,6 +338,12 @@
         var R = sprayRadius(s), aff = Math.max(0.05, Math.min(0.18, s.q * 0.012)), g = ctx.createRadialGradient(x, y, 0, x, y, R);
         g.addColorStop(0, "rgba(80,200,240," + aff + ")"); g.addColorStop(1, "rgba(80,200,240,0)");
         ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
+      }
+      // faint blue spray/hitbox outline (coverage when idle, actual reach when flowing)
+      if (active) {
+        var ringR = s.q > 0 ? sprayRadius(s) : coverageRadius(s);
+        ctx.save(); ctx.setLineDash([4, 4]); ctx.lineWidth = 1; ctx.strokeStyle = "rgba(110,200,240,0.22)";
+        ctx.beginPath(); ctx.arc(x, y, ringR, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
       }
       if (active && dryFlash) { var dp = 0.35 + 0.35 * Math.sin(nowT * 0.02); ctx.globalAlpha = dp; ctx.strokeStyle = "#ff5a4f"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, r + 6, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1; }
       if (active && s.kTier > 0) { ctx.strokeStyle = "rgba(108,214,242,0.7)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2); ctx.stroke(); }
@@ -431,7 +443,7 @@
 
     function reset() {
       for (var i = 0; i < slots.length; i++) { slots[i].state = (slots[i].c === 1 && slots[i].r === 1) ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; }
-      enemies = []; particles = []; score = 0; integrity = 100; maxWater = 100; water = 100; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; dryFlash = false; holding = false;
+      enemies = []; particles = []; score = 0; integrity = 100; maxWater = 100; water = 100; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = true; dryFlash = false; holding = false;
     }
     function newGame() { resize(); reset(); hud(); startWave(1); ["overOv","winOv","startOv","upgradeOv","pauseOv"].forEach(function (id) { $(id).classList.remove("show"); }); }
 
@@ -440,7 +452,7 @@
     $("winAgainBtn").onclick = newGame;
     $("cardUnlock").onclick = function () { if (state === "upgrade") chooseUnlock(); };
     $("cardWater").onclick = function () { if (state === "upgrade") chooseWater(); };
-    $("cardPump").onclick = function () { if (state === "upgrade") choosePump(); };
+    $("cardSupply").onclick = function () { if (state === "upgrade") chooseSupply(); };
     $("pauseBtn").onclick = function () { if (state === "playing") pauseGame(); else if (state === "paused") resumeGame(); };
     $("resumeBtn").onclick = resumeGame;
     $("pauseRestartBtn").onclick = newGame;
