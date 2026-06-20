@@ -116,6 +116,13 @@
     .sg-ability .badge { position:absolute; bottom:0; right:4px; font:800 .64rem Inter; color:var(--accent); text-shadow:0 1px 2px #000; pointer-events:none; }
     .sg-ability .badge[hidden] { display:none; }
     .sg-ability .ab-ic { width:84%; height:84%; object-fit:contain; pointer-events:none; }
+    #buildChoices { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; max-width:340px; }
+    #buildChoices .bcard { width:92px; background:var(--surface); border:1px solid var(--line-strong); border-radius:14px; padding:12px 6px; cursor:pointer; text-align:center; transition:transform .1s; }
+    #buildChoices .bcard:active { transform:scale(.95); }
+    #buildChoices .bcard .e { font-size:1.9rem; line-height:1; }
+    #buildChoices .bcard .t { font:700 .82rem 'Space Grotesk',sans-serif; margin-top:3px; }
+    #buildChoices .bcard .c { font:700 .8rem Inter,sans-serif; color:#ffd24a; margin-top:4px; }
+    #buildChoices .bcard.dim { opacity:.4; }
     .sg-prompt { position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:6; background:var(--accent); color:#1a0d06; font:700 .82rem 'Space Grotesk'; padding:8px 14px; border-radius:999px; box-shadow:0 4px 14px rgba(0,0,0,.4); animation:hbpulse 1s ease-in-out infinite; white-space:nowrap; }
     .sg-prompt[hidden] { display:none; }
     .sg-lowwater { position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:6; background:var(--bad,#ff5a4f); color:#1a0606; font:800 .8rem 'Space Grotesk'; letter-spacing:.03em; padding:7px 14px; border-radius:999px; box-shadow:0 4px 14px rgba(0,0,0,.4); animation:hbpulse .8s ease-in-out infinite; white-space:nowrap; }
@@ -149,8 +156,9 @@
   <main class="sg-wrap">
     <div class="sg-hud">
       <div class="pill wave"><div class="k">Wave</div><div class="v" id="waveVal">1</div></div>
+      <div class="pill"><div class="k">Level</div><div class="v" id="lvlVal" style="color:#8fd14a">1</div></div>
+      <div class="pill"><div class="k">Coins</div><div class="v" id="coinVal" style="color:#ffd24a">0</div></div>
       <div class="pill score"><div class="k">Score</div><div class="v" id="scoreVal">0</div></div>
-      <div class="pill"><div class="k">Sprinklers</div><div class="v" id="sprkVal">1/9</div></div>
     </div>
     <div class="sg-bars">
       <div class="sg-bar-wrap"><span class="lbl">Integrity</span><div class="sg-bar" id="integBar"><i id="integFill"></i><span class="sg-bar-val" id="integVal">100 HP</span></div></div>
@@ -165,6 +173,7 @@
       <button id="ffBtn" class="sg-pausebtn sg-ffbtn" aria-label="Fast forward" hidden>▶▶</button>
       <button id="musicBtn" class="sg-pausebtn sg-musicbtn" aria-label="Toggle sound">🔇</button>
       <div class="sg-abar" id="abar" hidden>
+        <button class="sg-ability" id="buildBtn" aria-label="Build sprinkler">🔧</button>
         <button class="sg-ability" id="overloadBtn" aria-label="Overload Fire Pump"><img class="ab-ic" src="../assets/overload-pump.png" alt="" /><div class="cd" id="overloadCdEl" hidden></div></button>
         <button class="sg-ability" id="hollywoodBtn" aria-label="Hollywood Scene" hidden>🎬<div class="badge" id="hollyBadge"></div></button>
       </div>
@@ -186,7 +195,7 @@
       <div class="sg-ov show" id="startOv">
         <div class="ic">💦</div>
         <h1>Sprinkler <span class="grad">Siege</span></h1>
-        <p>You're the brass upright in the center. <b>Tap and hold</b> to spray — but the supply is weak (~7 psi static), so residual pressure drops as more heads open. Each wave: unlock a head, raise its K‑factor, or grow your supply. <b>Green splitters</b> break into two when doused; from wave 10, <b>blue ELO flames</b> shrug off small heads — only K11.2+ can put them out. Hold the line to wave 15 to face the boss.</p>
+        <p>You're the brass upright in the center. <b>Tap and hold</b> to spray — but the supply is weak (~7 psi static), so residual pressure drops as more heads open. Put out fires to earn <b>coins</b> and <b>level up</b> — leveling unlocks stronger sprinkler types (laser last, ~level 5). Tap <b>🔧 Build</b> to spend coins placing them, and grab end-of-wave upgrade cards. <b>Green splitters</b> break into two when doused; from wave 10, <b>blue ELO flames</b> shrug off small heads — only K11.2+ can put them out. Hold the line to wave 15 to face the boss.</p>
         <div class="sg-opts">
           <label class="sg-toggle"><input type="checkbox" id="easyToggle"><span>🍃 Easy Mode</span></label>
           <label class="sg-toggle" id="autoWrap" hidden><input type="checkbox" id="autoToggle"><span>👆 Auto‑pick upgrades</span></label>
@@ -198,6 +207,13 @@
         <h1 id="upTitle">Wave cleared!</h1>
         <p>Choose your reward:</p>
         <div class="sg-choices" id="sgChoices"></div>
+      </div>
+
+      <div class="sg-ov" id="buildOv">
+        <h1>Build a <span class="grad">sprinkler</span></h1>
+        <p id="buildCoins">💰 0 coins · level up to unlock more</p>
+        <div id="buildChoices"></div>
+        <button class="sg-btn" id="buildDone" style="margin-top:14px">▶ Resume</button>
       </div>
 
       <div class="sg-ov end" id="overOv">
@@ -265,6 +281,20 @@
       moon:     { n: "Moon",     e: "🌙", rng: 1.15, dmg: 0 }
     };
     var UNLOCK_TYPES = ["standard", "laser", "foam", "lawn", "corridor", "moon"];
+    // ---- progression + economy ----
+    var UNLOCK_ORDER = ["foam", "moon", "lawn", "corridor", "laser"];   // standard free at start; specials unlock by leveling, laser last
+    var UNLOCK_XP = [50, 130, 230, 340, 440];          // cumulative XP per unlock (foam≈w2, moon≈w4, lawn≈w6, corridor≈w8, laser≈w10)
+    var XP_KILL = 1, XP_WAVE = 28, XP_BOSS = 120;
+    var COIN_KILL = 2, COIN_WAVE = 30, COIN_BOSS = 120;
+    var PLACE_COST = { standard: 25, foam: 50, moon: 45, lawn: 55, corridor: 65, laser: 100 };
+    var coins = 0, xp = 0, playerLevel = 1, unlocked = { standard: true }, pendingCost = 0;
+    function checkUnlocks() {
+      for (var i = 0; i < UNLOCK_ORDER.length; i++) {
+        var ty = UNLOCK_ORDER[i];
+        if (!unlocked[ty] && xp >= UNLOCK_XP[i]) { unlocked[ty] = true; playerLevel++; spawnFloat(W / 2, H / 2 - coreR * 1.3, "LV " + playerLevel + " · UNLOCKED " + TYPE_INFO[ty].n.toUpperCase(), "#8fd14a", 2.6); }
+      }
+    }
+    function placeCost(ty) { return PLACE_COST[ty] || 40; }
     function typeOf(s) { return s.type || "standard"; }
     function corridorAxis(s) { return s.axis || "x"; }
     function headReach(s) { return coverageRadius(s) * TYPE_INFO[typeOf(s)].rng; }
@@ -459,7 +489,8 @@
     }
     function hud() {
       $("scoreVal").textContent = score.toLocaleString();
-      $("sprkVal").textContent = activeSlots().length + "/9";
+      $("lvlVal").textContent = playerLevel;
+      $("coinVal").textContent = coins.toLocaleString();
     }
     // enemy mix: "elo" needs K11.2+ heads (kTier>=2); "splitter" breaks into 2 on death
     function pickType() {
@@ -615,6 +646,7 @@
         if (e.hp <= 0) {
           extinguishSfx();
           score += e.boss ? 600 : e.type === "elo" ? 30 + wave : e.type === "splitter" ? 8 + wave : 10 + wave;
+          coins += e.boss ? COIN_BOSS : COIN_KILL; xp += e.boss ? XP_BOSS : XP_KILL; checkUnlocks();   // putting out fires earns coins + XP
           var burstC = e.type === "elo" ? "#bfe0ff" : e.type === "splitter" ? "#bdf7c4" : "#cdf2ff";
           for (var p = 0; p < (e.boss ? 46 : 12); p++) { var an = Math.random() * Math.PI * 2, sp = 50 + Math.random() * 150, lf = 0.4 + Math.random() * 0.35; particles.push({ x: e.x, y: e.y, vx: Math.cos(an) * sp, vy: Math.sin(an) * sp, life: lf, max: lf, r: 2 + Math.random() * 2.6, c: burstC, spray: true }); }
           if (e.splits) { spawnChild(e.x, e.y, e.max * 0.42); spawnChild(e.x, e.y, e.max * 0.42); }
@@ -705,12 +737,12 @@
       return { e: pick.e, t: pick.t, d: pick.d, kid: pick.kid, apply: pick.apply, special: true };
     }
     function waveComplete() {
+      coins += COIN_WAVE; xp += XP_WAVE; checkUnlocks(); hud();   // finishing a wave earns coins + XP
       if (wave >= bossWaveFor(currentAct) && !bossAlive) { bossPending = true; startWave(wave + 1); return; }
       state = "upgrade";
       $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true;
-      // tank + special always in the pool; unlock/kfactor when applicable. Fire pump is its own RARE category (final tier extra-rare).
+      // upgrade cards (placement is now coin-based via Build): tank + special always; kfactor when applicable; pump rare
       var others = ["tank", "special"];
-      if (lockedCount() > 0) others.push("unlock");
       if (upgradeableCount() > 0) others.push("kfactor");
       for (var i = others.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), tmp = others[i]; others[i] = others[j]; others[j] = tmp; }
       var chosen = [];
@@ -787,6 +819,39 @@
       afterChoice();
     }
     function afterChoice() { startWave(wave + 1); }
+    // ---- Build: spend coins to place an unlocked sprinkler (pauses the action) ----
+    function openBuild() {
+      state = "build";
+      $("abar").hidden = true; $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("selectPrompt").hidden = true; $("rotOkBtn").hidden = true;
+      renderBuild(); $("buildOv").classList.add("show");
+    }
+    function renderBuild() {
+      var box = $("buildChoices"); if (!box) return;
+      var hasPlug = lockedCount() > 0;
+      $("buildCoins").textContent = "💰 " + coins.toLocaleString() + " coins" + (hasPlug ? "" : " · all slots full");
+      box.innerHTML = "";
+      var types = ["standard"].concat(UNLOCK_ORDER.filter(function (t) { return unlocked[t]; }));
+      types.forEach(function (ty) {
+        var cost = placeCost(ty), aff = coins >= cost && hasPlug;
+        var card = document.createElement("div");
+        card.className = "bcard" + (aff ? "" : " dim");
+        card.innerHTML = '<div class="e">' + TYPE_INFO[ty].e + '</div><div class="t">' + TYPE_INFO[ty].n + '</div><div class="c">💰 ' + cost + '</div>';
+        card.onclick = function () { if (state === "build" && coins >= cost && lockedCount() > 0) buildPlace(ty, cost); };
+        box.appendChild(card);
+      });
+    }
+    function buildPlace(ty, cost) {
+      var slot = nearestToCenter(function (sl) { return sl.state === "locked"; });
+      if (!slot || coins < cost) return;
+      coins -= cost; pendingType = ty; placeUnlock(slot); hud();
+      if (ty === "lawn") { $("buildOv").classList.remove("show"); beginLawnRotate(slot); }   // aim it; OK returns to build
+      else renderBuild();
+    }
+    function resumeFromBuild() {
+      $("buildOv").classList.remove("show"); state = "playing"; last = 0;
+      $("pauseBtn").hidden = false; $("ffBtn").hidden = false; $("easyInd").hidden = !easyMode;
+      updateAbar();
+    }
     // one-time lawn aiming at placement: drag around the head to set its base direction, then OK
     var rotSlot = null, rotDragging = false;
     function beginLawnRotate(s) {
@@ -804,7 +869,7 @@
       if (state !== "rotate" || !rotSlot) return;
       rotSlot.rotLocked = true; rotSlot.flash = 0.6; rotSlot = null; rotDragging = false;
       $("rotOkBtn").hidden = true; $("selectPrompt").hidden = true;
-      afterChoice();
+      openBuild();   // back to the build panel to place more
     }
     function beginSelectHead() {
       selectKind = "unlock"; state = "select"; $("upgradeOv").classList.remove("show");
@@ -1301,6 +1366,7 @@
       tankFillMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0; overloadT = 0; overloadCd = 0; selectKind = null; hurtT = 0; dpsNow = 0; dpsShown = 0;
       gameSpeed = 1; inspectSlot = null; pressSlot = null; lastTapSlot = null; rotSlot = null; rotDragging = false; $("ffBtn").textContent = "▶▶"; $("ffBtn").classList.remove("on"); $("rotOkBtn").hidden = true;
       hazard = null; hzPump = false; hzTankMult = 1; hzSpeed = 1; hzReach = 1; $("hazardInd").hidden = true;
+      coins = 0; xp = 0; playerLevel = 1; unlocked = { standard: true }; pendingCost = 0; $("buildOv").classList.remove("show");
       viewScale = 1; zoomTarget = 1;
       updatePumpIcons(); $("dpsMeter").hidden = true; $("abar").hidden = true;
     }
@@ -1345,7 +1411,7 @@
     }
     // music plays for the whole act and keeps playing through pause / upgrade / head-select overlays;
     // it only stops at the start screen, game over, or a win. Track follows the act (act 2 will use track 2).
-    function musicActive() { return soundOn && (state === "playing" || state === "paused" || state === "upgrade" || state === "select" || state === "rotate"); }
+    function musicActive() { return soundOn && (state === "playing" || state === "paused" || state === "upgrade" || state === "select" || state === "rotate" || state === "build"); }
     function updateMusic() {
       var want = musicActive() ? Math.min(musicTracks.length - 1, currentAct - 1) : -1;
       if (want < 0) { musicTracks.forEach(function (a) { try { a.pause(); } catch (e) {} }); curTrack = -1; return; }
@@ -1369,6 +1435,8 @@
     $("ffBtn").onclick = function () { gameSpeed = gameSpeed >= 3 ? 1 : gameSpeed + 1; this.textContent = gameSpeed > 1 ? ("▶▶" + gameSpeed) : "▶▶"; this.classList.toggle("on", gameSpeed > 1); };
     $("pauseAutoToggle").onchange = function () { autoPick = this.checked; try { localStorage.setItem("sg_auto", autoPick ? "1" : "0"); } catch (e) {} var at = $("autoToggle"); if (at) at.checked = autoPick; };
     $("rotOkBtn").onclick = confirmRotate;
+    $("buildBtn").onclick = function () { if (state === "playing") openBuild(); };
+    $("buildDone").onclick = resumeFromBuild;
     $("pauseBtn").onclick = function () { if (state === "playing") pauseGame(); else if (state === "paused") resumeGame(); };
     $("resumeBtn").onclick = resumeGame;
     $("pauseRestartBtn").onclick = newGame;
