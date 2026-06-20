@@ -859,7 +859,8 @@
     function loadImg(src) { var im = new Image(); im.src = src; return im; }
     var IMG = { plug: loadImg("../assets/pipe-plug.png"), bg1: loadImg("../assets/bg-act1.png"), bg2: loadImg("../assets/bg-act2.png"), bg3: loadImg("../assets/bg-act3.png"),
       laser: loadImg("../assets/head-laser.png"), laserOn: loadImg("../assets/head-laser-on.png"), foam: loadImg("../assets/head-foam.png"), foamOpen: loadImg("../assets/head-foam-open.png"),
-      lawn: loadImg("../assets/head-lawn.png"), corridor: loadImg("../assets/head-corridor.png"), moon: loadImg("../assets/head-moon.png"), moonOn: loadImg("../assets/head-moon-on.png") };
+      lawn: loadImg("../assets/head-lawn.png"), corridor: loadImg("../assets/head-corridor.png"), moon: loadImg("../assets/head-moon.png"), moonOn: loadImg("../assets/head-moon-on.png"),
+      std: [0, 1, 2, 3, 4, 5].map(function (i) { return loadImg("../assets/head-std-" + i + ".png"); }) };   // standard head art by K-tier (brass→chrome→white→black→ENT→royal gold)
     function imgReady(im) { return im && im.complete && im.naturalWidth > 0; }
     var HEAD_IMG = 2.9;   // image draw box = HEAD_IMG × head radius (tune for fit)
     function drawHeadImg(im, x, y, r, rot) { var d = r * HEAD_IMG; ctx.save(); ctx.translate(x, y); if (rot) ctx.rotate(rot); ctx.drawImage(im, -d / 2, -d / 2, d, d); ctx.restore(); }
@@ -904,8 +905,9 @@
       ctx.strokeStyle = "#5a626b"; ctx.lineWidth = Math.max(1, r * 0.05);
       ctx.beginPath(); ctx.moveTo(x - w * 0.42, y); ctx.lineTo(x + w * 0.42, y); ctx.moveTo(x, y - w * 0.42); ctx.lineTo(x, y + w * 0.42); ctx.stroke();
     }
-    // gear deflector (standard spray head)
+    // gear deflector (standard spray head) — colored art by K-tier, vector fallback
     function drawDeflector(x, y, r, s) {
+      var si2 = Math.min(s.kTier, 5); if (IMG.std && imgReady(IMG.std[si2])) { drawHeadImg(IMG.std[si2], x, y, r); return; }
       var fin = finish(s.kTier), teeth = 16, step = Math.PI * 2 / teeth, rRoot = r * 0.84, ti, pi;
       ctx.beginPath();
       for (ti = 0; ti < teeth; ti++) { var b = ti * step - Math.PI / 2, pa = [[b, rRoot], [b + step * 0.18, r], [b + step * 0.5, r], [b + step * 0.68, rRoot]]; for (pi = 0; pi < 4; pi++) { var px = x + Math.cos(pa[pi][0]) * pa[pi][1], py = y + Math.sin(pa[pi][0]) * pa[pi][1]; if (ti === 0 && pi === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); } }
