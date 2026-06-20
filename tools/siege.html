@@ -228,7 +228,7 @@
     // grid: 3x3 sprinkler slots. col/row 0..2. center (1,1) starts active.
     var slots = [];
     for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) slots.push({ c: c, r: r, x: 0, y: 0, state: (c === 1 && r === 1) ? "active" : "locked", kTier: 0, q: 0, type: (c === 1 && r === 1) ? "standard" : null, ec: false, hp: false, fr: false, aim: 0 });
-    var enemies = [], particles = [], foamPiles = [];
+    var enemies = [], particles = [], foamPiles = [], laserShots = [];
     var state = "start";  // start | playing | upgrade | over | win
     var wave = 1, score = 0, integrity = 100, water = 330, maxWater = 330, holding = false;
     var spawnQueue = 0, spawnT = 0, bossPending = false, bossAlive = false;
@@ -238,6 +238,7 @@
     var tankFillMult = 1, shield = 0, hollywoodCharges = 0, hollywoodT = 0;
     var overloadT = 0, overloadCd = 0;   // Overload Fire Pump: 15s ×1.5 damage, 60s cooldown
     var gameSpeed = 1;                    // fast-forward (1×/2×/3×)
+    var currentAct = 1;                   // music track follows the act (1 = track 1); persists across waves/pause/upgrade
     var inspectSlot = null, pressSlot = null, pressT0 = 0, lastTapT = 0, lastTapSlot = null;   // hold-to-inspect label + double-tap corridor rotate
     // combat feedback: floating text, integrity hit-flash, live damage-per-second
     var floats = [], hurtT = 0, dpsNow = 0, dpsShown = 0;
@@ -293,6 +294,7 @@
     var FOAM_PILE_LIFE = 5.5;                  // foam piles persist (sec); flames wading through take damage + slow (no damage from the spray itself)
     var DROOP_N = 0.95;                        // supply droop exponent: P = static − C·Q^DROOP_N (C derived per level to hit residual@ratedQ)
     var DMG_PER_GPM = 2.0, TANK_DRAIN = 1.2, TANK_REGEN = 26, BOSS_WAVE = 15;
+    var LASER_INTERVAL = 0.42, LASER_SPEED = 2.4;   // laser fires a projectile every LASER_INTERVAL s at LASER_SPEED·S/s; Fast Response shortens interval + speeds the bolt
     var SPECIAL_WATER_BONUS = 120;  // tank bump when a special head is installed — ~most of its auto-spray draw, intentionally a touch short
     // supply = static + pump churn, drooping with flow; ~3 psi @ 50 gpm with no pump,
     // ~175 psi @ 1000 gpm at full pump (the operating point for three K25.2 heads).
@@ -494,11 +496,18 @@
       // --- weapons pass: each firing head applies its type's damage / effect ---
       for (var ei = 0; ei < enemies.length; ei++) enemies[ei].dmgFrame = 0;
       for (var fh = 0; fh < firing.length; fh++) {
-        var s = firing[fh], ty = typeOf(s), per = s.q * DMG_PER_GPM * TYPE_INFO[ty].dmg * moonBuff(s) * (easyMode ? 1.5 : 1) * (overloadT > 0 ? 1.5 : 1) * ((s.fr && (ty === "standard" || ty === "laser")) ? 1.5 : 1), em, j;   // Fast Response = +50% dmg for standard/laser; other types get type-specific FR effects
+        var s = firing[fh], ty = typeOf(s), per = s.q * DMG_PER_GPM * TYPE_INFO[ty].dmg * moonBuff(s) * (easyMode ? 1.5 : 1) * (overloadT > 0 ? 1.5 : 1) * ((s.fr && ty === "standard") ? 1.5 : 1), em, j;   // Fast Response = +50% dmg for standard; other types get type-specific FR effects (laser: faster shots, below)
         if (ty === "moon") { for (j = 0; j < enemies.length; j++) if (inRange(s, enemies[j])) { integrity = Math.min(100, integrity + s.q * 0.05 * dt * (s.fr ? 1.5 : 1)); break; } continue; }   // FR: heals 50% more
-        if (ty === "laser") {                                  // single-target: nearest in range
+        if (ty === "laser") {                                  // repeating projectile at the nearest flame
           var tgt = null, bd = 1e9; for (j = 0; j < enemies.length; j++) { em = enemies[j]; if (!canHit(s, em)) continue; var dd = Math.hypot(em.x - s.x, em.y - s.y); if (dd < bd) { bd = dd; tgt = em; } }
-          s.laserTgt = tgt; if (tgt) tgt.dmgFrame += per; continue;
+          s.laserTgt = tgt; s.shotT = (s.shotT || 0) + dt;
+          var li = LASER_INTERVAL / (s.fr ? 1.5 : 1);          // Fast Response: shorter gap between shots
+          if (tgt && s.shotT >= li) {
+            s.shotT = 0;
+            var lang = Math.atan2(tgt.y - s.y, tgt.x - s.x), lsp = S * LASER_SPEED * (s.fr ? 1.5 : 1);   // FR: faster bolt
+            laserShots.push({ x: s.x, y: s.y, vx: Math.cos(lang) * lsp, vy: Math.sin(lang) * lsp, dmg: per * LASER_INTERVAL, r: Math.max(2.5, gap * 0.05), life: 2 });
+          }
+          continue;
         }
         if (ty === "lawn") { var hits = 0; for (j = 0; j < enemies.length && hits < 3; j++) { em = enemies[j]; if (canHit(s, em)) { em.dmgFrame += per; hits++; } } continue; }
         if (ty === "foam") { s.foamDropT = (s.foamDropT || 0) + dt; if (s.foamDropT >= (s.fr ? 0.107 : 0.16) && foamPiles.length < 110) { s.foamDropT = 0; var pa = Math.random() * Math.PI * 2, pr = headReach(s) * Math.sqrt(Math.random()); foamPiles.push({ x: s.x + Math.cos(pa) * pr, y: s.y + Math.sin(pa) * pr, r: gap * (0.16 + Math.random() * 0.14), life: FOAM_PILE_LIFE, max: FOAM_PILE_LIFE, dps: per, kTier: s.kTier, seed: Math.random() * 6.28 }); } continue; }   // foam lays piles on the ground; damage happens in the piles, not the spray
@@ -549,7 +558,7 @@
       }
       // spray droplets — each head type throws droplets that match its actual spray pattern
       if (spraying) for (var a2 = 0; a2 < act.length; a2++) {
-        var s2 = act[a2]; if (s2.q <= 0) continue; var t2 = typeOf(s2), nd = Math.max(1, Math.min(9, Math.round(s2.q / 3.5)));
+        var s2 = act[a2], t2 = typeOf(s2); if (s2.q <= 0 || t2 === "laser") continue; var nd = Math.max(1, Math.min(9, Math.round(s2.q / 3.5)));   // laser shows projectiles, not mist
         for (var d = 0; d < nd; d++) {
           if (particles.length > 560) break;
           var lifeD = 0.30 + Math.random() * 0.30, ang, reach, col = "#a6e9ff", rr = 1.6 + Math.random() * 2.4;
@@ -568,6 +577,13 @@
       // floating combat text + flash decay
       for (var fq = floats.length - 1; fq >= 0; fq--) { var ft = floats[fq]; ft.life -= dt; if (ft.life <= 0) { floats.splice(fq, 1); continue; } ft.y += ft.vy * dt; ft.vy *= 0.92; }
       for (var fp2 = foamPiles.length - 1; fp2 >= 0; fp2--) { foamPiles[fp2].life -= dt; if (foamPiles[fp2].life <= 0) foamPiles.splice(fp2, 1); }
+      // laser projectiles: travel, hit the first flame they touch
+      for (var ls = laserShots.length - 1; ls >= 0; ls--) {
+        var lp = laserShots[ls]; lp.x += lp.vx * dt; lp.y += lp.vy * dt; lp.life -= dt;
+        var heE = null, hbd = 1e9; for (var hi = 0; hi < enemies.length; hi++) { var hen = enemies[hi], hdd = Math.hypot(hen.x - lp.x, hen.y - lp.y); if (hdd < hen.sz + lp.r && hdd < hbd) { hbd = hdd; heE = hen; } }
+        if (heE) { heE.hp -= lp.dmg; heE.hit = 0.12; frameDps += lp.dmg / Math.max(dt, 0.016); spawnFloat(heE.x, heE.y - heE.sz, Math.round(lp.dmg) + "", "#ff8a78", 0.9); laserShots.splice(ls, 1); continue; }
+        if (lp.life <= 0 || lp.x < -20 || lp.x > W + 20 || lp.y < -20 || lp.y > H + 20) laserShots.splice(ls, 1);
+      }
       for (var k = 0; k < slots.length; k++) { if (slots[k].flash > 0) slots[k].flash = Math.max(0, slots[k].flash - dt); if (slots[k].hurt > 0) slots[k].hurt = Math.max(0, slots[k].hurt - dt); }
       if (hurtT > 0) hurtT = Math.max(0, hurtT - dt);
       // live damage-per-second meter (smoothed): rises fast, falls quick when you stop spraying
@@ -1005,7 +1021,7 @@
     }
     function drawHeadField(s, x, y, r, ty) {
       var firing = s.q > 0;
-      if (ty === "laser") { if (firing && s.laserTgt) { ctx.strokeStyle = "rgba(255,60,40,0.85)"; ctx.lineWidth = Math.max(2, r * 0.2); ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(s.laserTgt.x, s.laserTgt.y); ctx.stroke(); ctx.lineWidth = 1; } return; }
+      if (ty === "laser") return;   // laser fires discrete projectiles (drawn separately) — no continuous beam
       if (ty === "corridor") {
         var R = coverageRadius(s), ax = corridorAxis(s);
         if (firing) { ctx.fillStyle = "rgba(80,200,240,0.10)"; if (ax === "x") ctx.fillRect(x - R * 3, y - R * 0.35, R * 6, R * 0.7); else ctx.fillRect(x - R * 0.35, y - R * 3, R * 0.7, R * 6); }
@@ -1086,6 +1102,13 @@
         ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r * 0.7, 0, Math.PI * 2); ctx.fill();
       }
       ctx.globalAlpha = 1;
+      // laser projectiles — red bolts
+      for (var lj = 0; lj < laserShots.length; lj++) {
+        var lq = laserShots[lj], tlx = lq.x - lq.vx * 0.03, tly = lq.y - lq.vy * 0.03;
+        ctx.strokeStyle = "rgba(255,70,55,0.9)"; ctx.lineWidth = lq.r * 1.5; ctx.lineCap = "round";
+        ctx.beginPath(); ctx.moveTo(tlx, tly); ctx.lineTo(lq.x, lq.y); ctx.stroke();
+        ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(lq.x, lq.y, lq.r * 0.75, 0, Math.PI * 2); ctx.fill();
+      }
       // floating combat text (red = damage taken, blue = damage done)
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       for (var fi = 0; fi < floats.length; fi++) {
@@ -1140,7 +1163,7 @@
 
     function reset() {
       for (var i = 0; i < slots.length; i++) { var ctr = slots[i].c === 1 && slots[i].r === 1; slots[i].state = ctr ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].hurt = 0; slots[i].ec = false; slots[i].hp = false; slots[i].fr = false; slots[i].type = ctr ? "standard" : null; slots[i].aim = 0; }
-      enemies = []; particles = []; floats = []; foamPiles = []; score = 0; integrity = 100; maxWater = Math.round(330 * (easyMode ? 1.5 : 1)); water = maxWater; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
+      enemies = []; particles = []; floats = []; foamPiles = []; laserShots = []; currentAct = 1; score = 0; integrity = 100; maxWater = Math.round(330 * (easyMode ? 1.5 : 1)); water = maxWater; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
       tankFillMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0; overloadT = 0; overloadCd = 0; selectKind = null; hurtT = 0; dpsNow = 0; dpsShown = 0;
       gameSpeed = 1; inspectSlot = null; pressSlot = null; lastTapSlot = null; $("ffBtn").textContent = "▶▶"; $("ffBtn").classList.remove("on");
       viewScale = 1; zoomTarget = 1;
@@ -1185,10 +1208,12 @@
       var g = actx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.45, t0 + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.2);
       src.connect(bp); bp.connect(g); g.connect(actx.destination); src.start(t0); src.stop(t0 + 0.22);
     }
-    function musicForWave(n) { return n >= Math.ceil(BOSS_WAVE / 2) ? 1 : 0; }       // waves 1-7 → track 1, 8+ & boss → track 2
+    // music plays for the whole act and keeps playing through pause / upgrade / head-select overlays;
+    // it only stops at the start screen, game over, or a win. Track follows the act (act 2 will use track 2).
+    function musicActive() { return soundOn && (state === "playing" || state === "paused" || state === "upgrade" || state === "select"); }
     function updateMusic() {
-      if (!soundOn || state !== "playing") { musicTracks.forEach(function (a) { try { a.pause(); } catch (e) {} }); return; }
-      var want = bossAlive ? 1 : musicForWave(wave);
+      var want = musicActive() ? Math.min(musicTracks.length - 1, currentAct - 1) : -1;
+      if (want < 0) { musicTracks.forEach(function (a) { try { a.pause(); } catch (e) {} }); curTrack = -1; return; }
       if (want !== curTrack) { musicTracks.forEach(function (a, i) { if (i !== want) { try { a.pause(); a.currentTime = 0; } catch (e) {} } }); curTrack = want; }
       var tr = musicTracks[want]; tr.volume = 0.4; if (tr.paused) tr.play().catch(function () {});
     }
