@@ -85,6 +85,22 @@
     .sg-hollybtn[hidden] { display:none; }
     .sg-prompt { position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:6; background:var(--accent); color:#1a0d06; font:700 .82rem 'Space Grotesk'; padding:8px 14px; border-radius:999px; box-shadow:0 4px 14px rgba(0,0,0,.4); animation:hbpulse 1s ease-in-out infinite; white-space:nowrap; }
     .sg-prompt[hidden] { display:none; }
+    .sg-pump { align-items:center; }
+    .sg-pump-icons { display:flex; align-items:center; gap:5px; flex:1; }
+    .sg-pump-icons svg { width:18px; height:18px; display:block; }
+    .sg-pump-icons .star { color:var(--accent); font:700 .82rem 'Space Grotesk'; }
+    .sg-dps { position:absolute; right:10px; bottom:10px; z-index:6; background:rgba(13,17,22,.72); backdrop-filter:blur(2px); border:1px solid var(--line); border-radius:10px; padding:5px 9px; font:700 .62rem Inter; letter-spacing:.06em; color:var(--muted); display:flex; align-items:baseline; gap:4px; }
+    .sg-dps b { font:800 .95rem 'Space Grotesk'; color:var(--water); }
+    .sg-dps[hidden] { display:none; }
+    .sg-dps.hot { border-color:var(--accent); }
+    .sg-dps.hot b { color:var(--accent); }
+    .sg-dps.blaze { animation:dpsblaze .5s ease-in-out infinite; border-color:var(--brand); }
+    .sg-dps.blaze b { color:var(--brand); }
+    @keyframes dpsblaze { 0%,100% { transform:scale(1); } 50% { transform:scale(1.12); box-shadow:0 0 14px rgba(255,90,47,.5); } }
+    /* game-over / win: restart pinned at top, content below; buttons briefly locked to stop frantic mis-taps */
+    .sg-ov.end { justify-content:flex-start; }
+    .sg-restart { align-self:center; margin:2px 0 18px; max-width:240px; }
+    .sg-locked { opacity:.4; pointer-events:none; }
   </style>
 </head>
 <body>
@@ -100,8 +116,9 @@
       <div class="pill"><div class="k">Sprinklers</div><div class="v" id="sprkVal">1/9</div></div>
     </div>
     <div class="sg-bars">
-      <div class="sg-bar-wrap"><span class="lbl">Integrity</span><div class="sg-bar" id="integBar"><i id="integFill"></i><span class="sg-bar-val" id="shieldVal"></span></div></div>
+      <div class="sg-bar-wrap"><span class="lbl">Integrity</span><div class="sg-bar" id="integBar"><i id="integFill"></i><span class="sg-bar-val" id="integVal">100 HP</span></div></div>
       <div class="sg-bar-wrap"><span class="lbl">Water Tank</span><div class="sg-bar" id="waterBar"><i id="waterFill"></i><span class="sg-bar-val" id="waterVal">330 / 330 gal</span></div></div>
+      <div class="sg-bar-wrap sg-pump"><span class="lbl">Fire Pump</span><span class="sg-pump-icons" id="pumpIcons"></span></div>
       <div class="sg-psi" id="psiRead">Static Pressure: 7 PSI</div>
     </div>
 
@@ -110,6 +127,7 @@
       <button id="pauseBtn" class="sg-pausebtn" aria-label="Pause" hidden>❚❚</button>
       <button id="hollywoodBtn" class="sg-hollybtn" aria-label="Hollywood Scene" hidden>🎬 0</button>
       <div id="selectPrompt" class="sg-prompt" hidden>👆 Tap a dusty sprinkler to fix</div>
+      <div id="dpsMeter" class="sg-dps" hidden><b id="dpsNum">0</b> DPS</div>
 
       <div class="sg-ov" id="pauseOv">
         <div class="ic">❚❚</div>
@@ -131,7 +149,8 @@
         <div class="sg-choices" id="sgChoices"></div>
       </div>
 
-      <div class="sg-ov" id="overOv">
+      <div class="sg-ov end" id="overOv">
+        <button class="sg-btn ghost sg-restart" id="againBtn">↻ Try again</button>
         <div class="ic">🔥</div>
         <h1>Overrun</h1>
         <div class="sg-final"><div><div class="v gold" id="finalWave">1</div><div class="k">Waves held</div></div><div><div class="v" id="finalScore" style="color:var(--water)">0</div><div class="k">Score</div></div></div>
@@ -141,15 +160,14 @@
           <div class="sg-lb"><div class="sg-lb-h">🏆 Top Commanders</div><div id="sgLbList"><div class="sg-lb-empty">Loading…</div></div></div>
           <button class="sg-btn ghost" id="sgPostBtn" style="margin-top:10px">Sign in to post your score</button>
         </div>
-        <button class="sg-btn" id="againBtn">↻ Try again</button>
       </div>
 
-      <div class="sg-ov" id="winOv">
+      <div class="sg-ov end" id="winOv">
+        <button class="sg-btn ghost sg-restart" id="winAgainBtn">↻ Play again</button>
         <div class="ic">🏆</div>
         <h1>Act 1 <span class="grad">cleared!</span></h1>
         <p>The boss flame is out and all nine sprinklers held the line. More acts coming soon.</p>
         <div class="sg-final"><div><div class="v gold" id="winScore">0</div><div class="k">Score</div></div></div>
-        <button class="sg-btn" id="winAgainBtn">↻ Play again</button>
       </div>
     </div>
     <div class="sg-hint">Hold to spray · release to refill · flames die in the spray</div>
@@ -173,7 +191,13 @@
     var pumpLevel = 0, tankLevel = 0, nextSupplyPump = false, pendingSupplyPump = false, dryFlash = false, nowT = 0;
     // special upgrades: refill rate ×, spray reach ×, integrity shield pool, Hollywood charges/timer
     var tankFillMult = 1, shield = 0, hollywoodCharges = 0, hollywoodT = 0;
+    // combat feedback: floating text, integrity hit-flash, live damage-per-second
+    var floats = [], hurtT = 0, dpsNow = 0, dpsShown = 0;
+    function spawnFloat(x, y, text, color, scale) { if (floats.length > 40) floats.shift(); floats.push({ x: x, y: y, vy: -34, life: 0.85, max: 0.85, text: text, color: color, sc: scale || 1 }); }
     var W = 360, H = 430, S = 360, dpr = 1, gap = 70, coreR = 30, colXs = [], rowYs = [];
+    // battlefield zoom: stays at 1 until a head's coverage reaches the screen edge, then
+    // steps out to a preset so the 9 heads stay centered but you see (and fight) further out
+    var viewScale = 1, zoomTarget = 1, ZPRESETS = [1, 0.68, 0.5];
 
     // --- hydraulics: each head flows Q = K·√P; supply pressure sags as total flow rises ---
     var KLADDER = [5.6, 8.0, 11.2, 14.0, 16.8, 22.4, 25.2];   // K-factor per upgrade tier
@@ -209,13 +233,30 @@
     window.addEventListener("resize", resize);
 
     // shield (special) soaks core damage before integrity
-    function takeDamage(d) { if (shield > 0) { var a = Math.min(shield, d); shield -= a; d -= a; } integrity -= d; if (integrity < 0) integrity = 0; }
+    function takeDamage(d) {
+      if (shield > 0) { var a = Math.min(shield, d); shield -= a; d -= a; }
+      if (d > 0) {
+        integrity -= d; if (integrity < 0) integrity = 0;
+        hurtT = 0.45;                                   // red screen flash
+        var cs = slots[4]; if (cs) cs.hurt = 0.45;      // center sprinkler flashes red
+        spawnFloat(W / 2, H / 2 - coreR, "-" + Math.round(d), "#ff5a4f", 1.3);
+      }
+    }
     function activeSlots() { return slots.filter(function (s) { return s.state === "active"; }); }
     function lockedCount() { return slots.filter(function (s) { return s.state === "locked"; }).length; }
     function upgradeableCount() { return slots.filter(function (s) { return s.state === "active" && s.kTier < KLADDER.length - 1; }).length; }
     function sprayRadius(s) { var f = s.q || 0; return gap * Math.max(0.55, Math.min(1.6, 0.5 + 0.12 * Math.sqrt(f))) * (s.ec ? 1.5 : 1); }
     function coverageRadius(s) { var qn = KLADDER[s.kTier] * Math.sqrt(supplyP(0)); return gap * Math.max(0.55, Math.min(1.6, 0.5 + 0.12 * Math.sqrt(qn))) * (s.ec ? 1.5 : 1); }
     function sprayDps(s) { return (s.q || 0) * DMG_PER_GPM; }
+    // pick the largest preset zoom at which no active head's coverage bubble is clipped by the screen
+    function chooseZoom() {
+      var cx = W / 2, cy = H / 2, maxX = 1e-6, maxY = 1e-6;
+      for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (s.state !== "active") continue; var R = coverageRadius(s); maxX = Math.max(maxX, Math.abs(s.x - cx) + R); maxY = Math.max(maxY, Math.abs(s.y - cy) + R); }
+      var zfit = Math.min((W / 2) / maxX, (H / 2) / maxY) * 0.98;
+      var chosen = ZPRESETS[ZPRESETS.length - 1];
+      for (var p = 0; p < ZPRESETS.length; p++) { if (ZPRESETS[p] <= zfit) { chosen = ZPRESETS[p]; break; } }
+      if (chosen < zoomTarget) zoomTarget = chosen;        // only ever zoom out (bubbles only grow)
+    }
     // sprinkler finish by K-factor tier: brass → chrome → white poly → black poly → ENT → shiny gold
     function finish(kTier) {
       switch (kTier) {
@@ -245,7 +286,23 @@
       var s = nearestToCenter(function (sl) { return sl.state === "active" && sl.kTier < KLADDER.length - 1; });
       if (s) { s.kTier++; s.flash = 0.6; maxWater += 60; }
     }
-    function applyPump() { if (pumpLevel < PUMP_MAX) { pumpLevel++; for (var i = 0; i < slots.length; i++) if (slots[i].state === "active") slots[i].flash = 0.6; } }
+    function applyPump() { if (pumpLevel < PUMP_MAX) { pumpLevel++; for (var i = 0; i < slots.length; i++) if (slots[i].state === "active") slots[i].flash = 0.6; } updatePumpIcons(); }
+    // fire-pump level: one red pump icon per tier (lit = installed), star once maxed
+    function pumpSvg(on) { var c = on ? "#ff5a2f" : "#3a424c"; return '<svg viewBox="0 0 24 24"><circle cx="9" cy="6.5" r="3.4" fill="' + c + '"/><rect x="3.5" y="9" width="12" height="9.5" rx="1.5" fill="' + c + '"/><rect x="15.5" y="11" width="6" height="3.4" rx="1" fill="' + c + '"/></svg>'; }
+    function updatePumpIcons() {
+      var html = ""; for (var i = 0; i < PUMP_MAX; i++) html += pumpSvg(i < pumpLevel);
+      if (pumpLevel >= PUMP_MAX) html += '<span class="star">★ MAX</span>';
+      var el = $("pumpIcons"); if (el) el.innerHTML = html;
+    }
+    function updateDpsMeter() {
+      var el = $("dpsMeter"); if (!el) return;
+      var v = Math.round(dpsShown);
+      if (v < 1) { el.hidden = true; return; }
+      el.hidden = false; $("dpsNum").textContent = v.toLocaleString();
+      el.classList.toggle("hot", v >= 250 && v < 700);
+      el.classList.toggle("blaze", v >= 700);
+      if (!(v >= 250 && v < 700)) el.classList.remove("hot");
+    }
     function applyCapacity() { tankLevel++; maxWater += 180; water = maxWater; for (var i = 0; i < slots.length; i++) if (slots[i].state === "active") slots[i].flash = 0.6; }
 
     function startWave(n) {
@@ -273,7 +330,7 @@
     }
     function spawnEdge(type) {
       type = type || pickType();
-      var ang = Math.random() * Math.PI * 2, m = S * 0.62;
+      var ang = Math.random() * Math.PI * 2, m = S * 0.62 / viewScale;
       var x = W / 2 + Math.cos(ang) * m, y = H / 2 + Math.sin(ang) * m;
       var base = 26 + wave * 13;
       var e = { x: x, y: y, boss: false, t: Math.random() * 9, hit: 0, type: type, minTier: 0, coreDmg: 12, splits: false };
@@ -287,7 +344,7 @@
       enemies.push({ x: x + Math.cos(ang) * 6, y: y + Math.sin(ang) * 6, hp: hpv, max: hpv, spd: (34 + wave * 2.4) * (S / 400), sz: S * 0.038, boss: false, t: Math.random() * 9, hit: 0, type: "normal", minTier: 0, coreDmg: 7, splits: false });
     }
     function spawnBoss() {
-      var ang = Math.random() * Math.PI * 2, m = S * 0.62;
+      var ang = Math.random() * Math.PI * 2, m = S * 0.62 / viewScale;
       enemies.push({ x: W / 2 + Math.cos(ang) * m, y: H / 2 + Math.sin(ang) * m, hp: 2600, max: 2600, spd: 16 * (S / 400), sz: S * 0.13, boss: true, t: 0, mt: 0, type: "boss", minTier: 0, coreDmg: 28, splits: false });
     }
 
@@ -315,6 +372,7 @@
       // boss spawns minions
       for (var b = 0; b < enemies.length; b++) { if (enemies[b].boss) { enemies[b].mt += dt; if (enemies[b].mt > 2.6) { enemies[b].mt = 0; spawnEdge(); } } }
       // enemies move + take damage
+      var frameDps = 0;
       for (var i = enemies.length - 1; i >= 0; i--) {
         var e = enemies[i];
         var dx = W / 2 - e.x, dy = H / 2 - e.y, dist = Math.hypot(dx, dy) || 1;
@@ -335,7 +393,11 @@
         if (spraying) {
           var dmg = 0;
           for (var a = 0; a < act.length; a++) { var s = act[a]; if (s.kTier < e.minTier) continue; if (Math.hypot(e.x - s.x, e.y - s.y) <= sprayRadius(s)) dmg += sprayDps(s); }
-          if (dmg > 0) { e.hp -= dmg * dt; e.hit = 0.12; }
+          if (dmg > 0) {
+            e.hp -= dmg * dt; e.hit = 0.12; frameDps += dmg;          // dmg is already per-second
+            e.dmgT = (e.dmgT || 0) + dt;
+            if (e.dmgT > 0.33) { spawnFloat(e.x, e.y - e.sz, Math.round(dmg) + "", "#5fd0f5", 0.95); e.dmgT = 0; }  // blue damage-done text
+          }
         }
         if (e.hp <= 0) {
           score += e.boss ? 600 : e.type === "elo" ? 30 + wave : e.type === "splitter" ? 8 + wave : 10 + wave;
@@ -361,13 +423,22 @@
       }
       // particles
       for (var q = particles.length - 1; q >= 0; q--) { var pt = particles[q]; pt.life -= dt; if (pt.life <= 0) { particles.splice(q, 1); continue; } pt.x += pt.vx * dt; pt.y += pt.vy * dt; }
-      // flash decay
-      for (var k = 0; k < slots.length; k++) if (slots[k].flash > 0) slots[k].flash = Math.max(0, slots[k].flash - dt);
+      // floating combat text + flash decay
+      for (var fq = floats.length - 1; fq >= 0; fq--) { var ft = floats[fq]; ft.life -= dt; if (ft.life <= 0) { floats.splice(fq, 1); continue; } ft.y += ft.vy * dt; ft.vy *= 0.92; }
+      for (var k = 0; k < slots.length; k++) { if (slots[k].flash > 0) slots[k].flash = Math.max(0, slots[k].flash - dt); if (slots[k].hurt > 0) slots[k].hurt = Math.max(0, slots[k].hurt - dt); }
+      if (hurtT > 0) hurtT = Math.max(0, hurtT - dt);
+      // live damage-per-second meter (smoothed): rises fast, falls quick when you stop spraying
+      dpsNow = frameDps;
+      dpsShown += (dpsNow - dpsShown) * Math.min(1, dt * 9);
+      updateDpsMeter();
+      // battlefield zoom: ease toward the fitted preset as coverage grows
+      chooseZoom();
+      if (Math.abs(viewScale - zoomTarget) > 0.001) viewScale += (zoomTarget - viewScale) * Math.min(1, dt * 3.5);
       // wave end (boss win is handled on boss death)
       if (spawnQueue === 0 && enemies.length === 0 && !bossAlive) { waveComplete(); }
       // bars
       var iF = $("integFill"), iB = $("integBar"); iF.style.width = integrity + "%"; iF.style.background = integrity > 50 ? "var(--ok)" : integrity > 25 ? "var(--accent)" : "var(--bad)"; iB.classList.toggle("low", integrity <= 25);
-      $("shieldVal").textContent = shield > 0 ? "🛡 " + Math.round(shield) : "";
+      $("integVal").textContent = Math.round(integrity) + " HP" + (shield > 0 ? " · 🛡 " + Math.round(shield) : "");
       var wF = $("waterFill"), wB = $("waterBar"); wF.style.width = (maxWater ? (water / maxWater * 100) : 0) + "%"; wB.classList.toggle("low", water <= maxWater * 0.18);
       $("waterVal").textContent = Math.round(water) + " / " + Math.round(maxWater) + " gal";
     }
@@ -435,6 +506,7 @@
     }
     function selectHeadAt(tx, ty) {
       if (state !== "select") return;
+      tx = W / 2 + (tx - W / 2) / viewScale; ty = H / 2 + (ty - H / 2) / viewScale;   // screen → world
       var best = null, bd = 1e9;
       for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (!selectEligible(s)) continue; var d = Math.hypot(tx - s.x, ty - s.y); if (d < bd) { bd = d; best = s; } }
       if (best && bd < gap * 0.7) {
@@ -453,9 +525,9 @@
       hollywoodCharges--; hollywoodT = 5; updateHollywoodBtn();
     }
 
-    function gameOver() { state = "over"; $("pauseBtn").hidden = true; $("hollywoodBtn").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); pendingScore = score; $("overOv").classList.add("show"); mountLb("overOv", "againBtn"); }
-    function win() { state = "win"; $("pauseBtn").hidden = true; $("hollywoodBtn").hidden = true; $("winScore").textContent = score.toLocaleString(); pendingScore = score; $("winOv").classList.add("show"); mountLb("winOv", "winAgainBtn"); }
-    function pauseGame() { if (state !== "playing") return; state = "paused"; holding = false; $("pauseOv").classList.add("show"); $("hollywoodBtn").hidden = true; }
+    function gameOver() { state = "over"; $("pauseBtn").hidden = true; $("hollywoodBtn").hidden = true; $("dpsMeter").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); pendingScore = score; $("overOv").classList.add("show"); mountLb("overOv", "againBtn"); }
+    function win() { state = "win"; $("pauseBtn").hidden = true; $("hollywoodBtn").hidden = true; $("dpsMeter").hidden = true; $("winScore").textContent = score.toLocaleString(); pendingScore = score; $("winOv").classList.add("show"); mountLb("winOv", "winAgainBtn"); }
+    function pauseGame() { if (state !== "playing") return; state = "paused"; holding = false; $("pauseOv").classList.add("show"); $("hollywoodBtn").hidden = true; $("dpsMeter").hidden = true; }
     function resumeGame() { if (state !== "paused") return; state = "playing"; last = 0; $("pauseOv").classList.remove("show"); updateHollywoodBtn(); }
 
     // ---- rendering ----
@@ -517,6 +589,7 @@
       // dusty specks on locked (deterministic so they don't flicker)
       if (!active) { ctx.fillStyle = "rgba(205,210,215,0.4)"; for (var dd = 0; dd < 6; dd++) { var da = dd * 1.7, dr = r * (0.45 + (dd % 3) * 0.16); ctx.beginPath(); ctx.arc(x + Math.cos(da) * dr, y + Math.sin(da) * dr, r * 0.045, 0, Math.PI * 2); ctx.fill(); } }
       if (s.flash > 0) { ctx.globalAlpha = s.flash; ctx.fillStyle = "#bff0ff"; ctx.beginPath(); ctx.arc(x, y, r + 6, 0, Math.PI * 2); ctx.fill(); }
+      if (s.hurt > 0) { ctx.globalAlpha = Math.min(1, s.hurt / 0.45); ctx.fillStyle = "#ff3b30"; ctx.beginPath(); ctx.arc(x, y, r + 5, 0, Math.PI * 2); ctx.fill(); }
       ctx.globalAlpha = 1;
       if (active) { ctx.fillStyle = s.ec ? "#ffb03a" : "rgba(232,240,244,0.92)"; ctx.font = "700 " + Math.round(r * 0.5) + "px Inter, Arial, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillText("K" + KLADDER[s.kTier].toFixed(1) + (s.ec ? " EC" : ""), x, y + r + 3); }
     }
@@ -535,6 +608,8 @@
     function render(t) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
+      ctx.save();
+      if (viewScale !== 1) { ctx.translate(W / 2, H / 2); ctx.scale(viewScale, viewScale); ctx.translate(-W / 2, -H / 2); }
       // core target glow
       var cg = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, coreR);
       cg.addColorStop(0, "rgba(255,176,58,0.10)"); cg.addColorStop(1, "rgba(255,176,58,0)");
@@ -573,6 +648,22 @@
         ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r * 0.7, 0, Math.PI * 2); ctx.fill();
       }
       ctx.globalAlpha = 1;
+      // floating combat text (red = damage taken, blue = damage done)
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      for (var fi = 0; fi < floats.length; fi++) {
+        var f = floats[fi], fa = Math.min(1, f.life / f.max * 1.6);
+        ctx.globalAlpha = fa; ctx.fillStyle = f.color;
+        ctx.font = "800 " + Math.round(13 * f.sc) + "px 'Space Grotesk', Arial, sans-serif";
+        ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.strokeText(f.text, f.x, f.y); ctx.fillText(f.text, f.x, f.y);
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();                                  // end world (zoom) transform
+      // red hurt vignette when integrity is hit (full-canvas, unscaled)
+      if (hurtT > 0) {
+        var ha = (hurtT / 0.45) * 0.4, vg = ctx.createRadialGradient(W / 2, H / 2, S * 0.25, W / 2, H / 2, S * 0.62);
+        vg.addColorStop(0, "rgba(255,40,30,0)"); vg.addColorStop(1, "rgba(255,40,30," + ha.toFixed(3) + ")");
+        ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+      }
     }
 
     var last = 0;
@@ -587,9 +678,11 @@
     canvas.addEventListener("pointercancel", function () { holding = false; });
 
     function reset() {
-      for (var i = 0; i < slots.length; i++) { slots[i].state = (slots[i].c === 1 && slots[i].r === 1) ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].ec = false; }
-      enemies = []; particles = []; score = 0; integrity = 100; maxWater = 330; water = 330; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
-      tankFillMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0; selectKind = null;
+      for (var i = 0; i < slots.length; i++) { slots[i].state = (slots[i].c === 1 && slots[i].r === 1) ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].hurt = 0; slots[i].ec = false; }
+      enemies = []; particles = []; floats = []; score = 0; integrity = 100; maxWater = 330; water = 330; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
+      tankFillMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0; selectKind = null; hurtT = 0; dpsNow = 0; dpsShown = 0;
+      viewScale = 1; zoomTarget = 1;
+      updatePumpIcons(); $("dpsMeter").hidden = true;
     }
     function newGame() { resize(); reset(); hud(); startWave(1); ["overOv","winOv","startOv","upgradeOv","pauseOv"].forEach(function (id) { $(id).classList.remove("show"); }); }
 
@@ -608,12 +701,17 @@
     var pendingScore = 0;
     function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" })[c]; }); }
     function lbName() { return (window.SFAuth && SFAuth.displayName()) || ""; }
-    function mountLb(overlayId, beforeBtnId) {
-      var lb = $("sgLb"); if (!lb) return;
-      $(overlayId).insertBefore(lb, $(beforeBtnId));
+    function mountLb(overlayId, againId) {
+      var lb = $("sgLb"); if (lb) $(overlayId).appendChild(lb);   // leaderboard at the bottom of the overlay
       $("sgRankMsg").textContent = "";
-      renderWho(); loadLeaderboard();
-      if (window.SFAuth && SFAuth.isSignedIn()) submitScore();
+      renderWho(); loadLeaderboard();                            // no auto-post — let the player decide
+      lockButtons(againId);                                      // brief lock so frantic taps don't restart/post
+    }
+    // disable the restart + post buttons for a moment after a round ends
+    function lockButtons(againId) {
+      var ids = [againId, "sgPostBtn"];
+      ids.forEach(function (id) { var b = $(id); if (b) b.classList.add("sg-locked"); });
+      setTimeout(function () { ids.forEach(function (id) { var b = $(id); if (b) b.classList.remove("sg-locked"); }); }, 1300);
     }
     function renderWho() {
       var who = $("sgWho"); if (!who) return;
