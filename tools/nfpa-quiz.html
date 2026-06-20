@@ -521,7 +521,7 @@
       els.nextWrap.classList.remove("hidden");
       if (autoAdvance) {
         if (autoTimer) clearTimeout(autoTimer);
-        autoTimer = setTimeout(goNext, (isLight && lightDead) ? 2400 : 1700);
+        autoTimer = setTimeout(goNext, (isLight && lightDead) ? 1400 : 500);
       }
     }
 
