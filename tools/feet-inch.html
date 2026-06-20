@@ -14,7 +14,7 @@
 <body>
   <header class="app-bar">
     <a class="back" href="../index.html" aria-label="Back">‹</a>
-    <div><div class="title">Feet / Inch</div><div class="sub">Add, subtract &amp; convert</div></div>
+    <div><div class="title">Feet / Inch</div><div class="sub">Add, subtract, multiply &amp; divide</div></div>
   </header>
 
   <main class="tool-page">
@@ -27,15 +27,24 @@
     </div>
 
     <div class="field"><label>Operation</label>
-      <select id="op"><option value="add">A + B</option><option value="sub">A − B</option></select>
+      <select id="op">
+        <option value="add">A + B</option>
+        <option value="sub">A − B</option>
+        <option value="mul">A × number</option>
+        <option value="div">A ÷ number</option>
+      </select>
     </div>
 
-    <div class="field"><label>Measurement B</label>
+    <div class="field" id="measB"><label>Measurement B</label>
       <div class="row3">
         <input id="bFt" type="number" inputmode="numeric" placeholder="ft" />
         <input id="bIn" type="number" inputmode="numeric" placeholder="in" />
         <select id="bFr"></select>
       </div>
+    </div>
+
+    <div class="field" id="scalarField" hidden><label id="scalarLabel">Multiply by</label>
+      <input id="scalar" type="number" inputmode="decimal" step="any" placeholder="e.g. 3" />
     </div>
 
     <div class="result-card">
@@ -71,13 +80,27 @@
       let fracStr = frac ? " "+fracLabel(frac) : "";
       return `${sign}${feet}'-${inch}${fracStr}"`;
     }
+    function applyOpUI(op){
+      const isScalar = (op==="mul" || op==="div");
+      document.getElementById("measB").hidden = isScalar;
+      document.getElementById("scalarField").hidden = !isScalar;
+      document.getElementById("scalarLabel").textContent = op==="div" ? "Divide by" : "Multiply by";
+    }
     function update(){
-      const a=inchesOf("a"), b=inchesOf("b");
       const op=document.getElementById("op").value;
-      const total = op==="sub" ? a-b : a+b;
-      document.getElementById("rFI").textContent = fmtFeetInches16(total);
-      document.getElementById("rDec").textContent = (total/12).toFixed(3)+" ft";
-      document.getElementById("rIn").textContent = total.toFixed(3)+" in";
+      applyOpUI(op);
+      const a=inchesOf("a");
+      let total = null;
+      if (op==="add") total = a + inchesOf("b");
+      else if (op==="sub") total = a - inchesOf("b");
+      else {
+        const s = parseFloat(document.getElementById("scalar").value);
+        if (Number.isFinite(s) && !(op==="div" && s===0)) total = (op==="div") ? a/s : a*s;
+      }
+      const dash = total===null || !Number.isFinite(total);
+      document.getElementById("rFI").textContent = dash ? "—" : fmtFeetInches16(total);
+      document.getElementById("rDec").textContent = dash ? "—" : (total/12).toFixed(3)+" ft";
+      document.getElementById("rIn").textContent = dash ? "—" : total.toFixed(3)+" in";
     }
     document.querySelectorAll("input,select").forEach(el=>el.addEventListener("input",update));
     update();

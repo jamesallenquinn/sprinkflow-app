@@ -10,14 +10,26 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../styles.css" />
+  <style>
+    .ws-status { display:flex; align-items:center; gap:8px; font:700 .95rem Inter; margin-top:6px; }
+    .ws-status.ok { color:var(--ok); } .ws-status.bad { color:#ff5a4f; } .ws-status.idle { color:var(--muted); font-weight:500; }
+    .ws-actions { display:flex; gap:10px; margin-top:14px; }
+    .ws-btn { flex:1; border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:12px; padding:13px; font:600 .95rem Inter; cursor:pointer; }
+    .ws-btn.primary { background:var(--grad-fire); color:#1a0d06; border:0; }
+    .ws-legend { display:flex; flex-wrap:wrap; gap:10px 16px; margin-top:10px; font:500 .76rem Inter; color:var(--muted); }
+    .ws-legend span { display:inline-flex; align-items:center; gap:6px; }
+    .ws-legend i { width:11px; height:11px; border-radius:50%; display:inline-block; }
+    .sub-h { font:600 .72rem Inter; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:18px 0 8px; }
+  </style>
 </head>
 <body>
   <header class="app-bar">
     <a class="back" href="../index.html" aria-label="Back">‹</a>
-    <div><div class="title">Water Supply</div><div class="sub">Flow test curve &amp; available flow</div></div>
+    <div><div class="title">Water Supply</div><div class="sub">Flow test curve, demand &amp; available flow</div></div>
   </header>
 
   <main class="tool-page">
+    <div class="sub-h">Flow test</div>
     <div class="row2">
       <div class="field"><label>Static pressure (psi)</label><input id="ps" type="number" inputmode="decimal" placeholder="psi" /></div>
       <div class="field"><label>Residual pressure (psi)</label><input id="pr" type="number" inputmode="decimal" placeholder="psi" /></div>
@@ -27,56 +39,186 @@
       <div class="field"><label>Read flow at (psi)</label><input id="p2" type="number" inputmode="decimal" placeholder="20" value="20" /></div>
     </div>
 
+    <div class="sub-h">System demand (optional)</div>
+    <div class="row2">
+      <div class="field"><label>Demand flow (gpm)</label><input id="dq" type="number" inputmode="decimal" placeholder="gpm" /></div>
+      <div class="field"><label>Demand pressure (psi)</label><input id="dp" type="number" inputmode="decimal" placeholder="psi" /></div>
+    </div>
+    <div class="field"><label>Outside hose flow (gpm)</label><input id="hose" type="number" inputmode="decimal" placeholder="e.g. 250 (optional)" /></div>
+
     <div class="result-card">
       <div class="lbl">Available flow at <span id="p2lbl">20</span> psi</div>
       <div class="big" id="qAt">— gpm</div>
+      <div class="ws-status idle" id="demandStatus">Enter a system demand to check it against the supply.</div>
       <svg id="chart" viewBox="0 0 340 230" style="width:100%;height:auto;margin-top:6px"></svg>
+      <div class="ws-legend" id="legend"></div>
       <div class="result-row"><span>Static (Q=0)</span><span class="v" id="rPs">—</span></div>
       <div class="result-row"><span>Residual @ test flow</span><span class="v" id="rPr">—</span></div>
       <div class="result-row"><span>Max flow (curve to 0 psi)</span><span class="v" id="rMax">—</span></div>
+      <div class="result-row" id="rowDemand" hidden><span>Available @ total demand</span><span class="v" id="rDemand">—</span></div>
       <p class="hint" id="err" data-tone="error"></p>
+      <div class="ws-actions">
+        <button class="ws-btn primary" id="exportBtn">⬇ Export PNG (white background)</button>
+      </div>
     </div>
-    <p class="hint">Hazen-Williams curve: Q₂ = Q₁ × ((Ps − P₂)/(Ps − Pr))^0.54. Requires Static &gt; Residual and a test flow.</p>
+    <p class="hint">Hazen-Williams curve: Q₂ = Q₁ × ((Ps − P₂)/(Ps − Pr))^0.54. Enter a system demand (flow + pressure) to plot it; the outside hose flow is added horizontally from the demand point as a dashed line. The point must fall under the supply curve.</p>
   </main>
 
   <script>
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("../sw.js").catch(()=>{});
-    const num = id => { const v = parseFloat(document.getElementById(id).value); return Number.isFinite(v) ? v : null; };
-    const flowAtPressure = (p2, ps, pr, q1) => q1 * Math.pow((ps - p2) / (ps - pr), 0.54);
-    const pressureAtFlow = (q, ps, pr, q1) => ps - (ps - pr) * Math.pow(q / q1, 1.85);
-    function update(){
-      const ps=num("ps"), pr=num("pr"), q1=num("q1"), p2=(num("p2") ?? 20);
-      document.getElementById("p2lbl").textContent = p2;
-      const err=document.getElementById("err");
-      const blank=()=>{["qAt","rPs","rPr","rMax"].forEach(id=>document.getElementById(id).textContent="—");document.getElementById("chart").innerHTML="";};
-      if (ps==null||pr==null||q1==null){ err.textContent="Enter static, residual, and test flow."; blank(); return; }
-      if (!(ps>pr)){ err.textContent="Static pressure must be greater than residual."; blank(); return; }
-      if (!(q1>0)){ err.textContent="Test flow must be greater than zero."; blank(); return; }
-      err.textContent="";
-      const qMax = flowAtPressure(0, ps, pr, q1);           // flow when pressure drops to 0
-      const qAtP2 = p2<ps ? flowAtPressure(p2, ps, pr, q1) : 0;
-      document.getElementById("qAt").textContent = Math.round(qAtP2).toLocaleString()+" gpm";
-      document.getElementById("rPs").textContent = ps+" psi @ 0 gpm";
-      document.getElementById("rPr").textContent = pr+" psi @ "+Math.round(q1).toLocaleString()+" gpm";
-      document.getElementById("rMax").textContent = Math.round(qMax).toLocaleString()+" gpm";
-      drawChart(ps, pr, q1, p2, qAtP2, qMax);
+    var num = function (id) { var v = parseFloat(document.getElementById(id).value); return Number.isFinite(v) ? v : null; };
+    var flowAtPressure = function (p2, ps, pr, q1) { return q1 * Math.pow((ps - p2) / (ps - pr), 0.54); };
+    var pressureAtFlow = function (q, ps, pr, q1) { return ps - (ps - pr) * Math.pow(q / q1, 1.85); };
+
+    function getData() {
+      var ps = num("ps"), pr = num("pr"), q1 = num("q1"), p2 = (num("p2") == null ? 20 : num("p2"));
+      var dq = num("dq"), dp = num("dp"), hose = num("hose") || 0;
+      if (ps == null || pr == null || q1 == null) return { error: "Enter static, residual, and test flow." };
+      if (!(ps > pr)) return { error: "Static pressure must be greater than residual." };
+      if (!(q1 > 0)) return { error: "Test flow must be greater than zero." };
+      var qMax = flowAtPressure(0, ps, pr, q1);
+      var qAtP2 = p2 < ps ? flowAtPressure(p2, ps, pr, q1) : 0;
+      var d = { ps: ps, pr: pr, q1: q1, p2: p2, qMax: qMax, qAtP2: qAtP2, dq: dq, dp: dp, hose: hose, error: "" };
+      // demand adequacy (system + outside hose)
+      d.hasDemand = (dq != null && dp != null && dq >= 0 && dp >= 0);
+      if (d.hasDemand) {
+        d.totalQ = dq + hose;
+        d.availP = d.totalQ <= qMax ? pressureAtFlow(d.totalQ, ps, pr, q1) : 0;
+        d.adequate = d.totalQ <= qMax && d.availP >= dp;
+        d.margin = d.availP - dp;
+      }
+      d.maxX = Math.max(qMax, (d.hasDemand ? d.totalQ : 0), q1) * 1.08;
+      d.maxY = Math.max(ps, (d.hasDemand ? dp : 0)) * 1.08;
+      return d;
     }
-    function drawChart(ps, pr, q1, p2, qAtP2, qMax){
-      const W=340,H=230,padL=38,padR=12,padT=12,padB=28;
-      const maxX = qMax*1.08, maxY = ps*1.08;
-      const X = q => padL + (q/maxX)*(W-padL-padR);
-      const Y = p => H-padB - (p/maxY)*(H-padT-padB);
-      let pts=[];
-      for (let i=0;i<=40;i++){ const q=(maxX*i/40); const p=Math.max(0, pressureAtFlow(q, ps, pr, q1)); pts.push(`${X(q).toFixed(1)},${Y(p).toFixed(1)}`); }
-      const grid = `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${H-padB}" stroke="#2d3742"/><line x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}" stroke="#2d3742"/>`;
-      const curve = `<polyline points="${pts.join(' ')}" fill="none" stroke="url(#g)" stroke-width="2.5"/>`;
-      const pt = (q,p,cls)=>`<circle cx="${X(q).toFixed(1)}" cy="${Y(p).toFixed(1)}" r="4.5" fill="${cls}"/>`;
-      const target = (p2<ps && qAtP2>0) ? pt(qAtP2,p2,"#37b7e4")+`<line x1="${X(qAtP2)}" y1="${Y(p2)}" x2="${X(qAtP2)}" y2="${H-padB}" stroke="#37b7e4" stroke-dasharray="3 3" opacity="0.6"/>` : "";
-      const labels = `<text x="${padL}" y="${padT+8}" fill="#aab4bd" font-size="9">${Math.round(maxY)} psi</text><text x="${W-padR}" y="${H-padB+18}" fill="#aab4bd" font-size="9" text-anchor="end">${Math.round(maxX)} gpm</text>`;
-      document.getElementById("chart").innerHTML =
-        `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5a2f"/><stop offset="1" stop-color="#37b7e4"/></linearGradient></defs>${grid}${curve}${pt(0,ps,"#ffb03a")}${pt(q1,pr,"#ff5a2f")}${target}${labels}`;
+
+    // theme palettes
+    var DARK = { bg: null, axis: "#2d3742", grid: "#222a33", text: "#aab4bd", curveA: "#ff5a2f", curveB: "#37b7e4",
+      stat: "#ffb03a", test: "#ff5a2f", p2: "#37b7e4", demand: "#3ddc97", hose: "#aab4bd", okc: "#3ddc97", badc: "#ff5a4f" };
+    var LIGHT = { bg: "#ffffff", axis: "#444b52", grid: "#e3e8ee", text: "#333a40", curveA: "#e0461f", curveB: "#1f88c0",
+      stat: "#d98a10", test: "#d0431d", p2: "#1f88c0", demand: "#1aa06a", hose: "#7a838c", okc: "#1aa06a", badc: "#cf2f2f" };
+
+    function chartMarkup(W, H, pad, d, t, detail, gid) {
+      var padL = pad[0], padR = pad[1], padT = pad[2], padB = pad[3];
+      var X = function (q) { return padL + (q / d.maxX) * (W - padL - padR); };
+      var Y = function (p) { return H - padB - (p / d.maxY) * (H - padT - padB); };
+      var s = "";
+      if (t.bg) s += '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="' + t.bg + '"/>';
+      // gridlines + ticks (export detail)
+      if (detail) {
+        var ny = 4, nx = 4, i;
+        for (i = 1; i <= ny; i++) { var pv = d.maxY * i / ny, yy = Y(pv);
+          s += '<line x1="' + padL + '" y1="' + yy.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + yy.toFixed(1) + '" stroke="' + t.grid + '"/>';
+          s += '<text x="' + (padL - 5) + '" y="' + (yy + 3).toFixed(1) + '" fill="' + t.text + '" font-size="11" text-anchor="end">' + Math.round(pv) + '</text>'; }
+        for (i = 1; i <= nx; i++) { var qv = d.maxX * i / nx, xx = X(qv);
+          s += '<line x1="' + xx.toFixed(1) + '" y1="' + padT + '" x2="' + xx.toFixed(1) + '" y2="' + (H - padB) + '" stroke="' + t.grid + '"/>';
+          s += '<text x="' + xx.toFixed(1) + '" y="' + (H - padB + 16) + '" fill="' + t.text + '" font-size="11" text-anchor="middle">' + Math.round(qv) + '</text>'; }
+      }
+      // axes
+      s += '<line x1="' + padL + '" y1="' + padT + '" x2="' + padL + '" y2="' + (H - padB) + '" stroke="' + t.axis + '" stroke-width="1.5"/>';
+      s += '<line x1="' + padL + '" y1="' + (H - padB) + '" x2="' + (W - padR) + '" y2="' + (H - padB) + '" stroke="' + t.axis + '" stroke-width="1.5"/>';
+      // supply curve
+      var pts = [], n = 60;
+      for (var k = 0; k <= n; k++) { var q = d.maxX * k / n; var p = Math.max(0, pressureAtFlow(q, d.ps, d.pr, d.q1)); pts.push(X(q).toFixed(1) + "," + Y(p).toFixed(1)); }
+      s += '<defs><linearGradient id="' + gid + '" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' + t.curveA + '"/><stop offset="1" stop-color="' + t.curveB + '"/></linearGradient></defs>';
+      s += '<polyline points="' + pts.join(" ") + '" fill="none" stroke="url(#' + gid + ')" stroke-width="' + (detail ? 3 : 2.5) + '"/>';
+      var dot = function (q, p, c, r) { return '<circle cx="' + X(q).toFixed(1) + '" cy="' + Y(p).toFixed(1) + '" r="' + (r || (detail ? 6 : 4.5)) + '" fill="' + c + '"/>'; };
+      var drop = function (q, p, c) { return '<line x1="' + X(q).toFixed(1) + '" y1="' + Y(p).toFixed(1) + '" x2="' + X(q).toFixed(1) + '" y2="' + (H - padB) + '" stroke="' + c + '" stroke-dasharray="3 3" opacity="0.55"/>'; };
+      // flow-test points
+      s += dot(0, d.ps, t.stat) + dot(d.q1, d.pr, t.test);
+      // read-at-p2 marker
+      if (d.p2 < d.ps && d.qAtP2 > 0) s += drop(d.qAtP2, d.p2, t.p2) + dot(d.qAtP2, d.p2, t.p2);
+      // system demand + outside hose
+      if (d.hasDemand) {
+        var totalC = d.adequate ? t.okc : t.badc;
+        s += drop(d.totalQ, d.dp, totalC);
+        if (d.hose > 0) {
+          // horizontal dashed line from demand point out to demand+hose, at the demand pressure
+          s += '<line x1="' + X(d.dq).toFixed(1) + '" y1="' + Y(d.dp).toFixed(1) + '" x2="' + X(d.totalQ).toFixed(1) + '" y2="' + Y(d.dp).toFixed(1) + '" stroke="' + t.hose + '" stroke-width="' + (detail ? 2.5 : 2) + '" stroke-dasharray="6 4"/>';
+          s += dot(d.dq, d.dp, t.demand, detail ? 5 : 3.8);
+        }
+        s += dot(d.totalQ, d.dp, totalC);
+      }
+      // corner labels (non-detail) or title handled by caller
+      if (!detail) {
+        s += '<text x="' + padL + '" y="' + (padT + 8) + '" fill="' + t.text + '" font-size="9">' + Math.round(d.maxY) + ' psi</text>';
+        s += '<text x="' + (W - padR) + '" y="' + (H - padB + 18) + '" fill="' + t.text + '" font-size="9" text-anchor="end">' + Math.round(d.maxX) + ' gpm</text>';
+      }
+      return s;
     }
-    document.querySelectorAll("input").forEach(el=>el.addEventListener("input",update));
+
+    function update() {
+      var d = getData();
+      var err = document.getElementById("err");
+      var blank = function () { ["qAt", "rPs", "rPr", "rMax"].forEach(function (id) { document.getElementById(id).textContent = "—"; }); document.getElementById("chart").innerHTML = ""; document.getElementById("legend").innerHTML = ""; document.getElementById("rowDemand").hidden = true; };
+      if (d.error) { err.textContent = d.error; blank(); document.getElementById("demandStatus").className = "ws-status idle"; document.getElementById("demandStatus").textContent = "Enter the flow test to plot the supply curve."; return; }
+      err.textContent = "";
+      document.getElementById("p2lbl").textContent = d.p2;
+      document.getElementById("qAt").textContent = Math.round(d.qAtP2).toLocaleString() + " gpm";
+      document.getElementById("rPs").textContent = d.ps + " psi @ 0 gpm";
+      document.getElementById("rPr").textContent = d.pr + " psi @ " + Math.round(d.q1).toLocaleString() + " gpm";
+      document.getElementById("rMax").textContent = Math.round(d.qMax).toLocaleString() + " gpm";
+
+      var st = document.getElementById("demandStatus"), row = document.getElementById("rowDemand");
+      if (d.hasDemand) {
+        row.hidden = false;
+        document.getElementById("rDemand").textContent = (d.totalQ <= d.qMax ? Math.round(d.availP) + " psi" : "below curve") + " @ " + Math.round(d.totalQ).toLocaleString() + " gpm";
+        if (d.adequate) { st.className = "ws-status ok"; st.textContent = "✓ Supply adequate — " + d.margin.toFixed(1) + " psi to spare at " + Math.round(d.totalQ).toLocaleString() + " gpm" + (d.hose > 0 ? " (incl. hose)" : ""); }
+        else { st.className = "ws-status bad"; st.textContent = "✗ Supply insufficient — demand falls above the curve at " + Math.round(d.totalQ).toLocaleString() + " gpm"; }
+      } else { row.hidden = true; st.className = "ws-status idle"; st.textContent = "Enter a system demand to check it against the supply."; }
+
+      document.getElementById("chart").innerHTML = chartMarkup(340, 230, [38, 12, 12, 28], d, DARK, false, "g");
+      document.getElementById("legend").innerHTML = legendHTML(d);
+    }
+
+    function legendHTML(d) {
+      var L = [
+        ['#ffb03a', 'Static'], ['#ff5a2f', 'Residual @ test'], ['#37b7e4', 'Available @ ' + d.p2 + ' psi']
+      ];
+      if (d.hasDemand) { L.push([d.hose > 0 ? '#3ddc97' : (d.adequate ? '#3ddc97' : '#ff5a4f'), 'Demand']); if (d.hose > 0) L.push([(d.adequate ? '#3ddc97' : '#ff5a4f'), 'Demand + hose']); }
+      return L.map(function (x) { return '<span><i style="background:' + x[0] + '"></i>' + x[1] + '</span>'; }).join("");
+    }
+
+    // ---- PNG export (white background) ----
+    function exportPNG() {
+      var d = getData();
+      if (d.error) { document.getElementById("err").textContent = d.error; return; }
+      var W = 760, H = 470, pad = [54, 24, 58, 46];
+      var t = LIGHT;
+      var title = '<text x="' + (W / 2) + '" y="26" fill="#111" font-size="19" font-weight="700" text-anchor="middle" font-family="Arial,sans-serif">Water Supply Analysis</text>';
+      var sub = '<text x="' + (W / 2) + '" y="44" fill="#555" font-size="12" text-anchor="middle" font-family="Arial,sans-serif">Static ' + d.ps + ' psi · Residual ' + d.pr + ' psi @ ' + Math.round(d.q1).toLocaleString() + ' gpm · Available ' + Math.round(d.qAtP2).toLocaleString() + ' gpm @ ' + d.p2 + ' psi</text>';
+      var axTitleX = '<text x="' + ((W + pad[0] - pad[1]) / 2) + '" y="' + (H - 8) + '" fill="#333" font-size="12.5" font-weight="600" text-anchor="middle" font-family="Arial,sans-serif">Flow (gpm)</text>';
+      var axTitleY = '<text transform="translate(15 ' + (H / 2 + 8) + ') rotate(-90)" fill="#333" font-size="12.5" font-weight="600" text-anchor="middle" font-family="Arial,sans-serif">Pressure (psi)</text>';
+      // demand annotation
+      var ann = "";
+      if (d.hasDemand) {
+        var msg = d.adequate ? ("Demand OK — " + d.margin.toFixed(1) + " psi margin") : "Demand exceeds supply";
+        ann = '<text x="' + (W - pad[1]) + '" y="' + (pad[2] + 4) + '" fill="' + (d.adequate ? t.okc : t.badc) + '" font-size="12.5" font-weight="700" text-anchor="end" font-family="Arial,sans-serif">' + msg + '</text>';
+      }
+      var inner = chartMarkup(W, H - 12, [pad[0], pad[1], pad[2], pad[3]], d, t, true, "gx");
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" font-family="Arial,sans-serif">' +
+        '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#ffffff"/>' + title + sub + inner + axTitleX + axTitleY + ann + '</svg>';
+
+      var blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var img = new Image();
+      img.onload = function () {
+        var scale = 2, canvas = document.createElement("canvas");
+        canvas.width = W * scale; canvas.height = H * scale;
+        var ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        var done = function (href) { var a = document.createElement("a"); a.href = href; a.download = "water-supply-curve.png"; document.body.appendChild(a); a.click(); a.remove(); };
+        if (canvas.toBlob) { canvas.toBlob(function (b) { var h = URL.createObjectURL(b); done(h); setTimeout(function () { URL.revokeObjectURL(h); }, 2000); }, "image/png"); }
+        else { done(canvas.toDataURL("image/png")); }
+      };
+      img.onerror = function () { document.getElementById("err").textContent = "Could not export the image on this browser."; URL.revokeObjectURL(url); };
+      img.src = url;
+    }
+
+    document.querySelectorAll("input").forEach(function (el) { el.addEventListener("input", update); });
+    document.getElementById("exportBtn").addEventListener("click", exportPNG);
     update();
   </script>
 </body>
