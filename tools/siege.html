@@ -315,6 +315,7 @@
     // class-typed resistance: Class B (grease) fires only take real damage from Foam
     function resist(ty, e) { if (e && e.cls === "B") return ty === "foam" ? 1 : (e.boss ? 0.3 : 0.1); return 1; }   // boss less punishing (no hard wall without foam)
     var LASER_INTERVAL = 0.42, LASER_SPEED = 2.4;   // laser fires a projectile every LASER_INTERVAL s at LASER_SPEED·S/s; Fast Response shortens interval + speeds the bolt
+    var WATER_BUFF = 1.15;          // +15% water supply throughout (start, upgrades, refill)
     var SPECIAL_WATER_BONUS = 120;  // tank bump when a special head is installed — ~most of its auto-spray draw, intentionally a touch short
     // supply = static + pump churn, drooping with flow; ~3 psi @ 50 gpm with no pump,
     // ~175 psi @ 1000 gpm at full pump (the operating point for three K25.2 heads).
@@ -411,7 +412,7 @@
     }
     function applyUpgrade() {
       var s = nearestToCenter(function (sl) { return sl.state === "active" && sl.kTier < KLADDER.length - 1; });
-      if (s) { s.kTier++; s.flash = 0.6; maxWater += 60 * (easyMode ? 1.5 : 1); }
+      if (s) { s.kTier++; s.flash = 0.6; maxWater += 60 * (easyMode ? 1.5 : 1) * WATER_BUFF; }
     }
     function applyPump() { if (pumpLevel < PUMP_MAX) { pumpLevel++; for (var i = 0; i < slots.length; i++) if (slots[i].state === "active") slots[i].flash = 0.6; } updatePumpIcons(); }
     // fire-pump level: one red pump icon per tier (lit = installed), star once maxed
@@ -523,7 +524,7 @@
       for (i2 = 0; i2 < act.length; i2++) { var s2 = act[i2]; s2.q = s2.firing ? headFlow(s2, Pop) * eff : 0; totalQ += s2.q; drainQ += s2.q * (typeOf(s2) === "standard" ? 1 : 0.5); }  // auto heads use 50% less water
       var anyFire = totalQ > 0;
       if (anyFire && !hw) { water -= drainQ * TANK_DRAIN * dt * (easyMode ? 0.5 : 1); if (water < 0) water = 0; }   // Easy Mode: heads use 50% less water
-      else if (!anyFire) { water += TANK_REGEN * tankFillMult * dt * (easyMode ? 1.5 : 1); if (water > capW()) water = capW(); }
+      else if (!anyFire) { water += TANK_REGEN * tankFillMult * dt * (easyMode ? 1.5 : 1) * WATER_BUFF; if (water > capW()) water = capW(); }
       if (hollywoodT > 0) { hollywoodT -= dt; if (hollywoodT <= 0) updateHollywoodBtn(); }
       if (overloadT > 0) overloadT = Math.max(0, overloadT - dt);
       if (overloadCd > 0) overloadCd = Math.max(0, overloadCd - dt);
@@ -753,7 +754,7 @@
       if (kind === "ec") s.ec = true;
       else if (kind === "hp") s.hp = true;
       else if (kind === "fr") s.fr = true;
-      else if (kind === "kf") { s.kTier++; maxWater += 60 * (easyMode ? 1.5 : 1); }
+      else if (kind === "kf") { s.kTier++; maxWater += 60 * (easyMode ? 1.5 : 1) * WATER_BUFF; }
       s.flash = 0.6;
     }
     // perform an offer; auto=true also auto-places/auto-picks (no tap needed)
@@ -771,7 +772,7 @@
       best.state = "active"; best.kTier = 0; best.q = 0; best.ec = false; best.hp = false; best.fr = false; best.type = pendingType; best.aim = 0; best.foamOpen = 0; best.moonOpen = 0;
       if (pendingType === "corridor") best.axis = Math.random() < 0.5 ? "x" : "y";
       if (pendingType === "lawn") { best.aim0 = Math.atan2(H / 2 - best.y, W / 2 - best.x); best.sweep = 0; best.swPhase = "fwd"; best.rotLocked = false; }   // default aim toward core; rotate at placement
-      if (pendingType !== "standard") { var wb = SPECIAL_WATER_BONUS * (easyMode ? 1.5 : 1); maxWater += wb; water = Math.min(maxWater, water + wb); }
+      if (pendingType !== "standard") { var wb = SPECIAL_WATER_BONUS * (easyMode ? 1.5 : 1) * WATER_BUFF; maxWater += wb; water = Math.min(maxWater, water + wb); }
       best.flash = 0.6;
     }
     function autoPickKind(kind) {
@@ -1292,7 +1293,7 @@
 
     function reset() {
       for (var i = 0; i < slots.length; i++) { var ctr = slots[i].c === 1 && slots[i].r === 1; slots[i].state = ctr ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].hurt = 0; slots[i].ec = false; slots[i].hp = false; slots[i].fr = false; slots[i].type = ctr ? "standard" : null; slots[i].aim = 0; }
-      enemies = []; particles = []; floats = []; foamPiles = []; laserShots = []; currentAct = 1; score = 0; integrity = 100; maxWater = Math.round(330 * (easyMode ? 1.5 : 1)); water = maxWater; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
+      enemies = []; particles = []; floats = []; foamPiles = []; laserShots = []; currentAct = 1; score = 0; integrity = 100; maxWater = Math.round(330 * (easyMode ? 1.5 : 1) * WATER_BUFF); water = maxWater; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
       tankFillMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0; overloadT = 0; overloadCd = 0; selectKind = null; hurtT = 0; dpsNow = 0; dpsShown = 0;
       gameSpeed = 1; inspectSlot = null; pressSlot = null; lastTapSlot = null; rotSlot = null; rotDragging = false; $("ffBtn").textContent = "▶▶"; $("ffBtn").classList.remove("on"); $("rotOkBtn").hidden = true;
       hazard = null; hzPump = false; hzTankMult = 1; hzSpeed = 1; hzReach = 1; $("hazardInd").hidden = true;
