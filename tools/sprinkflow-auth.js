@@ -39,27 +39,55 @@
       ".sf-err{color:#ff5a4f;font:500 .85rem Inter;min-height:20px;margin:2px 0 10px}" +
       ".sf-btn{display:block;width:100%;border:0;border-radius:14px;padding:15px;font:700 1.05rem 'Space Grotesk';cursor:pointer;background:linear-gradient(120deg,#ff5a2f,#ffb03a);color:#1a0d06}" +
       ".sf-later{text-align:center;margin-top:14px}.sf-later button{background:none;border:0;color:var(--muted,#aab4bd);font:500 .85rem Inter;cursor:pointer}" +
+      ".sf-switch{text-align:center;margin-top:14px;font:500 .86rem Inter;color:var(--muted,#aab4bd)}.sf-switch a{color:var(--accent,#ffb03a);cursor:pointer;font-weight:600;text-decoration:underline}" +
+      ".sf-err.ok{color:var(--ok,#3ddc97)}.sf-err.ok b{color:var(--ok,#3ddc97)}" +
       ".sf-spin{display:inline-block;width:15px;height:15px;border:2px solid rgba(0,0,0,.25);border-top-color:#1a0d06;border-radius:50%;animation:sfspin .7s linear infinite;vertical-align:-2px}" +
       "@keyframes sfspin{to{transform:rotate(360deg)}}";
     var style = document.createElement("style"); style.textContent = css; document.head.appendChild(style);
     var div = document.createElement("div"); div.id = "sfAuthModal"; div.className = "sf-modal-bk";
     div.innerHTML =
       '<div class="sf-modal" role="dialog" aria-modal="true">' +
-      '<h3>Sign in to compete</h3>' +
-      '<p>One SprinkFlow account works across all the games and the study tool. Your leaderboard name is shown publicly; your email is never shown.</p>' +
+      '<h3 id="sfTitle">Sign in to compete</h3>' +
+      '<p id="sfBlurb">One free SprinkFlow account works across all the games and the study tool. Your leaderboard name is shown publicly; your email is never shown.</p>' +
       '<form id="sfAuthForm">' +
       '<div class="sf-field"><label>SprinkFlow email</label><input id="sfEmail" type="email" autocomplete="username" inputmode="email" placeholder="you@company.com" required></div>' +
-      '<div class="sf-field"><label>Password</label><input id="sfPass" type="password" autocomplete="current-password" placeholder="••••••••" required></div>' +
+      '<div class="sf-field"><label>Password</label><input id="sfPass" type="password" autocomplete="current-password" placeholder="At least 6 characters" required></div>' +
       '<div class="sf-field"><label>Leaderboard name (shown publicly)</label><input id="sfHandle" type="text" maxlength="24" placeholder="e.g. SprinkNerd"></div>' +
       '<div class="sf-err" id="sfErr"></div>' +
       '<button class="sf-btn" type="submit" id="sfSubmit">Sign in</button>' +
       '</form>' +
+      '<div class="sf-switch" id="sfSwitch"></div>' +
       '<div class="sf-later"><button id="sfLater" type="button">Maybe later</button></div>' +
       '</div>';
     document.body.appendChild(div);
     div.addEventListener("click", function (e) { if (e.target === div) close(); });
     document.getElementById("sfLater").onclick = close;
     document.getElementById("sfAuthForm").addEventListener("submit", submit);
+    document.getElementById("sfSwitch").addEventListener("click", function (e) {
+      if (e.target && e.target.dataset && e.target.dataset.mode) { e.preventDefault(); setMode(e.target.dataset.mode); }
+    });
+  }
+  var mode = "signin";
+  function setMode(m) {
+    mode = (m === "signup") ? "signup" : "signin";
+    var t = document.getElementById("sfTitle"), b = document.getElementById("sfBlurb"),
+        sub = document.getElementById("sfSubmit"), sw = document.getElementById("sfSwitch"),
+        pass = document.getElementById("sfPass"), err = document.getElementById("sfErr");
+    if (!t) return;
+    err.textContent = ""; err.className = "sf-err";
+    if (mode === "signup") {
+      t.textContent = "Create your free account";
+      b.textContent = "One free SprinkFlow account unlocks all the games, the study tool, and the global leaderboards. Your leaderboard name is public; your email never is.";
+      sub.textContent = "Create account";
+      pass.setAttribute("autocomplete", "new-password");
+      sw.innerHTML = 'Already have an account? <a data-mode="signin">Sign in</a>';
+    } else {
+      t.textContent = "Sign in to compete";
+      b.textContent = "One free SprinkFlow account works across all the games and the study tool. Your leaderboard name is shown publicly; your email is never shown.";
+      sub.textContent = "Sign in";
+      pass.setAttribute("autocomplete", "current-password");
+      sw.innerHTML = 'New here? <a data-mode="signup">Create a free account</a>';
+    }
   }
   function close() { var m = document.getElementById("sfAuthModal"); if (m) m.classList.remove("show"); }
   function openSignIn(opts) {
@@ -67,15 +95,22 @@
     var s = getSession();
     document.getElementById("sfEmail").value = (s && s.email) || "";
     document.getElementById("sfHandle").value = getHandle() || (opts.prefillHandle || "");
-    document.getElementById("sfErr").textContent = "";
+    setMode(opts.mode === "signup" ? "signup" : "signin");
     document.getElementById("sfAuthModal").classList.add("show");
   }
+  function escErr(s) { return String(s).replace(/[<>&]/g, function (c) { return ({ "<":"&lt;",">":"&gt;","&":"&amp;" })[c]; }); }
   function submit(e) {
     e.preventDefault();
     var email = document.getElementById("sfEmail").value.trim(), pass = document.getElementById("sfPass").value;
+    var handle = document.getElementById("sfHandle").value.trim();
+    var btn = document.getElementById("sfSubmit"), err = document.getElementById("sfErr");
     if (!email || !pass) return;
-    var btn = document.getElementById("sfSubmit"); btn.disabled = true; btn.innerHTML = '<span class="sf-spin"></span> Signing in…';
-    document.getElementById("sfErr").textContent = "";
+    err.textContent = ""; err.className = "sf-err";
+    if (mode === "signup") doSignup(email, pass, handle, btn, err);
+    else doSignin(email, pass, handle, btn, err);
+  }
+  function doSignin(email, pass, handle, btn, err) {
+    btn.disabled = true; btn.innerHTML = '<span class="sf-spin"></span> Signing in…';
     fetch(SB_URL + "/auth/v1/token?grant_type=password", { method: "POST", headers: { apikey: SB_ANON, "Content-Type": "application/json" }, body: JSON.stringify({ email: email, password: pass }) })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
@@ -84,13 +119,40 @@
           if (/confirm/i.test(msg)) msg = "Please confirm your email first (check your inbox), then sign in.";
           throw new Error(msg);
         }
-        setHandle(document.getElementById("sfHandle").value.trim() || email.split("@")[0]);
+        setHandle(handle || email.split("@")[0]);
         setSession({ token: res.d.access_token, userId: res.d.user && res.d.user.id, email: (res.d.user && res.d.user.email) || email });
         close();
         if (onSuccessCb) { var cb = onSuccessCb; onSuccessCb = null; cb(); }
       })
-      .catch(function (err) { document.getElementById("sfErr").textContent = err.message || "Sign-in failed."; })
-      .then(function () { btn.disabled = false; btn.textContent = "Sign in"; });
+      .catch(function (e) { err.className = "sf-err"; err.textContent = e.message || "Sign-in failed."; })
+      .then(function () { btn.disabled = false; btn.textContent = (mode === "signup") ? "Create account" : "Sign in"; });
+  }
+  function doSignup(email, pass, handle, btn, err) {
+    if (pass.length < 6) { err.className = "sf-err"; err.textContent = "Password must be at least 6 characters."; return; }
+    btn.disabled = true; btn.innerHTML = '<span class="sf-spin"></span> Creating account…';
+    fetch(SB_URL + "/auth/v1/signup", { method: "POST", headers: { apikey: SB_ANON, "Content-Type": "application/json" }, body: JSON.stringify({ email: email, password: pass }) })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          var msg = (res.d && (res.d.msg || res.d.error_description || res.d.error)) || "Could not create the account.";
+          if (/already|registered|exists/i.test(msg)) msg = "That email already has an account — try signing in instead.";
+          throw new Error(msg);
+        }
+        if (handle) setHandle(handle);
+        var d = res.d;
+        if (d.access_token) {                                  // email confirmation disabled -> signed in now
+          setSession({ token: d.access_token, userId: (d.user && d.user.id), email: (d.user && d.user.email) || email });
+          close();
+          if (onSuccessCb) { var cb = onSuccessCb; onSuccessCb = null; cb(); }
+          return;
+        }
+        setMode("signin");                                     // confirmation required -> prompt to confirm then sign in
+        document.getElementById("sfEmail").value = email;
+        err.className = "sf-err ok";
+        err.innerHTML = "✓ Account created! Check <b>" + escErr(email) + "</b> for a confirmation link (peek in spam too), then sign in.";
+      })
+      .catch(function (e) { err.className = "sf-err"; err.textContent = e.message || "Could not create the account."; })
+      .then(function () { btn.disabled = false; btn.textContent = (mode === "signup") ? "Create account" : "Sign in"; });
   }
 
   // ---- Supabase REST helpers ----
