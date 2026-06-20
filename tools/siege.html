@@ -97,6 +97,8 @@
     .sg-hollybtn.armed { animation:hbpulse .9s ease-in-out infinite; }
     @keyframes hbpulse { 50% { box-shadow:0 0 0 4px rgba(255,176,58,.18); } }
     .sg-hollybtn[hidden] { display:none; }
+    .sg-ffbtn { right:60px; width:auto; min-width:42px; padding:0 10px; font:800 .82rem 'Space Grotesk',sans-serif; gap:0; }
+    .sg-ffbtn.on { border-color:var(--accent); color:var(--accent); }
     /* WoW-style action bar (usable abilities) at bottom center */
     .sg-abar { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); z-index:6; display:flex; gap:10px; }
     .sg-abar[hidden] { display:none; }
@@ -153,6 +155,7 @@
     <div class="sg-stage">
       <canvas id="game" width="360" height="430"></canvas>
       <button id="pauseBtn" class="sg-pausebtn" aria-label="Pause" hidden>❚❚</button>
+      <button id="ffBtn" class="sg-pausebtn sg-ffbtn" aria-label="Fast forward" hidden>▶▶</button>
       <div class="sg-abar" id="abar" hidden>
         <button class="sg-ability" id="overloadBtn" aria-label="Overload Fire Pump">⚡<div class="cd" id="overloadCdEl" hidden></div></button>
         <button class="sg-ability" id="hollywoodBtn" aria-label="Hollywood Scene" hidden>🎬<div class="badge" id="hollyBadge"></div></button>
@@ -166,6 +169,7 @@
         <div class="ic">❚❚</div>
         <h1>Paused</h1>
         <button class="sg-btn" id="resumeBtn">▶ Resume</button>
+        <label class="sg-toggle" id="pauseAutoWrap" hidden style="margin-top:12px"><input type="checkbox" id="pauseAutoToggle"><span>👆 Auto‑pick upgrades</span></label>
         <button class="sg-btn ghost" id="pauseRestartBtn" style="margin-top:10px">↻ Restart</button>
       </div>
 
@@ -220,7 +224,7 @@
 
     // grid: 3x3 sprinkler slots. col/row 0..2. center (1,1) starts active.
     var slots = [];
-    for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) slots.push({ c: c, r: r, x: 0, y: 0, state: (c === 1 && r === 1) ? "active" : "locked", kTier: 0, q: 0, type: (c === 1 && r === 1) ? "standard" : null, ec: false, hp: false, aim: 0 });
+    for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) slots.push({ c: c, r: r, x: 0, y: 0, state: (c === 1 && r === 1) ? "active" : "locked", kTier: 0, q: 0, type: (c === 1 && r === 1) ? "standard" : null, ec: false, hp: false, fr: false, aim: 0 });
     var enemies = [], particles = [], foamPiles = [];
     var state = "start";  // start | playing | upgrade | over | win
     var wave = 1, score = 0, integrity = 100, water = 330, maxWater = 330, holding = false;
@@ -230,6 +234,8 @@
     // special upgrades: refill rate ×, spray reach ×, integrity shield pool, Hollywood charges/timer
     var tankFillMult = 1, shield = 0, hollywoodCharges = 0, hollywoodT = 0;
     var overloadT = 0, overloadCd = 0;   // Overload Fire Pump: 15s ×1.5 damage, 60s cooldown
+    var gameSpeed = 1;                    // fast-forward (1×/2×/3×)
+    var inspectSlot = null, pressSlot = null, pressT0 = 0, lastTapT = 0, lastTapSlot = null;   // hold-to-inspect label + double-tap corridor rotate
     // combat feedback: floating text, integrity hit-flash, live damage-per-second
     var floats = [], hurtT = 0, dpsNow = 0, dpsShown = 0;
     function spawnFloat(x, y, text, color, scale) { if (floats.length > 40) floats.shift(); floats.push({ x: x, y: y, vy: -34, life: 0.85, max: 0.85, text: text, color: color, sc: scale || 1 }); }
@@ -252,6 +258,7 @@
     function headReach(s) { return coverageRadius(s) * TYPE_INFO[typeOf(s)].rng; }
     function inRange(s, e) {
       var dx = e.x - s.x, dy = e.y - s.y, ty = typeOf(s);
+      if (ty === "laser") return true;          // lasers have infinite range — any flame on the field
       if (ty === "corridor") { var R = coverageRadius(s), ax = corridorAxis(s), along = ax === "x" ? Math.abs(dx) : Math.abs(dy), cross = ax === "x" ? Math.abs(dy) : Math.abs(dx); return along <= R * 3 && cross <= R * 0.35; }
       if (ty === "lawn") { if (Math.hypot(dx, dy) > headReach(s)) return false; var rel = Math.atan2(dy, dx) - (s.aim || 0); rel = Math.atan2(Math.sin(rel), Math.cos(rel)); return Math.abs(rel) <= 0.62; }
       return Math.hypot(dx, dy) <= headReach(s);
@@ -410,7 +417,7 @@
       $("upgradeOv").classList.remove("show"); $("startOv").classList.remove("show"); $("pauseOv").classList.remove("show");
       $("selectPrompt").hidden = true; $("lowWater").hidden = true;
       $("easyInd").hidden = !easyMode;
-      $("pauseBtn").hidden = false;
+      $("pauseBtn").hidden = false; $("ffBtn").hidden = false;
       updateHollywoodBtn();
     }
     function hud() {
@@ -464,11 +471,12 @@
       var totalQ = 0, drainQ = 0;
       for (i2 = 0; i2 < act.length; i2++) { var s2 = act[i2]; s2.q = s2.firing ? headFlow(s2, Pop) * eff : 0; totalQ += s2.q; drainQ += s2.q * (typeOf(s2) === "standard" ? 1 : 0.5); }  // auto heads use 50% less water
       var anyFire = totalQ > 0;
-      if (anyFire && !hw) { water -= drainQ * TANK_DRAIN * dt; if (water < 0) water = 0; }
+      if (anyFire && !hw) { water -= drainQ * TANK_DRAIN * dt * (easyMode ? 0.5 : 1); if (water < 0) water = 0; }   // Easy Mode: heads use 50% less water
       else if (!anyFire) { water += TANK_REGEN * tankFillMult * dt * (easyMode ? 1.5 : 1); if (water > maxWater) water = maxWater; }
       if (hollywoodT > 0) { hollywoodT -= dt; if (hollywoodT <= 0) updateHollywoodBtn(); }
       if (overloadT > 0) overloadT = Math.max(0, overloadT - dt);
       if (overloadCd > 0) overloadCd = Math.max(0, overloadCd - dt);
+      if (holding && pressSlot && inspectSlot !== pressSlot && nowT - pressT0 >= 1000) inspectSlot = pressSlot;   // hold ~1s on a head → show its label
       updateAbar();
       dryFlash = anyFire && !hw && water <= 0;
       var spraying = anyFire;
@@ -482,7 +490,7 @@
       // --- weapons pass: each firing head applies its type's damage / effect ---
       for (var ei = 0; ei < enemies.length; ei++) enemies[ei].dmgFrame = 0;
       for (var fh = 0; fh < firing.length; fh++) {
-        var s = firing[fh], ty = typeOf(s), per = s.q * DMG_PER_GPM * TYPE_INFO[ty].dmg * moonBuff(s) * (easyMode ? 1.5 : 1) * (overloadT > 0 ? 1.5 : 1), em, j;
+        var s = firing[fh], ty = typeOf(s), per = s.q * DMG_PER_GPM * TYPE_INFO[ty].dmg * moonBuff(s) * (easyMode ? 1.5 : 1) * (overloadT > 0 ? 1.5 : 1) * (s.fr ? 1.5 : 1), em, j;
         if (ty === "moon") { for (j = 0; j < enemies.length; j++) if (inRange(s, enemies[j])) { integrity = Math.min(100, integrity + s.q * 0.05 * dt); break; } continue; }
         if (ty === "laser") {                                  // single-target: nearest in range
           var tgt = null, bd = 1e9; for (j = 0; j < enemies.length; j++) { em = enemies[j]; if (!canHit(s, em)) continue; var dd = Math.hypot(em.x - s.x, em.y - s.y); if (dd < bd) { bd = dd; tgt = em; } }
@@ -584,26 +592,29 @@
     function unlockDesc(t) { return { standard: "Radial spray — your bread & butter", laser: "Auto-blasts the nearest flame (single target)", foam: "Foam ring: damages + slows flames in radius", lawn: "Rotating cone — hits up to 3 flames", corridor: "Extreme reach along one axis only", moon: "No damage — heals integrity & buffs neighbors" }[t]; }
     function categoryOffer(cat) {
       if (cat === "unlock") { var rt = UNLOCK_TYPES[Math.floor(Math.random() * UNLOCK_TYPES.length)]; return { e: TYPE_INFO[rt].e, t: "Unlock: " + TYPE_INFO[rt].n, d: unlockDesc(rt), kid: TYPE_INFO[rt].n, selectHead: true, headType: rt }; }
-      if (cat === "kfactor") return { e: "📈", t: "Bigger K-factor", d: "Step a head up the K ladder: more GPM", kid: "Power Up", apply: applyUpgrade };
+      if (cat === "kfactor") return { e: "📈", t: "Bigger K-factor", d: "Pick a head to step up the K ladder: more GPM", kid: "Power Up", pick: "kf" };
       if (cat === "pump") { var nl = pumpLevel + 1, pc = PUMP_CURVE[nl]; return { e: "⚙️", t: nl >= PUMP_MAX ? "Fire pump · FINAL" : "Fire pump", d: pumpLevel === 0 ? "Add a fire pump — " + pc.residual + " psi @ " + pc.ratedQ.toLocaleString() + " gpm" : (pc.residual + " psi @ " + pc.ratedQ.toLocaleString() + " gpm" + (nl >= PUMP_MAX ? " (max)" : "")), kid: "Pump", apply: applyPump }; }
       if (cat === "tank") { var nw = Math.round(maxWater * (1 + TANK_PCT)); return { e: "🛢️", t: "Bigger tank", d: "+" + Math.round(TANK_PCT * 100) + "% capacity → " + nw.toLocaleString() + " gal", kid: "Water", apply: applyCapacity }; }
-      var elig = slots.filter(function (s) { return s.state === "active" && !s.ec; });
+      var elig = slots.filter(function (s) { return s.state === "active" && !s.ec && typeOf(s) !== "laser"; });   // lasers have infinite range
       var eligHP = slots.filter(function (s) { return s.state === "active" && !s.hp; });
+      var eligFR = slots.filter(function (s) { return s.state === "active" && !s.fr && typeOf(s) !== "moon"; });
       var pool = SPECIALS.slice();
-      if (elig.length) pool.push("ec");                         // Extended Coverage only if a head can still take it
+      if (elig.length) pool.push("ec");                         // Extended Coverage only if a non-laser head can still take it
       if (eligHP.length) pool.push("hp");                       // High Pressure only if a head can still take it
+      if (eligFR.length) pool.push("fr");                       // Fast Response only if a non-moon head can still take it
       var pick = pool[Math.floor(Math.random() * pool.length)];
       if (pick === "ec") {
         var lbl = elig.length === 1 ? ("K" + KLADDER[elig[0].kTier].toFixed(1) + " EC") : "Extended Coverage";
-        return { e: "🎯", t: lbl, d: elig.length === 1 ? "+50% throw — Extended Coverage" : "+50% throw — pick a head", kid: "Bigger", special: true, applyEC: true };
+        return { e: "🎯", t: lbl, d: elig.length === 1 ? "+50% throw — Extended Coverage" : "+50% throw — pick a head", kid: "Bigger", special: true, pick: "ec" };
       }
-      if (pick === "hp") return { e: "🔺", t: "High Pressure", d: "Pick a head — it can exceed 175 psi, up to 300", kid: "300 PSI", special: true, applyHP: true };
+      if (pick === "hp") return { e: "🔺", t: "High Pressure", d: "Pick a head — it can exceed 175 psi, up to 300", kid: "300 PSI", special: true, pick: "hp" };
+      if (pick === "fr") return { e: "💨", t: "Fast Response", d: "Pick a head — +50% attack speed (permanent)", kid: "Fast", special: true, pick: "fr" };
       return { e: pick.e, t: pick.t, d: pick.d, kid: pick.kid, apply: pick.apply, special: true };
     }
     function waveComplete() {
       if (wave >= BOSS_WAVE && !bossAlive) { bossPending = true; startWave(wave + 1); return; }
       state = "upgrade";
-      $("pauseBtn").hidden = true; $("abar").hidden = true;
+      $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true;
       // tank + special always in the pool; unlock/kfactor when applicable. Fire pump is its own RARE category (final tier extra-rare).
       var others = ["tank", "special"];
       if (lockedCount() > 0) others.push("unlock");
@@ -640,47 +651,57 @@
       if (cat === "tank") return 1.5;
       return 3;   // special (EC / refill / etc) — utility
     }
-    // perform an offer; auto=true also auto-places head/EC (no tap needed)
+    // pick-a-head modes: unlock (tap a plug) | ec | hp | kf (K-factor) | fr (Fast Response)
+    var selectKind = null, pendingType = "standard";
+    var PICK_PROMPT = { ec: "👆 Tap a head for Extended Coverage", hp: "👆 Tap a head for High Pressure (300 psi)", kf: "👆 Tap a head to power up (K‑factor)", fr: "👆 Tap a head for Fast Response" };
+    function selectEligible(s) {
+      if (selectKind === "unlock") return s.state === "locked";
+      if (s.state !== "active") return false;
+      if (selectKind === "ec") return !s.ec && typeOf(s) !== "laser";   // lasers have infinite range — no EC
+      if (selectKind === "hp") return !s.hp;
+      if (selectKind === "kf") return s.kTier < KLADDER.length - 1;
+      if (selectKind === "fr") return !s.fr && typeOf(s) !== "moon";     // moon deals no damage — no Fast Response
+      return false;
+    }
+    function applyPickTo(s, kind) {
+      if (kind === "ec") s.ec = true;
+      else if (kind === "hp") s.hp = true;
+      else if (kind === "fr") s.fr = true;
+      else if (kind === "kf") { s.kTier++; maxWater += 60 * (easyMode ? 1.5 : 1); }
+      s.flash = 0.6;
+    }
+    // perform an offer; auto=true also auto-places/auto-picks (no tap needed)
     function doOffer(o, auto) {
       if (o.selectHead) { pendingType = o.headType; if (auto) autoUnlock(); else beginSelectHead(); }
-      else if (o.applyEC) { if (auto) autoEC(); else beginEC(); }
-      else if (o.applyHP) { if (auto) autoHP(); else beginHP(); }
+      else if (o.pick) { if (auto) autoPickKind(o.pick); else beginPick(o.pick); }
       else { o.apply(); afterChoice(); }
     }
     function autoUnlock() {
       var best = nearestToCenter(function (sl) { return sl.state === "locked" && slots.some(function (o) { return o.state === "active" && Math.abs(o.c - sl.c) + Math.abs(o.r - sl.r) === 1; }); }) || nearestToCenter(function (sl) { return sl.state === "locked"; });
-      if (best) { best.state = "active"; best.kTier = 0; best.q = 0; best.ec = false; best.hp = false; best.type = pendingType; best.aim = 0; best.foamOpen = 0; best.moonOpen = 0; if (pendingType === "corridor") best.axis = Math.random() < 0.5 ? "x" : "y"; if (pendingType !== "standard") { maxWater += SPECIAL_WATER_BONUS * (easyMode ? 1.5 : 1); water = Math.min(maxWater, water + SPECIAL_WATER_BONUS * (easyMode ? 1.5 : 1)); } best.flash = 0.6; }
+      if (best) { placeUnlock(best); }
       afterChoice();
     }
-    function autoEC() {
-      var elig = slots.filter(function (s) { return s.state === "active" && !s.ec; });
-      if (elig.length) { elig.sort(function (a, b) { return b.kTier - a.kTier; }); elig[0].ec = true; elig[0].flash = 0.6; }
-      afterChoice();
+    function placeUnlock(best) {
+      best.state = "active"; best.kTier = 0; best.q = 0; best.ec = false; best.hp = false; best.fr = false; best.type = pendingType; best.aim = 0; best.foamOpen = 0; best.moonOpen = 0;
+      if (pendingType === "corridor") best.axis = Math.random() < 0.5 ? "x" : "y";
+      if (pendingType !== "standard") { var wb = SPECIAL_WATER_BONUS * (easyMode ? 1.5 : 1); maxWater += wb; water = Math.min(maxWater, water + wb); }
+      best.flash = 0.6;
     }
-    function autoHP() {
-      var elig = slots.filter(function (s) { return s.state === "active" && !s.hp; });
-      if (elig.length) { elig.sort(function (a, b) { return b.kTier - a.kTier; }); elig[0].hp = true; elig[0].flash = 0.6; }
+    function autoPickKind(kind) {
+      selectKind = kind; var elig = slots.filter(selectEligible); selectKind = null;
+      if (elig.length) { elig.sort(function (a, b) { return b.kTier - a.kTier; }); applyPickTo(elig[0], kind); }
       afterChoice();
     }
     function afterChoice() { startWave(wave + 1); }
-    // Pick-a-head modes: 'unlock' (tap a dusty head) or 'ec' (tap an active head for Extended Coverage).
-    var selectKind = null, pendingType = "standard";
-    function selectEligible(s) { if (selectKind === "unlock") return s.state === "locked"; if (selectKind === "hp") return s.state === "active" && !s.hp; return s.state === "active" && !s.ec; }
     function beginSelectHead() {
       selectKind = "unlock"; state = "select"; $("upgradeOv").classList.remove("show");
       $("selectPrompt").textContent = "👆 Tap a plug to install your " + TYPE_INFO[pendingType].n; $("selectPrompt").hidden = false;
     }
-    function beginEC() {
-      var elig = slots.filter(function (s) { return s.state === "active" && !s.ec; });
-      if (elig.length === 1) { elig[0].ec = true; elig[0].flash = 0.6; afterChoice(); return; }
-      selectKind = "ec"; state = "select"; $("upgradeOv").classList.remove("show");
-      $("selectPrompt").textContent = "👆 Tap a head for Extended Coverage"; $("selectPrompt").hidden = false;
-    }
-    function beginHP() {
-      var elig = slots.filter(function (s) { return s.state === "active" && !s.hp; });
-      if (elig.length === 1) { elig[0].hp = true; elig[0].flash = 0.6; afterChoice(); return; }
-      selectKind = "hp"; state = "select"; $("upgradeOv").classList.remove("show");
-      $("selectPrompt").textContent = "👆 Tap a head for High Pressure (300 psi)"; $("selectPrompt").hidden = false;
+    function beginPick(kind) {
+      selectKind = kind; var elig = slots.filter(selectEligible);
+      if (elig.length === 1) { applyPickTo(elig[0], kind); selectKind = null; afterChoice(); return; }
+      state = "select"; $("upgradeOv").classList.remove("show");
+      $("selectPrompt").textContent = PICK_PROMPT[kind]; $("selectPrompt").hidden = false;
     }
     function selectHeadAt(tx, ty) {
       if (state !== "select") return;
@@ -688,10 +709,8 @@
       var best = null, bd = 1e9;
       for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (!selectEligible(s)) continue; var d = Math.hypot(tx - s.x, ty - s.y); if (d < bd) { bd = d; best = s; } }
       if (best && bd < gap * 0.7) {
-        if (selectKind === "unlock") { best.state = "active"; best.kTier = 0; best.q = 0; best.ec = false; best.hp = false; best.type = pendingType; best.aim = 0; best.foamOpen = 0; best.moonOpen = 0; if (pendingType === "corridor") best.axis = Math.random() < 0.5 ? "x" : "y"; if (pendingType !== "standard") { var wb = SPECIAL_WATER_BONUS * (easyMode ? 1.5 : 1); maxWater += wb; water = Math.min(maxWater, water + wb); } }
-        else if (selectKind === "hp") { best.hp = true; }
-        else { best.ec = true; }
-        best.flash = 0.6; selectKind = null; $("selectPrompt").hidden = true; afterChoice();
+        if (selectKind === "unlock") placeUnlock(best); else applyPickTo(best, selectKind);
+        selectKind = null; $("selectPrompt").hidden = true; afterChoice();
       }
     }
     function updateHollywoodBtn() { updateAbar(); }
@@ -720,10 +739,10 @@
       overloadT = 15; overloadCd = 60; updateAbar();
     }
 
-    function gameOver() { state = "over"; $("pauseBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); pendingScore = score; $("overOv").classList.add("show"); mountLb("overOv", "againBtn"); }
-    function win() { state = "win"; $("pauseBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("winScore").textContent = score.toLocaleString(); pendingScore = score; $("winOv").classList.add("show"); mountLb("winOv", "winAgainBtn"); }
-    function pauseGame() { if (state !== "playing") return; state = "paused"; holding = false; $("pauseOv").classList.add("show"); $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; }
-    function resumeGame() { if (state !== "paused") return; state = "playing"; last = 0; $("pauseOv").classList.remove("show"); $("easyInd").hidden = !easyMode; updateHollywoodBtn(); }
+    function gameOver() { state = "over"; $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); pendingScore = score; $("overOv").classList.add("show"); mountLb("overOv", "againBtn"); }
+    function win() { state = "win"; $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("winScore").textContent = score.toLocaleString(); pendingScore = score; $("winOv").classList.add("show"); mountLb("winOv", "winAgainBtn"); }
+    function pauseGame() { if (state !== "playing") return; state = "paused"; holding = false; $("pauseOv").classList.add("show"); $("abar").hidden = true; $("ffBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("pauseAutoWrap").hidden = !easyMode; $("pauseAutoToggle").checked = autoPick; }
+    function resumeGame() { if (state !== "paused") return; state = "playing"; last = 0; $("pauseOv").classList.remove("show"); $("easyInd").hidden = !easyMode; $("ffBtn").hidden = false; updateHollywoodBtn(); }
 
     // ---- rendering ----
     function brass(ctx, x, y, r, grad) { var g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r); g.addColorStop(0, grad[0]); g.addColorStop(1, grad[1]); return g; }
@@ -747,10 +766,15 @@
       else drawDeflector(x, y, r, s);
       if (s.flash > 0) { ctx.globalAlpha = s.flash; ctx.fillStyle = "#bff0ff"; ctx.beginPath(); ctx.arc(x, y, r + 6, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; }
       if (s.hurt > 0) { ctx.globalAlpha = Math.min(1, s.hurt / 0.45); ctx.fillStyle = "#ff3b30"; ctx.beginPath(); ctx.arc(x, y, r + 5, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; }
-      // label: standard grade (ELO/ESFR) or the special's name, + K-factor + EC
-      var grade = ty === "standard" ? (s.kTier >= 3 ? "ESFR" : s.kTier >= 2 ? "ELO" : "") : TYPE_INFO[ty].n;
-      ctx.fillStyle = s.ec ? "#ffb03a" : "rgba(232,240,244,0.92)"; ctx.font = "700 " + Math.max(7, Math.round(r * 0.46 / viewScale)) + "px Inter, Arial, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";   // /viewScale → constant on-screen size when zoomed out
-      ctx.fillText((grade ? grade + " " : "") + "K" + KLADDER[s.kTier].toFixed(1) + (s.ec ? " EC" : "") + (s.hp ? " ⊕300" : ""), x, y + r + 3 / viewScale);
+      // label only while inspecting (tap & hold this head ~1s) — keeps the playfield clean
+      if (s === inspectSlot) {
+        var grade = ty === "standard" ? (s.kTier >= 3 ? "ESFR" : s.kTier >= 2 ? "ELO" : "") : TYPE_INFO[ty].n;
+        var label = (s.fr ? "Fast Response " : "") + (grade ? grade + " " : "") + "K" + KLADDER[s.kTier].toFixed(1) + (s.ec ? " EC" : "") + (s.hp ? " 300psi" : "");
+        var fs = Math.max(9, Math.round(r * 0.44 / viewScale)); ctx.font = "700 " + fs + "px Inter, Arial, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+        var ly = y + r + 4 / viewScale, tw = ctx.measureText(label).width;
+        ctx.fillStyle = "rgba(8,12,16,0.82)"; ctx.fillRect(x - tw / 2 - 5, ly - 2, tw + 10, fs + 6);   // backing pill for readability
+        ctx.fillStyle = s.ec || s.hp || s.fr ? "#ffb03a" : "#eaf2f6"; ctx.fillText(label, x, ly);
+      }
     }
     // empty pipe outlet — a square head plug
     function drawPlug(x, y, r) {
@@ -1075,20 +1099,44 @@
     }
 
     var last = 0;
-    function loop(ts) { nowT = ts; if (!last) last = ts; var dt = Math.min(0.05, (ts - last) / 1000); last = ts; update(dt); render(ts); requestAnimationFrame(loop); }
+    function loop(ts) {
+      nowT = ts; if (!last) last = ts;
+      var total = Math.min(0.05, (ts - last) / 1000) * gameSpeed; last = ts;          // fast-forward scales game time
+      var steps = Math.min(6, Math.max(1, Math.ceil(total / 0.02))), st = total / steps;   // sub-step for stability at high speed
+      for (var k = 0; k < steps; k++) update(st);
+      render(ts); requestAnimationFrame(loop);
+    }
 
+    function headUnderPointer(sx, sy) {
+      var tx = W / 2 + (sx - W / 2) / viewScale, ty = H / 2 + (sy - H / 2) / viewScale, best = null, bd = 1e9;
+      for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (s.state !== "active") continue; var d = Math.hypot(tx - s.x, ty - s.y); if (d < bd) { bd = d; best = s; } }
+      return best && bd < gap * 0.6 ? best : null;
+    }
     canvas.addEventListener("pointerdown", function (e) {
       e.preventDefault();
-      if (state === "select") { var rect = canvas.getBoundingClientRect(); selectHeadAt(e.clientX - rect.left, e.clientY - rect.top); return; }
-      holding = true;
+      var rect = canvas.getBoundingClientRect(), px = e.clientX - rect.left, py = e.clientY - rect.top;
+      if (state === "select") { selectHeadAt(px, py); return; }
+      holding = true; pressSlot = headUnderPointer(px, py); pressT0 = nowT; inspectSlot = null;   // track press for hold-inspect + double-tap
     });
-    window.addEventListener("pointerup", function () { holding = false; });
-    canvas.addEventListener("pointercancel", function () { holding = false; });
+    function endPress() {
+      holding = false;
+      var held = nowT - pressT0;
+      if (pressSlot && held < 280) {                                   // a quick tap (not a hold)
+        if (lastTapSlot === pressSlot && nowT - lastTapT < 350) {       // double-tap
+          if (typeOf(pressSlot) === "corridor") { pressSlot.axis = corridorAxis(pressSlot) === "x" ? "y" : "x"; pressSlot.flash = 0.5; }
+          lastTapSlot = null; lastTapT = 0;
+        } else { lastTapSlot = pressSlot; lastTapT = nowT; }
+      }
+      inspectSlot = null; pressSlot = null;
+    }
+    window.addEventListener("pointerup", endPress);
+    canvas.addEventListener("pointercancel", endPress);
 
     function reset() {
-      for (var i = 0; i < slots.length; i++) { var ctr = slots[i].c === 1 && slots[i].r === 1; slots[i].state = ctr ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].hurt = 0; slots[i].ec = false; slots[i].hp = false; slots[i].type = ctr ? "standard" : null; slots[i].aim = 0; }
+      for (var i = 0; i < slots.length; i++) { var ctr = slots[i].c === 1 && slots[i].r === 1; slots[i].state = ctr ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].hurt = 0; slots[i].ec = false; slots[i].hp = false; slots[i].fr = false; slots[i].type = ctr ? "standard" : null; slots[i].aim = 0; }
       enemies = []; particles = []; floats = []; foamPiles = []; score = 0; integrity = 100; maxWater = Math.round(330 * (easyMode ? 1.5 : 1)); water = maxWater; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
       tankFillMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0; overloadT = 0; overloadCd = 0; selectKind = null; hurtT = 0; dpsNow = 0; dpsShown = 0;
+      gameSpeed = 1; inspectSlot = null; pressSlot = null; lastTapSlot = null; $("ffBtn").textContent = "▶▶"; $("ffBtn").classList.remove("on");
       viewScale = 1; zoomTarget = 1;
       updatePumpIcons(); $("dpsMeter").hidden = true; $("abar").hidden = true;
     }
@@ -1111,6 +1159,8 @@
     $("winAgainBtn").onclick = newGame;
     $("hollywoodBtn").onclick = activateHollywood;
     $("overloadBtn").onclick = activateOverload;
+    $("ffBtn").onclick = function () { gameSpeed = gameSpeed >= 3 ? 1 : gameSpeed + 1; this.textContent = gameSpeed > 1 ? ("▶▶" + gameSpeed) : "▶▶"; this.classList.toggle("on", gameSpeed > 1); };
+    $("pauseAutoToggle").onchange = function () { autoPick = this.checked; try { localStorage.setItem("sg_auto", autoPick ? "1" : "0"); } catch (e) {} var at = $("autoToggle"); if (at) at.checked = autoPick; };
     $("pauseBtn").onclick = function () { if (state === "playing") pauseGame(); else if (state === "paused") resumeGame(); };
     $("resumeBtn").onclick = resumeGame;
     $("pauseRestartBtn").onclick = newGame;
