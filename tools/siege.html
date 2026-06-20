@@ -102,7 +102,10 @@
     .sg-ffbtn { right:60px; width:auto; min-width:42px; padding:0 10px; font:800 .82rem 'Space Grotesk',sans-serif; gap:0; }
     .sg-ffbtn.on { border-color:var(--accent); color:var(--accent); }
     .sg-musicbtn { left:10px; right:auto; }
+    .sg-sfxbtn { left:60px; right:auto; }
     .sg-musicbtn.on { border-color:var(--water); color:var(--water); }
+    .sg-sfxbtn.on { border-color:var(--ok); color:var(--ok); }
+    .sg-musicbtn:not(.on), .sg-sfxbtn:not(.on) { opacity:.45; }
     /* WoW-style action bar (usable abilities) at bottom center */
     .sg-abar { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); z-index:6; display:flex; gap:10px; }
     .sg-abar[hidden] { display:none; }
@@ -174,7 +177,8 @@
       <canvas id="game" width="360" height="430"></canvas>
       <button id="pauseBtn" class="sg-pausebtn" aria-label="Pause" hidden>❚❚</button>
       <button id="ffBtn" class="sg-pausebtn sg-ffbtn" aria-label="Fast forward" hidden>▶▶</button>
-      <button id="musicBtn" class="sg-pausebtn sg-musicbtn" aria-label="Toggle sound">🔇</button>
+      <button id="musicBtn" class="sg-pausebtn sg-musicbtn" aria-label="Toggle music">🎵</button>
+      <button id="sfxBtn" class="sg-pausebtn sg-sfxbtn" aria-label="Toggle sound effects">🔊</button>
       <div class="sg-abar" id="abar" hidden>
         <button class="sg-ability" id="buildBtn" aria-label="Build sprinkler">🔧</button>
         <button class="sg-ability" id="overloadBtn" aria-label="Overload Fire Pump"><img class="ab-ic" src="../assets/overload-pump.png" alt="" /><div class="cd" id="overloadCdEl" hidden></div></button>
@@ -585,7 +589,7 @@
       updateAbar();
       dryFlash = anyFire && !hw && water <= 0;
       var spraying = anyFire;
-      if (sprayGain) { var sg2 = (soundOn && spraying) ? Math.min(0.2, 0.05 + totalQ * 0.0006) : 0; sprayGain.gain.value += (sg2 - sprayGain.gain.value) * Math.min(1, dt * 8); }   // spray hiss tracks GPM
+      if (sprayGain) { var sg2 = (sfxOn && spraying) ? Math.min(0.2, 0.05 + totalQ * 0.0006) : 0; sprayGain.gain.value += (sg2 - sprayGain.gain.value) * Math.min(1, dt * 8); }   // spray hiss tracks GPM (SFX toggle)
       for (i2 = 0; i2 < act.length; i2++) { var hh = act[i2], tt = typeOf(hh); if (tt === "lawn") {
           var lsp2 = hh.fr ? 1.5 : 1;                              // FR: sweeps faster
           if (hh.swPhase === "rev") { hh.sweep -= dt * 2.6 * lsp2; if (hh.sweep <= 0) { hh.sweep = 0; hh.swPhase = "fwd"; } }   // fast stuttery snap back to start
@@ -1258,6 +1262,7 @@
     }
     function render(t) {
       if (typeof updateMusic === "function") updateMusic();
+      if (sprayGain && state !== "playing") sprayGain.gain.value = 0;   // SFX silent during pauses/menus/overlays
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
       // act background (wood = Act 1, steel = Act 2; act 3 reserved), darkened so heads & flames pop
@@ -1410,7 +1415,8 @@
       at.onchange = function () { try { localStorage.setItem("sg_auto", at.checked ? "1" : "0"); } catch (e) {} };
     })();
     // ---- audio: optional looping music (per level) + procedural SFX (spray hiss, flame extinguish) ----
-    var soundOn = false; try { soundOn = localStorage.getItem("sg_sound") === "1"; } catch (e) {}
+    var musicOn = false, sfxOn = false;
+    try { var legacy = localStorage.getItem("sg_sound") === "1"; musicOn = localStorage.getItem("sg_music") === "1" || (legacy && localStorage.getItem("sg_music") === null); sfxOn = localStorage.getItem("sg_sfx") === "1" || (legacy && localStorage.getItem("sg_sfx") === null); } catch (e) {}
     var musicTracks = [new Audio("../assets/music-level1.mp3"), new Audio("../assets/music-level2.mp3")];
     musicTracks.forEach(function (a) { a.loop = true; a.preload = "none"; a.volume = 0; });
     var curTrack = -1, actx = null, noiseBuf = null, sprayGain = null, lastExt = 0;
@@ -1427,7 +1433,8 @@
       } catch (e) { actx = null; }
     }
     function extinguishSfx() {
-      if (!soundOn || !actx || nowT - lastExt < 45) return; lastExt = nowT;        // throttle bursts
+      if (!sfxOn || state !== "playing" || !actx || nowT - lastExt < 45) return; lastExt = nowT;   // SFX only while actively playing
+
       var t0 = actx.currentTime, src = actx.createBufferSource(); src.buffer = noiseBuf;
       var bp = actx.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 0.8;
       bp.frequency.setValueAtTime(2400, t0); bp.frequency.exponentialRampToValueAtTime(420, t0 + 0.18);
@@ -1436,23 +1443,30 @@
     }
     // music plays for the whole act and keeps playing through pause / upgrade / head-select overlays;
     // it only stops at the start screen, game over, or a win. Track follows the act (act 2 will use track 2).
-    function musicActive() { return soundOn && (state === "playing" || state === "paused" || state === "upgrade" || state === "select" || state === "rotate" || state === "build"); }
+    function musicActive() { return musicOn && (state === "playing" || state === "paused" || state === "upgrade" || state === "select" || state === "rotate" || state === "build"); }
     function updateMusic() {
       var want = musicActive() ? Math.min(musicTracks.length - 1, currentAct - 1) : -1;
       if (want < 0) { musicTracks.forEach(function (a) { try { a.pause(); } catch (e) {} }); curTrack = -1; return; }
       if (want !== curTrack) { musicTracks.forEach(function (a, i) { if (i !== want) { try { a.pause(); a.currentTime = 0; } catch (e) {} } }); curTrack = want; }
       var tr = musicTracks[want]; tr.volume = 0.4; if (tr.paused) tr.play().catch(function () {});
     }
-    function setSound(on) {
-      soundOn = on; try { localStorage.setItem("sg_sound", on ? "1" : "0"); } catch (e) {}
+    function setMusic(on) {
+      musicOn = on; try { localStorage.setItem("sg_music", on ? "1" : "0"); } catch (e) {}
       if (on) { ensureAudio(); if (actx && actx.state === "suspended") actx.resume(); }
-      else { musicTracks.forEach(function (a) { try { a.pause(); } catch (e) {} }); if (sprayGain) sprayGain.gain.value = 0; }
-      var b = $("musicBtn"); if (b) { b.textContent = on ? "🎵" : "🔇"; b.classList.toggle("on", on); }
+      else musicTracks.forEach(function (a) { try { a.pause(); } catch (e) {} });
+      var b = $("musicBtn"); if (b) b.classList.toggle("on", on);
       updateMusic();
     }
-    $("musicBtn").onclick = function () { setSound(!soundOn); };
-    setSound(soundOn);   // reflect saved pref on the icon (won't autoplay until a gesture)
-    $("playBtn").onclick = function () { if (soundOn) { ensureAudio(); if (actx && actx.state === "suspended") actx.resume(); } newGame(); };
+    function setSfx(on) {
+      sfxOn = on; try { localStorage.setItem("sg_sfx", on ? "1" : "0"); } catch (e) {}
+      if (on) { ensureAudio(); if (actx && actx.state === "suspended") actx.resume(); }
+      else if (sprayGain) sprayGain.gain.value = 0;
+      var b = $("sfxBtn"); if (b) b.classList.toggle("on", on);
+    }
+    $("musicBtn").onclick = function () { setMusic(!musicOn); };
+    $("sfxBtn").onclick = function () { setSfx(!sfxOn); };
+    setMusic(musicOn); setSfx(sfxOn);   // reflect saved prefs (won't autoplay until a gesture)
+    $("playBtn").onclick = function () { if (musicOn || sfxOn) { ensureAudio(); if (actx && actx.state === "suspended") actx.resume(); } newGame(); };
     $("againBtn").onclick = newGame;
     $("winAgainBtn").onclick = newGame;
     $("hollywoodBtn").onclick = activateHollywood;
