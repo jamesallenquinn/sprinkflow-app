@@ -399,7 +399,7 @@
       if (hollywoodT > 0) { hollywoodT -= dt; if (hollywoodT <= 0) updateHollywoodBtn(); }
       dryFlash = anyFire && !hw && water <= 0;
       var spraying = anyFire;
-      for (i2 = 0; i2 < act.length; i2++) if (typeOf(act[i2]) === "lawn") act[i2].aim = (act[i2].aim || 0) + dt * 1.1;  // lawn cone sweeps
+      for (i2 = 0; i2 < act.length; i2++) { var hh = act[i2], tt = typeOf(hh); if (tt === "lawn") hh.aim = (hh.aim || 0) + dt * 1.1; else if (tt === "foam") hh.foamOpen = (hh.foamOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.foamOpen || 0)) * Math.min(1, dt * 8); }  // lawn cone sweeps; foam opens/closes
       var dispP = Math.round(spraying ? supplyP(totalQ) : supplyP(0)), pumpTxt = pumpLevel > 0 ? " · Pump " + pumpLevel : "";
       $("psiRead").textContent = spraying
         ? "Residual: " + dispP + " PSI @ " + Math.round(totalQ) + " GPM" + (dryFlash ? " · TANK DRY" : "") + pumpTxt
@@ -561,7 +561,7 @@
       var best = null, bd = 1e9;
       for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (!selectEligible(s)) continue; var d = Math.hypot(tx - s.x, ty - s.y); if (d < bd) { bd = d; best = s; } }
       if (best && bd < gap * 0.7) {
-        if (selectKind === "unlock") { best.state = "active"; best.kTier = 0; best.q = 0; best.ec = false; best.type = pendingType; best.aim = 0; if (pendingType === "corridor") best.axis = Math.random() < 0.5 ? "x" : "y"; if (pendingType !== "standard") { maxWater += SPECIAL_WATER_BONUS; water = Math.min(maxWater, water + SPECIAL_WATER_BONUS); } }
+        if (selectKind === "unlock") { best.state = "active"; best.kTier = 0; best.q = 0; best.ec = false; best.type = pendingType; best.aim = 0; best.foamOpen = 0; if (pendingType === "corridor") best.axis = Math.random() < 0.5 ? "x" : "y"; if (pendingType !== "standard") { maxWater += SPECIAL_WATER_BONUS; water = Math.min(maxWater, water + SPECIAL_WATER_BONUS); } }
         else { best.ec = true; }
         best.flash = 0.6; selectKind = null; $("selectPrompt").hidden = true; afterChoice();
       }
@@ -663,8 +663,35 @@
       ctx.lineWidth = Math.max(1.5, r * 0.075); ctx.strokeStyle = "rgba(255,72,58," + glow + ")"; ctx.beginPath(); ctx.arc(x, y, r * 0.22, 0, Math.PI * 2); ctx.stroke();
       ctx.fillStyle = on ? "#fff" : "rgba(255,245,243," + (0.6 + 0.4 * glow) + ")"; ctx.beginPath(); ctx.arc(x, y, r * 0.14, 0, Math.PI * 2); ctx.fill();
     }
-    // foam head — glossy red bolted body with a billowing white foam cluster (matches owner art)
+    // foam head — cross-fades between closed (solid) and open/discharging by s.foamOpen (0..1)
     function drawFoamHead(x, y, r, s) {
+      var t = s.foamOpen || 0;
+      drawFoamClosed(x, y, r);                                   // always the opaque base
+      if (t > 0.002) { ctx.globalAlpha = Math.min(1, t); drawFoamOpen(x, y, r); ctx.globalAlpha = 1; }
+    }
+    // small white foam blob cluster centered at rim angle `ang`
+    function foamCluster(x, y, r, ang) {
+      var cx = x + Math.cos(ang) * r * 0.78, cy = y + Math.sin(ang) * r * 0.78, b = [[0, 0, 0.13], [0.12, -0.06, 0.1], [-0.1, 0.05, 0.09], [0.04, 0.11, 0.07], [0.17, 0.05, 0.06]], i;
+      for (i = 0; i < b.length; i++) { var px = cx + b[i][0] * r, py = cy + b[i][1] * r, br = b[i][2] * r; ctx.fillStyle = "#f4f9ff"; ctx.beginPath(); ctx.arc(px, py, br, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,0.95)"; ctx.beginPath(); ctx.arc(px - br * 0.25, py - br * 0.28, br * 0.5, 0, Math.PI * 2); ctx.fill(); }
+    }
+    // foam head — OPEN/discharging: red bolted ring with a black open port + foam pushing out at the rim
+    function drawFoamOpen(x, y, r) {
+      var k;
+      ctx.fillStyle = brass(ctx, x, y, r, ["#ff4a40", "#c01007"]); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = Math.max(2, r * 0.09); ctx.strokeStyle = "#150403"; ctx.stroke();
+      ctx.strokeStyle = "rgba(90,8,4,0.8)"; ctx.lineWidth = Math.max(1, r * 0.03);
+      for (k = 0; k < 8; k++) { var ga = k * Math.PI / 4 + Math.PI / 8; ctx.beginPath(); ctx.moveTo(x + Math.cos(ga) * r * 0.72, y + Math.sin(ga) * r * 0.72); ctx.lineTo(x + Math.cos(ga) * r * 0.98, y + Math.sin(ga) * r * 0.98); ctx.stroke(); }
+      ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = "rgba(255,202,197,0.6)"; ctx.beginPath(); ctx.arc(x, y, r * 0.88, Math.PI * 1.05, Math.PI * 1.7); ctx.stroke();
+      // black open center (discharge port)
+      ctx.fillStyle = "#0a0a0c"; ctx.beginPath(); ctx.arc(x, y, r * 0.66, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = Math.max(1.5, r * 0.04); ctx.strokeStyle = "#3a0a06"; ctx.stroke();
+      // bolts (cardinals on raised tabs)
+      for (k = 0; k < 8; k++) { var ba = k * Math.PI / 4 - Math.PI / 2, bx = x + Math.cos(ba) * r * 0.84, by = y + Math.sin(ba) * r * 0.84; if (k % 2 === 0) { ctx.save(); ctx.translate(bx, by); ctx.rotate(ba); ctx.fillStyle = brass(ctx, 0, 0, r * 0.2, ["#ff5a50", "#b81009"]); ctx.fillRect(-r * 0.13, -r * 0.14, r * 0.26, r * 0.28); ctx.lineWidth = Math.max(1, r * 0.02); ctx.strokeStyle = "#3a0a06"; ctx.strokeRect(-r * 0.13, -r * 0.14, r * 0.26, r * 0.28); ctx.restore(); } ctx.fillStyle = brass(ctx, bx, by, r * 0.1, ["#ff6a60", "#9a0e07"]); ctx.beginPath(); ctx.arc(bx, by, r * 0.09, 0, Math.PI * 2); ctx.fill(); ctx.lineWidth = Math.max(1, r * 0.02); ctx.strokeStyle = "#3a0a06"; ctx.stroke(); ctx.fillStyle = "rgba(255,226,223,0.85)"; ctx.beginPath(); ctx.arc(bx - r * 0.025, by - r * 0.025, r * 0.03, 0, Math.PI * 2); ctx.fill(); }
+      // foam pushing out at a few rim spots
+      foamCluster(x, y, r, -2.5); foamCluster(x, y, r, -0.25); foamCluster(x, y, r, 1.15);
+    }
+    // foam head — CLOSED: glossy red bolted body with a billowing white foam cluster (matches owner art)
+    function drawFoamClosed(x, y, r) {
       var bi, i;
       // glossy red body
       ctx.fillStyle = brass(ctx, x, y, r, ["#ff5a4f", "#c8160c"]); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
