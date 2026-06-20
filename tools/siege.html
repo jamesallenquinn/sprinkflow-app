@@ -37,8 +37,22 @@
     .sg-stage { position:relative; border-radius:16px; overflow:hidden; }
     canvas#game { display:block; width:100%; height:auto; background:radial-gradient(circle at 50% 50%, #131c22, #0a0f13); border:1px solid var(--line); border-radius:16px; touch-action:none; }
 
-    .sg-ov { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; text-align:center;
+    .sg-ov { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:safe center; text-align:center; overflow-y:auto;
       background:rgba(7,10,13,.84); backdrop-filter:blur(3px); border-radius:16px; padding:20px; z-index:5; }
+    /* leaderboard */
+    .sg-lb-block { width:100%; max-width:340px; margin:2px 0 4px; }
+    .sg-who { font:500 .8rem Inter; color:var(--muted); margin:2px 0 8px; min-height:16px; }
+    .sg-who b { color:var(--accent); } .sg-who button { background:none; border:0; color:var(--water); font:600 .8rem Inter; cursor:pointer; text-decoration:underline; }
+    .sg-lb { border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--surface); }
+    .sg-lb-h { font:700 .88rem 'Space Grotesk'; padding:8px 14px; border-bottom:1px solid var(--line); }
+    .sg-lb-row { display:flex; align-items:center; gap:10px; padding:6px 14px; border-bottom:1px solid var(--line); font:600 .84rem Inter; }
+    .sg-lb-row:last-child { border-bottom:0; }
+    .sg-lb-row .rk { width:20px; color:var(--muted); font:700 .86rem 'Space Grotesk'; text-align:center; }
+    .sg-lb-row .nm { flex:1; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .sg-lb-row .sc { color:var(--accent); font:700 .88rem 'Space Grotesk'; }
+    .sg-lb-row.me { background:rgba(255,176,58,.10); }
+    .sg-lb-empty { padding:14px; text-align:center; color:var(--muted); font:500 .82rem Inter; }
+    .sg-rankmsg { font:600 .86rem Inter; min-height:16px; margin:0 0 4px; color:var(--ok); }
     .sg-ov.show { display:flex; }
     .sg-ov .ic { font-size:44px; filter:drop-shadow(0 6px 18px rgba(55,183,228,.4)); }
     .sg-ov h1 { font:700 1.55rem/1.05 'Space Grotesk'; margin:8px 0 4px; }
@@ -114,6 +128,12 @@
         <div class="ic">🔥</div>
         <h1>Overrun</h1>
         <div class="sg-final"><div><div class="v gold" id="finalWave">1</div><div class="k">Waves held</div></div><div><div class="v" id="finalScore" style="color:var(--water)">0</div><div class="k">Score</div></div></div>
+        <div class="sg-lb-block" id="sgLb">
+          <div class="sg-rankmsg" id="sgRankMsg"></div>
+          <div class="sg-who" id="sgWho"></div>
+          <div class="sg-lb"><div class="sg-lb-h">🏆 Top Commanders</div><div id="sgLbList"><div class="sg-lb-empty">Loading…</div></div></div>
+          <button class="sg-btn ghost" id="sgPostBtn" style="margin-top:10px">Sign in to post your score</button>
+        </div>
         <button class="sg-btn" id="againBtn">↻ Try again</button>
       </div>
 
@@ -128,6 +148,7 @@
     <div class="sg-hint">Hold to spray · release to refill · flames die in the spray</div>
   </main>
 
+  <script src="./sprinkflow-auth.js"></script>
   <script>
   (function () {
     "use strict";
@@ -342,8 +363,8 @@
     function chooseSupply() { if (pendingSupplyPump) applyPump(); else applyCapacity(); nextSupplyPump = !nextSupplyPump; afterChoice(); }
     function afterChoice() { startWave(wave + 1); }
 
-    function gameOver() { state = "over"; $("pauseBtn").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); $("overOv").classList.add("show"); }
-    function win() { state = "win"; $("pauseBtn").hidden = true; $("winScore").textContent = score.toLocaleString(); $("winOv").classList.add("show"); }
+    function gameOver() { state = "over"; $("pauseBtn").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); pendingScore = score; $("overOv").classList.add("show"); mountLb("overOv", "againBtn"); }
+    function win() { state = "win"; $("pauseBtn").hidden = true; $("winScore").textContent = score.toLocaleString(); pendingScore = score; $("winOv").classList.add("show"); mountLb("winOv", "winAgainBtn"); }
     function pauseGame() { if (state !== "playing") return; state = "paused"; holding = false; $("pauseOv").classList.add("show"); }
     function resumeGame() { if (state !== "paused") return; state = "playing"; last = 0; $("pauseOv").classList.remove("show"); }
 
@@ -483,6 +504,56 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" || e.key === "p" || e.key === "P") { if (state === "playing") pauseGame(); else if (state === "paused") resumeGame(); } });
     document.addEventListener("visibilitychange", function () { if (document.hidden) { last = 0; holding = false; pauseGame(); } else { resize(); if (state !== "playing") render(0); } });
     window.addEventListener("load", function () { resize(); if (state !== "playing") render(0); });
+
+    // ---- global leaderboard (shared SprinkFlow sign-in) ----
+    var pendingScore = 0;
+    function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" })[c]; }); }
+    function lbName() { return (window.SFAuth && SFAuth.displayName()) || ""; }
+    function mountLb(overlayId, beforeBtnId) {
+      var lb = $("sgLb"); if (!lb) return;
+      $(overlayId).insertBefore(lb, $(beforeBtnId));
+      $("sgRankMsg").textContent = "";
+      renderWho(); loadLeaderboard();
+      if (window.SFAuth && SFAuth.isSignedIn()) submitScore();
+    }
+    function renderWho() {
+      var who = $("sgWho"); if (!who) return;
+      if (window.SFAuth && SFAuth.isSignedIn()) {
+        who.innerHTML = 'Signed in as <b>' + esc(SFAuth.displayName()) + '</b> · <button id="sgSignOut">sign out</button>';
+        $("sgSignOut").onclick = function () { SFAuth.signOut(); };
+        $("sgPostBtn").textContent = "↑ Post score to global board";
+      } else {
+        who.innerHTML = 'Sign in to post your score to the global board.';
+        $("sgPostBtn").textContent = "Sign in to post your score";
+      }
+    }
+    function loadLeaderboard() {
+      if (!window.SFAuth) return;
+      SFAuth.read("siege_scores?select=display_name,best_score&order=best_score.desc&limit=10").then(function (rows) {
+        var list = $("sgLbList"); if (!list) return;
+        if (!Array.isArray(rows) || !rows.length) { list.innerHTML = '<div class="sg-lb-empty">No scores yet. Claim the top spot! 🥇</div>'; return; }
+        var me = lbName().toLowerCase();
+        list.innerHTML = rows.map(function (r, i) {
+          var mine = me && String(r.display_name).toLowerCase() === me ? " me" : "";
+          var medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
+          return '<div class="sg-lb-row' + mine + '"><div class="rk">' + medal + '</div><div class="nm">' + esc(r.display_name) + '</div><div class="sc">' + Number(r.best_score).toLocaleString() + '</div></div>';
+        }).join("");
+      });
+    }
+    function submitScore() {
+      if (!window.SFAuth || !SFAuth.isSignedIn() || pendingScore <= 0) return;
+      $("sgRankMsg").style.color = "var(--muted)"; $("sgRankMsg").textContent = "Posting your score…";
+      SFAuth.rpc("submit_siege_score", { p_display_name: SFAuth.displayName(), p_score: pendingScore }).then(function (res) {
+        if (res.ok) { $("sgRankMsg").style.color = "var(--ok)"; $("sgRankMsg").textContent = "✓ Score posted!"; loadLeaderboard(); }
+        else if (res.reason === "expired") { $("sgRankMsg").textContent = ""; }
+        else if (res.reason !== "not-signed-in") { $("sgRankMsg").style.color = "var(--accent)"; $("sgRankMsg").textContent = "Couldn't post (offline?)."; }
+      });
+    }
+    $("sgPostBtn").onclick = function () {
+      if (window.SFAuth && SFAuth.isSignedIn()) submitScore();
+      else if (window.SFAuth) SFAuth.openSignIn({ onSuccess: function () { renderWho(); submitScore(); loadLeaderboard(); } });
+    };
+    if (window.SFAuth) SFAuth.onChange(function () { renderWho(); loadLeaderboard(); });
 
     resize(); render(0);
     requestAnimationFrame(loop);
