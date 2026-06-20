@@ -121,7 +121,9 @@
     .sg-pump-icons { display:flex; align-items:center; gap:5px; flex:1; }
     .sg-pump-icons svg { width:18px; height:18px; display:block; }
     .sg-pump-icons .star { color:var(--accent); font:700 .82rem 'Space Grotesk'; }
-    .sg-dps { position:absolute; left:10px; bottom:10px; z-index:6; background:rgba(13,17,22,.72); backdrop-filter:blur(2px); border:1px solid var(--line); border-radius:10px; padding:5px 9px; font:700 .62rem Inter; letter-spacing:.06em; color:var(--muted); display:flex; align-items:baseline; gap:4px; }
+    .sg-dps { position:absolute; left:10px; bottom:10px; z-index:6; background:rgba(13,17,22,.72); backdrop-filter:blur(2px); border:1px solid var(--line); border-radius:10px; padding:5px 9px; font:700 .62rem Inter; letter-spacing:.06em; color:var(--muted); display:flex; flex-direction:column; align-items:flex-start; gap:1px; }
+    .sg-dps .sg-dps-avg { color:var(--water); } .sg-dps .sg-dps-avg b { font-size:.82rem; }
+    .sg-dps .sg-dps-now b { font-size:.82rem; color:var(--ink); }
     .sg-dps b { font:800 .95rem 'Space Grotesk'; color:var(--water); }
     .sg-dps[hidden] { display:none; }
     .sg-dps.hot { border-color:var(--accent); }
@@ -164,7 +166,8 @@
         <button class="sg-ability" id="hollywoodBtn" aria-label="Hollywood Scene" hidden>🎬<div class="badge" id="hollyBadge"></div></button>
       </div>
       <div id="selectPrompt" class="sg-prompt" hidden>👆 Tap a dusty sprinkler to fix</div>
-      <div id="dpsMeter" class="sg-dps" hidden><b id="dpsNum">0</b> DPS</div>
+      <button id="rotOkBtn" class="sg-btn" hidden style="position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:7;padding:12px 32px">OK</button>
+      <div id="dpsMeter" class="sg-dps" hidden><div class="sg-dps-avg">AVG <b id="dpsAvg">0</b></div><div class="sg-dps-now"><b id="dpsNum">0</b> DPS</div></div>
       <div id="lowWater" class="sg-lowwater" hidden>💧 LOW WATER!</div>
       <div id="easyInd" class="sg-easy-ind" hidden>🍃 Easy</div>
 
@@ -239,6 +242,7 @@
     var overloadT = 0, overloadCd = 0;   // Overload Fire Pump: 15s ×1.5 damage, 60s cooldown
     var gameSpeed = 1;                    // fast-forward (1×/2×/3×)
     var currentAct = 1;                   // music track follows the act (1 = track 1); persists across waves/pause/upgrade
+    var waveDmg = 0, waveCombatT = 0;     // per-wave running average DPS (reset each wave)
     var inspectSlot = null, pressSlot = null, pressT0 = 0, lastTapT = 0, lastTapSlot = null;   // hold-to-inspect label + double-tap corridor rotate
     // combat feedback: floating text, integrity hit-flash, live damage-per-second
     var floats = [], hurtT = 0, dpsNow = 0, dpsShown = 0;
@@ -402,18 +406,19 @@
     }
     function updateDpsMeter() {
       var el = $("dpsMeter"); if (!el) return;
+      el.hidden = false;                        // stays visible the whole wave
       var v = Math.round(dpsShown);
-      if (v < 1) { el.hidden = true; return; }
-      el.hidden = false; $("dpsNum").textContent = v.toLocaleString();
+      $("dpsNum").textContent = v.toLocaleString();
+      $("dpsAvg").textContent = Math.round(waveCombatT > 0.1 ? waveDmg / waveCombatT : 0).toLocaleString();
       el.classList.toggle("hot", v >= 250 && v < 700);
       el.classList.toggle("blaze", v >= 700);
-      if (!(v >= 250 && v < 700)) el.classList.remove("hot");
     }
     function applyCapacity() { tankLevel++; maxWater = Math.round(maxWater * (1 + TANK_PCT)); water = maxWater; for (var i = 0; i < slots.length; i++) if (slots[i].state === "active") slots[i].flash = 0.6; }
 
     function startWave(n) {
       wave = n; state = "playing";
       water = maxWater; integrity = Math.min(100, integrity + 8);
+      waveDmg = 0; waveCombatT = 0;             // reset the running Avg. DPS each wave
       if (bossPending) { bossPending = false; bossAlive = true; spawnBoss(); spawnQueue = 0; }
       else { bossAlive = false; spawnQueue = 4 + n * 2; }
       spawnT = 0;
@@ -486,7 +491,12 @@
       dryFlash = anyFire && !hw && water <= 0;
       var spraying = anyFire;
       if (sprayGain) { var sg2 = (soundOn && spraying) ? Math.min(0.2, 0.05 + totalQ * 0.0006) : 0; sprayGain.gain.value += (sg2 - sprayGain.gain.value) * Math.min(1, dt * 8); }   // spray hiss tracks GPM
-      for (i2 = 0; i2 < act.length; i2++) { var hh = act[i2], tt = typeOf(hh); if (tt === "lawn") hh.aim = (hh.aim || 0) + dt * 1.1 * (hh.fr ? 1.5 : 1); else if (tt === "foam") hh.foamOpen = (hh.foamOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.foamOpen || 0)) * Math.min(1, dt * 8); else if (tt === "moon") hh.moonOpen = (hh.moonOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.moonOpen || 0)) * Math.min(1, dt * 8); }  // lawn sweeps; foam & moon open/close
+      for (i2 = 0; i2 < act.length; i2++) { var hh = act[i2], tt = typeOf(hh); if (tt === "lawn") {
+          var lsp2 = hh.fr ? 1.5 : 1;                              // FR: sweeps faster
+          if (hh.swPhase === "rev") { hh.sweep -= dt * 2.6 * lsp2; if (hh.sweep <= 0) { hh.sweep = 0; hh.swPhase = "fwd"; } }   // fast stuttery snap back to start
+          else { hh.sweep = (hh.sweep || 0) + dt * 0.34 * lsp2; if (hh.sweep >= 1) { hh.sweep = 1; hh.swPhase = "rev"; } }      // smooth 180° sweep
+          hh.aim = (hh.aim0 || 0) + hh.sweep * Math.PI + (hh.swPhase === "rev" ? Math.sin(nowT * 0.05) * 0.06 : 0);            // classic lawn-sprinkler stutter on the reset
+        } else if (tt === "foam") hh.foamOpen = (hh.foamOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.foamOpen || 0)) * Math.min(1, dt * 8); else if (tt === "moon") hh.moonOpen = (hh.moonOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.moonOpen || 0)) * Math.min(1, dt * 8); }  // lawn sweeps; foam & moon open/close
       var dispP = Math.round(spraying ? Math.max(FLOW_FLOOR, supplyP(totalQ)) : supplyP(0)), pumpTxt = pumpLevel > 0 ? " · Pump " + pumpLevel : "";
       $("psiRead").textContent = spraying
         ? "Residual: " + dispP + " PSI @ " + Math.round(totalQ) + " GPM" + (dryFlash ? " · TANK DRY" : "") + pumpTxt
@@ -588,6 +598,7 @@
       if (hurtT > 0) hurtT = Math.max(0, hurtT - dt);
       // live damage-per-second meter (smoothed): rises fast, falls quick when you stop spraying
       dpsNow = frameDps;
+      waveDmg += frameDps * dt; if (enemies.length) waveCombatT += dt;   // running Avg. DPS over active combat
       dpsShown += (dpsNow - dpsShown) * Math.min(1, dt * 9);
       updateDpsMeter();
       // battlefield zoom: ease toward the fitted preset as coverage grows
@@ -635,7 +646,7 @@
     function waveComplete() {
       if (wave >= BOSS_WAVE && !bossAlive) { bossPending = true; startWave(wave + 1); return; }
       state = "upgrade";
-      $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true;
+      $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true;
       // tank + special always in the pool; unlock/kfactor when applicable. Fire pump is its own RARE category (final tier extra-rare).
       var others = ["tank", "special"];
       if (lockedCount() > 0) others.push("unlock");
@@ -699,12 +710,13 @@
     }
     function autoUnlock() {
       var best = nearestToCenter(function (sl) { return sl.state === "locked" && slots.some(function (o) { return o.state === "active" && Math.abs(o.c - sl.c) + Math.abs(o.r - sl.r) === 1; }); }) || nearestToCenter(function (sl) { return sl.state === "locked"; });
-      if (best) { placeUnlock(best); }
+      if (best) { placeUnlock(best); best.rotLocked = true; }   // auto-pick: lawn keeps its default aim, no rotate prompt
       afterChoice();
     }
     function placeUnlock(best) {
       best.state = "active"; best.kTier = 0; best.q = 0; best.ec = false; best.hp = false; best.fr = false; best.type = pendingType; best.aim = 0; best.foamOpen = 0; best.moonOpen = 0;
       if (pendingType === "corridor") best.axis = Math.random() < 0.5 ? "x" : "y";
+      if (pendingType === "lawn") { best.aim0 = Math.atan2(H / 2 - best.y, W / 2 - best.x); best.sweep = 0; best.swPhase = "fwd"; best.rotLocked = false; }   // default aim toward core; rotate at placement
       if (pendingType !== "standard") { var wb = SPECIAL_WATER_BONUS * (easyMode ? 1.5 : 1); maxWater += wb; water = Math.min(maxWater, water + wb); }
       best.flash = 0.6;
     }
@@ -714,6 +726,25 @@
       afterChoice();
     }
     function afterChoice() { startWave(wave + 1); }
+    // one-time lawn aiming at placement: drag around the head to set its base direction, then OK
+    var rotSlot = null, rotDragging = false;
+    function beginLawnRotate(s) {
+      rotSlot = s; s.rotLocked = false; state = "rotate";
+      $("upgradeOv").classList.remove("show"); $("abar").hidden = true; $("ffBtn").hidden = true; $("pauseBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true;
+      $("selectPrompt").textContent = "🔄 Drag around the head to aim, then tap OK"; $("selectPrompt").hidden = false;
+      $("rotOkBtn").hidden = false;
+    }
+    function aimRotate(sx, sy) {
+      if (!rotSlot) return;
+      var wx = W / 2 + (sx - W / 2) / viewScale, wy = H / 2 + (sy - H / 2) / viewScale;
+      rotSlot.aim0 = Math.atan2(wy - rotSlot.y, wx - rotSlot.x); rotSlot.sweep = 0; rotSlot.swPhase = "fwd"; rotSlot.aim = rotSlot.aim0;
+    }
+    function confirmRotate() {
+      if (state !== "rotate" || !rotSlot) return;
+      rotSlot.rotLocked = true; rotSlot.flash = 0.6; rotSlot = null; rotDragging = false;
+      $("rotOkBtn").hidden = true; $("selectPrompt").hidden = true;
+      afterChoice();
+    }
     function beginSelectHead() {
       selectKind = "unlock"; state = "select"; $("upgradeOv").classList.remove("show");
       $("selectPrompt").textContent = "👆 Tap a plug to install your " + TYPE_INFO[pendingType].n; $("selectPrompt").hidden = false;
@@ -730,7 +761,12 @@
       var best = null, bd = 1e9;
       for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (!selectEligible(s)) continue; var d = Math.hypot(tx - s.x, ty - s.y); if (d < bd) { bd = d; best = s; } }
       if (best && bd < gap * 0.7) {
-        if (selectKind === "unlock") placeUnlock(best); else applyPickTo(best, selectKind);
+        if (selectKind === "unlock") {
+          placeUnlock(best); selectKind = null; $("selectPrompt").hidden = true;
+          if (best.type === "lawn") { beginLawnRotate(best); return; }   // aim it before the wave starts
+          afterChoice(); return;
+        }
+        applyPickTo(best, selectKind);
         selectKind = null; $("selectPrompt").hidden = true; afterChoice();
       }
     }
@@ -1118,6 +1154,15 @@
         ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.strokeText(f.text, f.x, f.y); ctx.fillText(f.text, f.x, f.y);
       }
       ctx.globalAlpha = 1;
+      // lawn aiming guide (Rotate Mode): dashed ring to drag around + arrow showing the chosen direction
+      if (state === "rotate" && rotSlot) {
+        var gx = rotSlot.x, gy = rotSlot.y, gr = gap * 0.55, a0 = rotSlot.aim0 || 0;
+        ctx.save(); ctx.setLineDash([6, 5]); ctx.lineWidth = 2; ctx.strokeStyle = "rgba(143,209,74,0.85)";
+        ctx.beginPath(); ctx.arc(gx, gy, gr, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+        ctx.strokeStyle = "#8fd14a"; ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx + Math.cos(a0) * gr, gy + Math.sin(a0) * gr); ctx.stroke();
+        ctx.fillStyle = "#8fd14a"; ctx.beginPath(); ctx.arc(gx + Math.cos(a0) * gr, gy + Math.sin(a0) * gr, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
       ctx.restore();                                  // end world (zoom) transform
       // red hurt vignette when integrity is hit (full-canvas, unscaled)
       if (hurtT > 0) {
@@ -1145,14 +1190,21 @@
       e.preventDefault();
       var rect = canvas.getBoundingClientRect(), px = e.clientX - rect.left, py = e.clientY - rect.top;
       if (state === "select") { selectHeadAt(px, py); return; }
+      if (state === "rotate") { rotDragging = true; aimRotate(px, py); return; }
       holding = true; pressSlot = headUnderPointer(px, py); pressT0 = nowT; inspectSlot = null;   // track press for hold-inspect + double-tap
     });
+    canvas.addEventListener("pointermove", function (e) {
+      if (state !== "rotate" || !rotDragging) return;
+      e.preventDefault(); var rect = canvas.getBoundingClientRect(); aimRotate(e.clientX - rect.left, e.clientY - rect.top);
+    });
     function endPress() {
+      if (state === "rotate") { rotDragging = false; return; }
       holding = false;
       var held = nowT - pressT0;
       if (pressSlot && held < 280) {                                   // a quick tap (not a hold)
         if (lastTapSlot === pressSlot && nowT - lastTapT < 350) {       // double-tap
           if (typeOf(pressSlot) === "corridor") { pressSlot.axis = corridorAxis(pressSlot) === "x" ? "y" : "x"; pressSlot.flash = 0.5; }
+          else if (typeOf(pressSlot) === "lawn" && !pressSlot.rotLocked) beginLawnRotate(pressSlot);   // re-aim a freshly placed (unconfirmed) lawn
           lastTapSlot = null; lastTapT = 0;
         } else { lastTapSlot = pressSlot; lastTapT = nowT; }
       }
@@ -1165,7 +1217,7 @@
       for (var i = 0; i < slots.length; i++) { var ctr = slots[i].c === 1 && slots[i].r === 1; slots[i].state = ctr ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].hurt = 0; slots[i].ec = false; slots[i].hp = false; slots[i].fr = false; slots[i].type = ctr ? "standard" : null; slots[i].aim = 0; }
       enemies = []; particles = []; floats = []; foamPiles = []; laserShots = []; currentAct = 1; score = 0; integrity = 100; maxWater = Math.round(330 * (easyMode ? 1.5 : 1)); water = maxWater; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
       tankFillMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0; overloadT = 0; overloadCd = 0; selectKind = null; hurtT = 0; dpsNow = 0; dpsShown = 0;
-      gameSpeed = 1; inspectSlot = null; pressSlot = null; lastTapSlot = null; $("ffBtn").textContent = "▶▶"; $("ffBtn").classList.remove("on");
+      gameSpeed = 1; inspectSlot = null; pressSlot = null; lastTapSlot = null; rotSlot = null; rotDragging = false; $("ffBtn").textContent = "▶▶"; $("ffBtn").classList.remove("on"); $("rotOkBtn").hidden = true;
       viewScale = 1; zoomTarget = 1;
       updatePumpIcons(); $("dpsMeter").hidden = true; $("abar").hidden = true;
     }
@@ -1210,7 +1262,7 @@
     }
     // music plays for the whole act and keeps playing through pause / upgrade / head-select overlays;
     // it only stops at the start screen, game over, or a win. Track follows the act (act 2 will use track 2).
-    function musicActive() { return soundOn && (state === "playing" || state === "paused" || state === "upgrade" || state === "select"); }
+    function musicActive() { return soundOn && (state === "playing" || state === "paused" || state === "upgrade" || state === "select" || state === "rotate"); }
     function updateMusic() {
       var want = musicActive() ? Math.min(musicTracks.length - 1, currentAct - 1) : -1;
       if (want < 0) { musicTracks.forEach(function (a) { try { a.pause(); } catch (e) {} }); curTrack = -1; return; }
@@ -1233,6 +1285,7 @@
     $("overloadBtn").onclick = activateOverload;
     $("ffBtn").onclick = function () { gameSpeed = gameSpeed >= 3 ? 1 : gameSpeed + 1; this.textContent = gameSpeed > 1 ? ("▶▶" + gameSpeed) : "▶▶"; this.classList.toggle("on", gameSpeed > 1); };
     $("pauseAutoToggle").onchange = function () { autoPick = this.checked; try { localStorage.setItem("sg_auto", autoPick ? "1" : "0"); } catch (e) {} var at = $("autoToggle"); if (at) at.checked = autoPick; };
+    $("rotOkBtn").onclick = confirmRotate;
     $("pauseBtn").onclick = function () { if (state === "playing") pauseGame(); else if (state === "paused") resumeGame(); };
     $("resumeBtn").onclick = resumeGame;
     $("pauseRestartBtn").onclick = newGame;
