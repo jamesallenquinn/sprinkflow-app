@@ -16,7 +16,9 @@
   <link rel="stylesheet" href="../styles.css" />
   <style>
     html, body { overscroll-behavior:none; }
-    .sg-wrap { max-width:480px; margin:0 auto; padding:0 12px calc(10px + env(safe-area-inset-bottom,0px)); display:flex; flex-direction:column; }
+    body { -webkit-user-select:none; -moz-user-select:none; user-select:none; -webkit-touch-callout:none; }
+    .sg-wrap { max-width:480px; margin:0 auto; padding:0 12px calc(10px + env(safe-area-inset-bottom,0px)); display:flex; flex-direction:column; touch-action:manipulation; }
+    .sg-stage, canvas#game { touch-action:none; }
     .sg-hud { display:flex; align-items:center; gap:8px; margin:6px 0 8px; }
     .sg-hud .pill { flex:1; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:7px 8px; text-align:center; }
     .sg-hud .k { font:600 .58rem/1 Inter; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); }
@@ -128,7 +130,9 @@
     var W = 360, H = 430, S = 360, dpr = 1, gap = 70, coreR = 30;
 
     function resize() {
-      var w = Math.min(canvas.parentElement.clientWidth, 460);
+      var pw = (canvas.parentElement && canvas.parentElement.clientWidth) || 0;
+      if (pw < 50) pw = Math.min((window.innerWidth || 360) - 24, 460);
+      var w = Math.min(pw, 460);
       var h = Math.round(w * 1.2);
       W = w; H = h; S = Math.min(W, H);
       dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -225,14 +229,24 @@
         }
         if (e.hp <= 0) {
           score += e.boss ? 600 : 10 + wave;
-          for (var p = 0; p < (e.boss ? 40 : 8); p++) { var an = Math.random() * Math.PI * 2, sp = 40 + Math.random() * 120; particles.push({ x: e.x, y: e.y, vx: Math.cos(an) * sp, vy: Math.sin(an) * sp, life: 0.4 + Math.random() * 0.3, r: 2 + Math.random() * 2, c: "#9be8ff" }); }
+          for (var p = 0; p < (e.boss ? 46 : 12); p++) { var an = Math.random() * Math.PI * 2, sp = 50 + Math.random() * 150, lf = 0.4 + Math.random() * 0.35; particles.push({ x: e.x, y: e.y, vx: Math.cos(an) * sp, vy: Math.sin(an) * sp, life: lf, max: lf, r: 2 + Math.random() * 2.6, c: "#cdf2ff", spray: true }); }
           enemies.splice(i, 1); hud();
           if (e.boss) { bossAlive = false; win(); return; }
           continue;
         }
       }
-      // spray particles from sprinklers
-      if (spraying) for (var a2 = 0; a2 < act.length; a2++) { var s2 = act[a2]; if (Math.random() < (s2.up ? 0.9 : 0.6)) { var an2 = Math.random() * Math.PI * 2, rr = Math.random() * sprayRadius(s2); particles.push({ x: s2.x, y: s2.y, vx: Math.cos(an2) * 60, vy: Math.sin(an2) * 60, life: rr / (sprayRadius(s2)) * 0.4 + 0.1, r: 1.5 + Math.random() * 2, c: "#6fd6f2" }); } }
+      // spray droplets from sprinklers
+      if (spraying) for (var a2 = 0; a2 < act.length; a2++) {
+        var s2 = act[a2], R = sprayRadius(s2), nd = s2.up ? 4 : 3;
+        for (var d = 0; d < nd; d++) {
+          if (particles.length > 540) break;
+          var an2 = Math.random() * Math.PI * 2;
+          var lifeD = 0.30 + Math.random() * 0.30;
+          var reach = R * (0.45 + Math.random() * 0.55);
+          var spd2 = reach / lifeD;
+          particles.push({ x: s2.x + Math.cos(an2) * R * 0.12, y: s2.y + Math.sin(an2) * R * 0.12, vx: Math.cos(an2) * spd2, vy: Math.sin(an2) * spd2, life: lifeD, max: lifeD, r: 1.6 + Math.random() * 2.4, c: "#a6e9ff", spray: true });
+        }
+      }
       // particles
       for (var q = particles.length - 1; q >= 0; q--) { var pt = particles[q]; pt.life -= dt; if (pt.life <= 0) { particles.splice(q, 1); continue; } pt.x += pt.vx * dt; pt.y += pt.vy * dt; }
       // flash decay
@@ -325,8 +339,17 @@
         if (en.boss) { var bw = en.sz * 2.4, bx = en.x - bw / 2, by = en.y - en.sz * 1.5; ctx.fillStyle = "#3a2027"; ctx.fillRect(bx, by, bw, 5); ctx.fillStyle = "#ff5a4f"; ctx.fillRect(bx, by, bw * (en.hp / en.max), 5); }
         else if (en.hp < en.max) { var w2 = en.sz * 1.6, x2 = en.x - w2 / 2, y2 = en.y - en.sz * 1.1; ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.fillRect(x2, y2, w2, 3); ctx.fillStyle = "#ffb03a"; ctx.fillRect(x2, y2, w2 * (en.hp / en.max), 3); }
       }
-      // particles
-      for (var p = 0; p < particles.length; p++) { var pt = particles[p]; ctx.globalAlpha = Math.max(0, Math.min(1, pt.life * 2.4)); ctx.fillStyle = pt.c; ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI * 2); ctx.fill(); }
+      // water droplets (streak + bright head)
+      ctx.lineCap = "round";
+      for (var p = 0; p < particles.length; p++) {
+        var pt = particles[p];
+        var a = Math.max(0, Math.min(1, pt.max ? pt.life / pt.max : pt.life * 2.4));
+        var tx = pt.x - pt.vx * 0.02, ty = pt.y - pt.vy * 0.02;
+        ctx.globalAlpha = a * 0.6; ctx.strokeStyle = pt.c; ctx.lineWidth = pt.r;
+        ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(pt.x, pt.y); ctx.stroke();
+        ctx.globalAlpha = a; ctx.fillStyle = "#ecfbff";
+        ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r * 0.7, 0, Math.PI * 2); ctx.fill();
+      }
       ctx.globalAlpha = 1;
     }
 
@@ -348,7 +371,8 @@
     $("winAgainBtn").onclick = newGame;
     $("cardUnlock").onclick = function () { if (state === "upgrade") chooseUnlock(); };
     $("cardWater").onclick = function () { if (state === "upgrade") chooseWater(); };
-    document.addEventListener("visibilitychange", function () { if (document.hidden) { last = 0; holding = false; } });
+    document.addEventListener("visibilitychange", function () { if (document.hidden) { last = 0; holding = false; } else { resize(); if (state !== "playing") render(0); } });
+    window.addEventListener("load", function () { resize(); if (state !== "playing") render(0); });
 
     resize(); render(0);
     requestAnimationFrame(loop);
