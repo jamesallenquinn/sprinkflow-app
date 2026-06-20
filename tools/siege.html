@@ -99,6 +99,8 @@
     .sg-hollybtn[hidden] { display:none; }
     .sg-ffbtn { right:60px; width:auto; min-width:42px; padding:0 10px; font:800 .82rem 'Space Grotesk',sans-serif; gap:0; }
     .sg-ffbtn.on { border-color:var(--accent); color:var(--accent); }
+    .sg-musicbtn { left:10px; right:auto; }
+    .sg-musicbtn.on { border-color:var(--water); color:var(--water); }
     /* WoW-style action bar (usable abilities) at bottom center */
     .sg-abar { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); z-index:6; display:flex; gap:10px; }
     .sg-abar[hidden] { display:none; }
@@ -156,6 +158,7 @@
       <canvas id="game" width="360" height="430"></canvas>
       <button id="pauseBtn" class="sg-pausebtn" aria-label="Pause" hidden>❚❚</button>
       <button id="ffBtn" class="sg-pausebtn sg-ffbtn" aria-label="Fast forward" hidden>▶▶</button>
+      <button id="musicBtn" class="sg-pausebtn sg-musicbtn" aria-label="Toggle sound">🔇</button>
       <div class="sg-abar" id="abar" hidden>
         <button class="sg-ability" id="overloadBtn" aria-label="Overload Fire Pump">⚡<div class="cd" id="overloadCdEl" hidden></div></button>
         <button class="sg-ability" id="hollywoodBtn" aria-label="Hollywood Scene" hidden>🎬<div class="badge" id="hollyBadge"></div></button>
@@ -480,6 +483,7 @@
       updateAbar();
       dryFlash = anyFire && !hw && water <= 0;
       var spraying = anyFire;
+      if (sprayGain) { var sg2 = (soundOn && spraying) ? Math.min(0.2, 0.05 + totalQ * 0.0006) : 0; sprayGain.gain.value += (sg2 - sprayGain.gain.value) * Math.min(1, dt * 8); }   // spray hiss tracks GPM
       for (i2 = 0; i2 < act.length; i2++) { var hh = act[i2], tt = typeOf(hh); if (tt === "lawn") hh.aim = (hh.aim || 0) + dt * 1.1; else if (tt === "foam") hh.foamOpen = (hh.foamOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.foamOpen || 0)) * Math.min(1, dt * 8); else if (tt === "moon") hh.moonOpen = (hh.moonOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.moonOpen || 0)) * Math.min(1, dt * 8); }  // lawn sweeps; foam & moon open/close
       var dispP = Math.round(spraying ? Math.max(FLOW_FLOOR, supplyP(totalQ)) : supplyP(0)), pumpTxt = pumpLevel > 0 ? " · Pump " + pumpLevel : "";
       $("psiRead").textContent = spraying
@@ -533,6 +537,7 @@
           }
         }
         if (e.hp <= 0) {
+          extinguishSfx();
           score += e.boss ? 600 : e.type === "elo" ? 30 + wave : e.type === "splitter" ? 8 + wave : 10 + wave;
           var burstC = e.type === "elo" ? "#bfe0ff" : e.type === "splitter" ? "#bdf7c4" : "#cdf2ff";
           for (var p = 0; p < (e.boss ? 46 : 12); p++) { var an = Math.random() * Math.PI * 2, sp = 50 + Math.random() * 150, lf = 0.4 + Math.random() * 0.35; particles.push({ x: e.x, y: e.y, vx: Math.cos(an) * sp, vy: Math.sin(an) * sp, life: lf, max: lf, r: 2 + Math.random() * 2.6, c: burstC, spray: true }); }
@@ -1037,6 +1042,7 @@
       ctx.globalAlpha = 1;
     }
     function render(t) {
+      if (typeof updateMusic === "function") updateMusic();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
       ctx.save();
@@ -1154,7 +1160,48 @@
       et.onchange = function () { aw.hidden = !et.checked; try { localStorage.setItem("sg_easy", et.checked ? "1" : "0"); } catch (e) {} };
       at.onchange = function () { try { localStorage.setItem("sg_auto", at.checked ? "1" : "0"); } catch (e) {} };
     })();
-    $("playBtn").onclick = newGame;
+    // ---- audio: optional looping music (per level) + procedural SFX (spray hiss, flame extinguish) ----
+    var soundOn = false; try { soundOn = localStorage.getItem("sg_sound") === "1"; } catch (e) {}
+    var musicTracks = [new Audio("../assets/music-level1.mp3"), new Audio("../assets/music-level2.mp3")];
+    musicTracks.forEach(function (a) { a.loop = true; a.preload = "none"; a.volume = 0; });
+    var curTrack = -1, actx = null, noiseBuf = null, sprayGain = null, lastExt = 0;
+    function ensureAudio() {
+      if (actx) return;
+      try {
+        actx = new (window.AudioContext || window.webkitAudioContext)();
+        noiseBuf = actx.createBuffer(1, Math.floor(actx.sampleRate * 1.5), actx.sampleRate);
+        var d = noiseBuf.getChannelData(0); for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+        var src = actx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+        var lp = actx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 1150;
+        sprayGain = actx.createGain(); sprayGain.gain.value = 0;
+        src.connect(lp); lp.connect(sprayGain); sprayGain.connect(actx.destination); src.start();
+      } catch (e) { actx = null; }
+    }
+    function extinguishSfx() {
+      if (!soundOn || !actx || nowT - lastExt < 45) return; lastExt = nowT;        // throttle bursts
+      var t0 = actx.currentTime, src = actx.createBufferSource(); src.buffer = noiseBuf;
+      var bp = actx.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 0.8;
+      bp.frequency.setValueAtTime(2400, t0); bp.frequency.exponentialRampToValueAtTime(420, t0 + 0.18);
+      var g = actx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.45, t0 + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.2);
+      src.connect(bp); bp.connect(g); g.connect(actx.destination); src.start(t0); src.stop(t0 + 0.22);
+    }
+    function musicForWave(n) { return n >= Math.ceil(BOSS_WAVE / 2) ? 1 : 0; }       // waves 1-7 → track 1, 8+ & boss → track 2
+    function updateMusic() {
+      if (!soundOn || state !== "playing") { musicTracks.forEach(function (a) { try { a.pause(); } catch (e) {} }); return; }
+      var want = bossAlive ? 1 : musicForWave(wave);
+      if (want !== curTrack) { musicTracks.forEach(function (a, i) { if (i !== want) { try { a.pause(); a.currentTime = 0; } catch (e) {} } }); curTrack = want; }
+      var tr = musicTracks[want]; tr.volume = 0.4; if (tr.paused) tr.play().catch(function () {});
+    }
+    function setSound(on) {
+      soundOn = on; try { localStorage.setItem("sg_sound", on ? "1" : "0"); } catch (e) {}
+      if (on) { ensureAudio(); if (actx && actx.state === "suspended") actx.resume(); }
+      else { musicTracks.forEach(function (a) { try { a.pause(); } catch (e) {} }); if (sprayGain) sprayGain.gain.value = 0; }
+      var b = $("musicBtn"); if (b) { b.textContent = on ? "🎵" : "🔇"; b.classList.toggle("on", on); }
+      updateMusic();
+    }
+    $("musicBtn").onclick = function () { setSound(!soundOn); };
+    setSound(soundOn);   // reflect saved pref on the icon (won't autoplay until a gesture)
+    $("playBtn").onclick = function () { if (soundOn) { ensureAudio(); if (actx && actx.state === "suspended") actx.resume(); } newGame(); };
     $("againBtn").onclick = newGame;
     $("winAgainBtn").onclick = newGame;
     $("hollywoodBtn").onclick = activateHollywood;
