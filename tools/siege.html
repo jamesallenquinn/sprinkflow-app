@@ -401,7 +401,7 @@
       if (hollywoodT > 0) { hollywoodT -= dt; if (hollywoodT <= 0) updateHollywoodBtn(); }
       dryFlash = anyFire && !hw && water <= 0;
       var spraying = anyFire;
-      for (i2 = 0; i2 < act.length; i2++) { var hh = act[i2], tt = typeOf(hh); if (tt === "lawn") hh.aim = (hh.aim || 0) + dt * 1.1; else if (tt === "foam") hh.foamOpen = (hh.foamOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.foamOpen || 0)) * Math.min(1, dt * 8); }  // lawn cone sweeps; foam opens/closes
+      for (i2 = 0; i2 < act.length; i2++) { var hh = act[i2], tt = typeOf(hh); if (tt === "lawn") hh.aim = (hh.aim || 0) + dt * 1.1; else if (tt === "foam") hh.foamOpen = (hh.foamOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.foamOpen || 0)) * Math.min(1, dt * 8); else if (tt === "moon") hh.moonOpen = (hh.moonOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.moonOpen || 0)) * Math.min(1, dt * 8); }  // lawn sweeps; foam & moon open/close
       var dispP = Math.round(spraying ? supplyP(totalQ) : supplyP(0)), pumpTxt = pumpLevel > 0 ? " · Pump " + pumpLevel : "";
       $("psiRead").textContent = spraying
         ? "Residual: " + dispP + " PSI @ " + Math.round(totalQ) + " GPM" + (dryFlash ? " · TANK DRY" : "") + pumpTxt
@@ -562,7 +562,7 @@
       var best = null, bd = 1e9;
       for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (!selectEligible(s)) continue; var d = Math.hypot(tx - s.x, ty - s.y); if (d < bd) { bd = d; best = s; } }
       if (best && bd < gap * 0.7) {
-        if (selectKind === "unlock") { best.state = "active"; best.kTier = 0; best.q = 0; best.ec = false; best.type = pendingType; best.aim = 0; best.foamOpen = 0; if (pendingType === "corridor") best.axis = Math.random() < 0.5 ? "x" : "y"; if (pendingType !== "standard") { maxWater += SPECIAL_WATER_BONUS; water = Math.min(maxWater, water + SPECIAL_WATER_BONUS); } }
+        if (selectKind === "unlock") { best.state = "active"; best.kTier = 0; best.q = 0; best.ec = false; best.type = pendingType; best.aim = 0; best.foamOpen = 0; best.moonOpen = 0; if (pendingType === "corridor") best.axis = Math.random() < 0.5 ? "x" : "y"; if (pendingType !== "standard") { maxWater += SPECIAL_WATER_BONUS; water = Math.min(maxWater, water + SPECIAL_WATER_BONUS); } }
         else { best.ec = true; }
         best.flash = 0.6; selectKind = null; $("selectPrompt").hidden = true; afterChoice();
       }
@@ -599,7 +599,7 @@
       // body per type
       if (ty === "foam") drawFoamHead(x, y, r, s);
       else if (ty === "lawn") drawLawnHead(x, y, r, s);
-      else if (ty === "moon") drawMoonHead(x, y, r);
+      else if (ty === "moon") drawMoonHead(x, y, r, s);
       else if (ty === "corridor") drawCorridorHead(x, y, r, s);
       else if (ty === "laser") drawLaserHead(x, y, r, s);
       else drawDeflector(x, y, r, s);
@@ -771,8 +771,33 @@
       ctx.restore();
     }
     function drawSparkle(x, y, s) { ctx.fillStyle = "#eaf2ff"; ctx.beginPath(); ctx.moveTo(x, y - s); ctx.quadraticCurveTo(x + s * 0.16, y - s * 0.16, x + s, y); ctx.quadraticCurveTo(x + s * 0.16, y + s * 0.16, x, y + s); ctx.quadraticCurveTo(x - s * 0.16, y + s * 0.16, x - s, y); ctx.quadraticCurveTo(x - s * 0.16, y - s * 0.16, x, y - s); ctx.closePath(); ctx.fill(); }
-    // moon head — silver/lavender lunar ring, blue-glowing slots, starry crescent center (matches owner art)
-    function drawMoonHead(x, y, r) {
+    // moon head — cross-fades to an energized glow while spraying (s.moonOpen 0..1)
+    function drawMoonHead(x, y, r, s) {
+      var a = s ? (s.moonOpen || 0) : 0;
+      drawMoonClosed(x, y, r);
+      if (a > 0.002) drawMoonGlow(x, y, r, Math.min(1, a));
+    }
+    // energized overlay: outer aura, neon slots, glowing crescent + star sparkles
+    function drawMoonGlow(x, y, r, a) {
+      var k, si;
+      ctx.save(); ctx.globalAlpha = a;
+      var au = ctx.createRadialGradient(x, y, r * 0.85, x, y, r * 1.3); au.addColorStop(0, "rgba(90,160,255,0)"); au.addColorStop(0.5, "rgba(90,160,255,0.5)"); au.addColorStop(1, "rgba(90,160,255,0)");
+      ctx.fillStyle = au; ctx.beginPath(); ctx.arc(x, y, r * 1.3, 0, Math.PI * 2); ctx.fill();
+      ctx.lineCap = "round"; ctx.shadowColor = "#5aa0ff";
+      for (si = 0; si < 8; si++) { var ang = si * Math.PI / 4 - Math.PI / 2, x1 = x + Math.cos(ang) * r * 0.4, y1 = y + Math.sin(ang) * r * 0.4, x2 = x + Math.cos(ang) * r * 0.64, y2 = y + Math.sin(ang) * r * 0.64; ctx.shadowBlur = r * 0.18; ctx.lineWidth = r * 0.05; ctx.strokeStyle = "#bfe0ff"; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
+      ctx.shadowBlur = 0; ctx.lineCap = "butt";
+      var cg = ctx.createRadialGradient(x, y, 0, x, y, r * 0.34); cg.addColorStop(0, "rgba(120,190,255,0.7)"); cg.addColorStop(1, "rgba(60,120,255,0)");
+      ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(x, y, r * 0.34, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowColor = "#5aa0ff"; ctx.shadowBlur = r * 0.22;
+      ctx.save(); ctx.beginPath(); ctx.arc(x, y, r * 0.31, 0, Math.PI * 2); ctx.clip();
+      ctx.fillStyle = "#eaf2ff"; ctx.beginPath(); ctx.arc(x - r * 0.05, y, r * 0.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#0b1840"; ctx.beginPath(); ctx.arc(x + r * 0.07, y - r * 0.02, r * 0.18, 0, Math.PI * 2); ctx.fill();
+      ctx.restore(); ctx.shadowBlur = 0;
+      for (k = 0; k < 4; k++) { var sa = k * Math.PI / 2 - Math.PI / 2; ctx.shadowColor = "#9cc8ff"; ctx.shadowBlur = r * 0.16; drawSparkle(x + Math.cos(sa) * r * 0.87, y + Math.sin(sa) * r * 0.87, r * 0.11); ctx.shadowBlur = 0; }
+      ctx.restore();
+    }
+    // moon head CLOSED — silver/lavender lunar ring, blue slots, starry crescent center (matches owner art)
+    function drawMoonClosed(x, y, r) {
       var k, si, t;
       // outer silver rim band
       ctx.fillStyle = brass(ctx, x, y, r, ["#c9ccd6", "#7e8290"]); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
