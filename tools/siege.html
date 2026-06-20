@@ -857,8 +857,12 @@
 
     // ---- rendering ----
     function loadImg(src) { var im = new Image(); im.src = src; return im; }
-    var IMG = { plug: loadImg("../assets/pipe-plug.png"), bg1: loadImg("../assets/bg-act1.png"), bg2: loadImg("../assets/bg-act2.png"), bg3: loadImg("../assets/bg-act3.png") };
+    var IMG = { plug: loadImg("../assets/pipe-plug.png"), bg1: loadImg("../assets/bg-act1.png"), bg2: loadImg("../assets/bg-act2.png"), bg3: loadImg("../assets/bg-act3.png"),
+      laser: loadImg("../assets/head-laser.png"), laserOn: loadImg("../assets/head-laser-on.png"), foam: loadImg("../assets/head-foam.png"), foamOpen: loadImg("../assets/head-foam-open.png"),
+      lawn: loadImg("../assets/head-lawn.png"), corridor: loadImg("../assets/head-corridor.png"), moon: loadImg("../assets/head-moon.png"), moonOn: loadImg("../assets/head-moon-on.png") };
     function imgReady(im) { return im && im.complete && im.naturalWidth > 0; }
+    var HEAD_IMG = 2.9;   // image draw box = HEAD_IMG × head radius (tune for fit)
+    function drawHeadImg(im, x, y, r, rot) { var d = r * HEAD_IMG; ctx.save(); ctx.translate(x, y); if (rot) ctx.rotate(rot); ctx.drawImage(im, -d / 2, -d / 2, d, d); ctx.restore(); }
     function brass(ctx, x, y, r, grad) { var g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r); g.addColorStop(0, grad[0]); g.addColorStop(1, grad[1]); return g; }
     function drawSprinkler(s) {
       var x = s.x, y = s.y, r = gap * 0.32 * (0.5 + 0.5 * ((s.kTier || 0) / (KLADDER.length - 1)));
@@ -915,8 +919,9 @@
       ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = fin.edge; ctx.stroke();
       ctx.fillStyle = "#0a0e12"; ctx.beginPath(); ctx.arc(x, y, r * 0.16, 0, Math.PI * 2); ctx.fill();
     }
-    // laser head — chrome gear deflector with red-glowing teardrop slots + bolted hub & red orifice ring (matches owner art)
+    // laser head — uses art (idle / activated) when loaded, else the vector below
     function drawLaserHead(x, y, r, s) {
+      if (imgReady(IMG.laser)) { drawHeadImg((s.q > 0 && imgReady(IMG.laserOn)) ? IMG.laserOn : IMG.laser, x, y, r); return; }
       var on = s.q > 0, glow = on ? 1 : (0.42 + 0.26 * Math.sin(nowT * 0.02)), teeth = 16, step = Math.PI * 2 / teeth, rRoot = r * 0.84, ti, pi, si;
       // chrome gear body
       ctx.beginPath();
@@ -956,6 +961,7 @@
     // foam head — cross-fades between closed (solid) and open/discharging by s.foamOpen (0..1)
     function drawFoamHead(x, y, r, s) {
       var t = s.foamOpen || 0;
+      if (imgReady(IMG.foam)) { drawHeadImg(IMG.foam, x, y, r); if (t > 0.002 && imgReady(IMG.foamOpen)) { ctx.globalAlpha = Math.min(1, t); drawHeadImg(IMG.foamOpen, x, y, r); ctx.globalAlpha = 1; } return; }
       drawFoamClosed(x, y, r);                                   // always the opaque base
       if (t > 0.002) { ctx.globalAlpha = Math.min(1, t); drawFoamOpen(x, y, r); ctx.globalAlpha = 1; }
     }
@@ -1001,6 +1007,7 @@
     }
     // lawn head — dark segmented body w/ green accents + a side nozzle barrel that points along s.aim (lines up with the spray cone). Whole head rotates with aim.
     function drawLawnHead(x, y, r, s) {
+      if (imgReady(IMG.lawn)) { drawHeadImg(IMG.lawn, x, y, r, s.aim || 0); return; }   // art rotates to aim
       var aim = s.aim || 0, k;
       ctx.save(); ctx.translate(x, y); ctx.rotate(aim);
       // --- nozzle barrel (drawn first so the body edge overlaps its base), points +x = aim ---
@@ -1033,6 +1040,7 @@
     }
     // corridor head — elongated notched white deflector + center orifice, stretched along the firing axis (matches owner art)
     function drawCorridorHead(x, y, r, s) {
+      if (imgReady(IMG.corridor)) { drawHeadImg(IMG.corridor, x, y, r, corridorAxis(s) === "y" ? Math.PI / 2 : 0); return; }
       var ax = corridorAxis(s), L = r * 1.78, H = r * 0.92, sh = L - H, un = sh * 0.6, nw = L * 0.075, nd = H * 0.5;
       ctx.save(); ctx.translate(x, y); if (ax === "y") ctx.rotate(Math.PI / 2);
       function edge(dir) { // dir=1: top edge L→R at y=-H ; dir=-1: bottom edge R→L at y=+H (notch cuts inward)
@@ -1055,6 +1063,7 @@
     // moon head — cross-fades to an energized glow while spraying (s.moonOpen 0..1)
     function drawMoonHead(x, y, r, s) {
       var a = s ? (s.moonOpen || 0) : 0;
+      if (imgReady(IMG.moon)) { drawHeadImg(IMG.moon, x, y, r); if (a > 0.002 && imgReady(IMG.moonOn)) { ctx.globalAlpha = Math.min(1, a); drawHeadImg(IMG.moonOn, x, y, r); ctx.globalAlpha = 1; } return; }
       drawMoonClosed(x, y, r);
       if (a > 0.002) drawMoonGlow(x, y, r, Math.min(1, a));
     }
