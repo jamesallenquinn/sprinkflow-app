@@ -226,20 +226,23 @@
 
     // --- hydraulics: each head flows Q = K·√P; supply pressure sags as total flow rises ---
     var KLADDER = [5.6, 8.0, 11.2, 14.0, 16.8, 22.4, 25.2];   // K-factor per upgrade tier
-    var P_STATIC = 7;                          // psi at no flow, no pump (weak supply)
+    var P_STATIC = 10;                         // psi at no flow, no pump (start supply: 10 static, ~7 @ 25 gpm)
+    var FLOW_FLOOR = 7;                         // a sprinkler always flows at >= this pressure (hard floor)
+    var K_PHASE_BOOST = 6;                      // psi added to supply per K-ladder tier reached (max active kTier) — bigger heads earn more pressure
     var BASE_COV = 0.95;                        // FIXED spray radius (× gap) — K-factor & pressure raise OUTPUT, not radius
     var EC_MIN = 1.15, EC_MAX = 1.9;            // Extended Coverage radius multiplier; scales with supply pressure (pump) min→max
     var PUMP_MAX = 3;                          // fire-pump tiers; maxed pump ≈ 175 psi @ 1000 gpm (for K25.2)
     var TANK_PCT = 0.30;                        // tank upgrades scale by % of CURRENT capacity → compounds to massive end-game tanks
     var PUMP_OFFER_CHANCE = 0.45, PUMP_FINAL_CHANCE = 0.10;  // pump rarer than other cards; final tier (lvl2→3) very rare
     var FOAM_PILE_LIFE = 5.5;                  // foam piles persist (sec); flames wading through take damage + slow (no damage from the spray itself)
-    var PUMP_HEAD = 79.33;                     // churn pressure added per pump tier (0→7, 3→245)
-    var DROOP_C = 0.099, DROOP_N = 0.95;       // supply droop: P = churn − DROOP_C·Q^DROOP_N
+    var PUMP_HEAD = 80;                        // churn pressure added per pump tier
+    var DROOP_C = 0.141, DROOP_N = 0.95;       // supply droop: P = churn − DROOP_C·Q^DROOP_N (tuned: 10 psi → 7 psi at 25 gpm)
     var DMG_PER_GPM = 2.0, TANK_DRAIN = 1.2, TANK_REGEN = 26, BOSS_WAVE = 15;
     var SPECIAL_WATER_BONUS = 120;  // tank bump when a special head is installed — ~most of its auto-spray draw, intentionally a touch short
     // supply = static + pump churn, drooping with flow; ~3 psi @ 50 gpm with no pump,
     // ~175 psi @ 1000 gpm at full pump (the operating point for three K25.2 heads).
-    function supplyP(Q) { var p = (P_STATIC + pumpLevel * PUMP_HEAD) - DROOP_C * Math.pow(Q, DROOP_N); return p < 0 ? 0 : p; }
+    function phaseBoost() { var mx = 0; for (var i = 0; i < slots.length; i++) if (slots[i].state === "active" && slots[i].kTier > mx) mx = slots[i].kTier; return mx * K_PHASE_BOOST; }
+    function supplyP(Q) { var p = (P_STATIC + pumpLevel * PUMP_HEAD + phaseBoost()) - DROOP_C * Math.pow(Q, DROOP_N); return p < 0 ? 0 : p; }
     function headFlow(s, P) { return KLADDER[s.kTier] * Math.sqrt(P > 0 ? P : 0); }
     function solveOp(act) {
       var P = supplyP(0), i, Q;
@@ -280,7 +283,7 @@
     function coverageRadius(s) {
       var base = gap * BASE_COV;
       if (!s.ec) return base;
-      var norm = Math.max(0, Math.min(1, (supplyP(0) - P_STATIC) / (PUMP_MAX * PUMP_HEAD)));   // 0 at no pump → 1 at max pump
+      var norm = Math.max(0, Math.min(1, pumpLevel / PUMP_MAX));   // EC radius scales with PUMP pressure only (0 at no pump → 1 at max pump)
       return base * (EC_MIN + (EC_MAX - EC_MIN) * norm);
     }
     function sprayRadius(s) { return coverageRadius(s); }
@@ -402,17 +405,18 @@
         sh.firing = fire; if (fire) firing.push(sh);
       }
       var op = firing.length ? solveOp(firing) : { P: supplyP(0), Q: 0 };
+      var Pop = Math.max(FLOW_FLOOR, op.P);     // every sprinkler flows at >= 7 psi (hard floor)
       var eff = (water > 0 || hw) ? 1 : 0.10;   // empty tank → 10% trickle (full during Hollywood)
-      var totalQ = 0;
-      for (i2 = 0; i2 < act.length; i2++) { var s2 = act[i2]; s2.q = s2.firing ? headFlow(s2, op.P) * eff : 0; totalQ += s2.q; }
+      var totalQ = 0, drainQ = 0;
+      for (i2 = 0; i2 < act.length; i2++) { var s2 = act[i2]; s2.q = s2.firing ? headFlow(s2, Pop) * eff : 0; totalQ += s2.q; drainQ += s2.q * (typeOf(s2) === "standard" ? 1 : 0.5); }  // auto heads use 50% less water
       var anyFire = totalQ > 0;
-      if (anyFire && !hw) { water -= totalQ * TANK_DRAIN * dt; if (water < 0) water = 0; }
+      if (anyFire && !hw) { water -= drainQ * TANK_DRAIN * dt; if (water < 0) water = 0; }
       else if (!anyFire) { water += TANK_REGEN * tankFillMult * dt; if (water > maxWater) water = maxWater; }
       if (hollywoodT > 0) { hollywoodT -= dt; if (hollywoodT <= 0) updateHollywoodBtn(); }
       dryFlash = anyFire && !hw && water <= 0;
       var spraying = anyFire;
       for (i2 = 0; i2 < act.length; i2++) { var hh = act[i2], tt = typeOf(hh); if (tt === "lawn") hh.aim = (hh.aim || 0) + dt * 1.1; else if (tt === "foam") hh.foamOpen = (hh.foamOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.foamOpen || 0)) * Math.min(1, dt * 8); else if (tt === "moon") hh.moonOpen = (hh.moonOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.moonOpen || 0)) * Math.min(1, dt * 8); }  // lawn sweeps; foam & moon open/close
-      var dispP = Math.round(spraying ? supplyP(totalQ) : supplyP(0)), pumpTxt = pumpLevel > 0 ? " · Pump " + pumpLevel : "";
+      var dispP = Math.round(spraying ? Math.max(FLOW_FLOOR, supplyP(totalQ)) : supplyP(0)), pumpTxt = pumpLevel > 0 ? " · Pump " + pumpLevel : "";
       $("psiRead").textContent = spraying
         ? "Residual: " + dispP + " PSI @ " + Math.round(totalQ) + " GPM" + (dryFlash ? " · TANK DRY" : "") + pumpTxt
         : "Static Pressure: " + dispP + " PSI" + pumpTxt;
