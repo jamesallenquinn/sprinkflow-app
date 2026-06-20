@@ -872,3 +872,95 @@ html[data-theme="plain-light"] .curve-card text {
     grid-template-columns: 1fr;
   }
 }
+
+/* ===== Collapsible sections (calc trace + source preview) ===== */
+details.collapser > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; }
+details.collapser > summary::-webkit-details-marker { display: none; }
+details.collapser > summary p { margin: 0; }
+details.collapser > summary > span { margin-left: auto; }
+details.collapser > summary::after { content: "\25BE"; color: var(--muted); font-size: 0.8rem; transition: transform 0.15s ease; }
+details.collapser[open] > summary::after { transform: rotate(180deg); }
+details.input-trace { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 16px; }
+details.input-trace[open] > summary { margin-bottom: 12px; }
+details.source-preview-section[open] > summary { margin-bottom: 12px; }
+
+/* ===== Mobile UX overhaul (phones) ===== */
+@media (max-width: 640px) {
+  /* tighter chrome */
+  .topbar { padding: 12px 14px; }
+  .brand img { height: 32px; width: 32px; }
+  .brand h1 { font-size: 1.12rem; }
+  .brand p { font-size: 0.66rem; }
+  .analysis-shell { padding: 12px; gap: 14px; }
+  .input-pane { padding: 14px; }
+  .output-pane { padding: 12px; gap: 12px; }
+  .results-section { padding: 12px; }
+
+  /* inputs: single column, large tap targets, 16px to stop iOS zoom */
+  .field-grid { grid-template-columns: 1fr; gap: 12px; }
+  label { font-size: 0.86rem; }
+  input, select { min-height: 48px; font-size: 16px; padding: 10px 12px; }
+  button { min-height: 44px; }
+  .input-actions button { min-height: 40px; padding: 8px 14px; }
+  .switch-row { grid-template-columns: 1fr; }
+  .switch-row label { min-height: 50px; }
+
+  /* calc trace: shorter when expanded */
+  details.input-trace pre { min-height: 110px; max-height: 46vh; }
+
+  /* summary: compact 3-up, pinned under the back bar */
+  .summary-band {
+    grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding: 10px 10px;
+    position: sticky; top: calc(env(safe-area-inset-top, 0px) + 50px); z-index: 30;
+  }
+  .summary-band p { font-size: 0.58rem; line-height: 1.2; }
+  .summary-band strong { font-size: 1.12rem; }
+  .summary-band > div:first-child strong { font-size: 1.42rem; color: var(--gold); }
+
+  /* filters: horizontal scroll chip rail */
+  .criteria-toolbar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: 4px; margin-bottom: 10px; }
+  .criteria-toolbar::-webkit-scrollbar { display: none; }
+  .toolbar-label { flex: 0 0 auto; }
+  .filter-chip { flex: 0 0 auto; min-height: 38px; }
+
+  /* ===== results TABLE -> CARDS ===== */
+  .table-wrap { overflow: visible; }
+  table { min-width: 0; table-layout: auto; }
+  table colgroup, thead { display: none; }
+  table, tbody, tr, td { display: block; width: 100%; }
+  tbody tr[data-candidate-id] {
+    background: #121b22; border: 1px solid var(--line); border-radius: 12px;
+    padding: 13px 14px; margin-bottom: 12px;
+  }
+  tbody tr.best-row { border-color: rgba(92, 196, 139, 0.55); background: rgba(92, 196, 139, 0.08); outline: none; }
+  tbody tr.selected-row { box-shadow: inset 4px 0 0 var(--gold); }
+  td { border: 0; padding: 0; font-size: 0.92rem; }
+  td.option-cell { margin-bottom: 8px; }
+  td.option-cell strong { font-size: 1.04rem; line-height: 1.3; }
+  td.basis-cell { margin: 0 0 10px; padding-bottom: 10px; border-bottom: 1px dashed var(--line); }
+  td.basis-cell > strong { font-size: 0.92rem; }
+  td.number-cell {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 5px 0; white-space: normal;
+  }
+  td.number-cell::before { color: var(--muted); font-size: 0.8rem; font-weight: 600; }
+  tr td:nth-of-type(3)::before { content: "Ceiling demand"; }
+  tr td:nth-of-type(4)::before { content: "In-rack demand"; }
+  tr td:nth-of-type(5)::before { content: "Hose allowance"; }
+  tr td:nth-of-type(6) { margin-top: 4px; padding-top: 9px; border-top: 1px solid var(--line); }
+  tr td:nth-of-type(6)::before { content: "Total demand"; color: var(--ink); font-weight: 700; font-size: 0.84rem; }
+  tr td:nth-of-type(6) strong { color: var(--gold); font-size: 1.22rem; }
+
+  /* pager: full-width touch buttons */
+  .criteria-pager { gap: 8px; justify-content: space-between; }
+  .criteria-pager button { min-height: 44px; flex: 1 1 0; }
+  .criteria-pager span { flex: 0 0 auto; text-align: center; min-width: 92px; }
+
+  /* source preview: stack */
+  .preview-summary { grid-template-columns: 1fr; }
+}
+
+/* keep the table-as-cards readable in light theme too */
+@media (max-width: 640px) {
+  html[data-theme="plain-light"] tbody tr[data-candidate-id] { background: #ffffff; border-color: #c2d0dc; }
+  html[data-theme="plain-light"] tbody tr.best-row { background: #eaf6ef; }
+}

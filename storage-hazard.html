@@ -8,7 +8,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./assets/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./assets/logo.png" />
-    <link rel="stylesheet" href="./storage-hazard.css?v=2" />
+    <link rel="stylesheet" href="./storage-hazard.css?v=3" />
     <style>
       /* PWA back bar + mobile guards for the desktop-oriented analyzer */
       .pwa-backbar { position: sticky; top: 0; z-index: 50; display: flex; align-items: center;
@@ -134,13 +134,13 @@
           </label>
         </div>
 
-        <section class="input-trace">
-          <div class="section-heading">
+        <details class="input-trace collapser" open>
+          <summary class="section-heading">
             <p>Calculation Trace</p>
             <span>Copy-ready design text</span>
-          </div>
+          </summary>
           <pre id="calculationTrace"></pre>
-        </section>
+        </details>
       </section>
 
       <section class="output-pane" aria-label="Storage hazard analysis results">
@@ -207,17 +207,28 @@
           </div>
         </section>
 
-        <section class="results-section source-preview-section">
-          <div class="section-heading">
+        <details class="results-section source-preview-section collapser" open>
+          <summary class="section-heading">
             <p>Source Preview</p>
             <span id="sourcePreviewTitle">Selected criteria</span>
-          </div>
+          </summary>
           <div id="sourcePreview" class="source-preview"></div>
-        </section>
+        </details>
 
       </section>
     </main>
 
     <script src="./storage-hazard.js?v=6"></script>
+    <script>
+      /* On phones, start the calc-trace and source-preview collapsed so results lead. */
+      (function () {
+        function collapseForMobile() {
+          if (!window.matchMedia("(max-width: 640px)").matches) return;
+          document.querySelectorAll("details.collapser").forEach(function (d) { d.open = false; });
+        }
+        if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", collapseForMobile);
+        else collapseForMobile();
+      })();
+    </script>
   </body>
 </html>
