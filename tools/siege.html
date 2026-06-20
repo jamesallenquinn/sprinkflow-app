@@ -87,6 +87,8 @@
     .sg-toggle[hidden] { display:none; }
     .sg-easy-ind { position:absolute; right:10px; bottom:10px; z-index:6; background:rgba(13,17,22,.7); border:1px solid var(--line); border-radius:999px; padding:4px 10px; font:700 .66rem Inter; letter-spacing:.04em; color:var(--ok); display:flex; align-items:center; gap:4px; }
     .sg-easy-ind[hidden] { display:none; }
+    .sg-hazard { position:absolute; left:50%; top:46px; transform:translateX(-50%); z-index:6; background:rgba(40,20,8,.82); border:1px solid var(--accent); border-radius:999px; padding:5px 13px; font:700 .68rem Inter; color:var(--accent); white-space:nowrap; box-shadow:0 3px 12px rgba(0,0,0,.4); }
+    .sg-hazard[hidden] { display:none; }
     .sg-psi { font:700 .72rem/1 'Space Grotesk'; letter-spacing:.03em; color:var(--water); text-align:center; padding:3px 0 1px; min-height:14px; }
     .sg-hint { text-align:center; color:var(--muted); font:500 .76rem Inter; padding:8px 0 2px; }
     .sg-pausebtn { position:absolute; top:10px; right:10px; z-index:6; width:42px; height:42px; border-radius:12px; border:1px solid var(--line); background:rgba(13,17,22,.72); backdrop-filter:blur(2px); color:var(--ink); font-size:16px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; }
@@ -170,6 +172,7 @@
       <div id="dpsMeter" class="sg-dps" hidden><div class="sg-dps-avg">AVG <b id="dpsAvg">0</b></div><div class="sg-dps-now"><b id="dpsNum">0</b> DPS</div></div>
       <div id="lowWater" class="sg-lowwater" hidden>💧 LOW WATER!</div>
       <div id="easyInd" class="sg-easy-ind" hidden>🍃 Easy</div>
+      <div id="hazardInd" class="sg-hazard" hidden></div>
 
       <div class="sg-ov" id="pauseOv">
         <div class="ic">❚❚</div>
@@ -212,8 +215,8 @@
       <div class="sg-ov end" id="winOv">
         <button class="sg-btn ghost sg-restart" id="winAgainBtn">↻ Play again</button>
         <div class="ic">🏆</div>
-        <h1>Act 1 <span class="grad">cleared!</span></h1>
-        <p>The boss flame is out and all nine sprinklers held the line. More acts coming soon.</p>
+        <h1>Act 2 <span class="grad">cleared!</span></h1>
+        <p>The Conflagration is out. You used the right head for every fire and held the line. Legendary.</p>
         <div class="sg-final"><div><div class="v gold" id="winScore">0</div><div class="k">Score</div></div></div>
       </div>
     </div>
@@ -297,7 +300,19 @@
     var TANK_PCT = 0.30;                        // tank upgrades scale by % of CURRENT capacity → compounds to massive end-game tanks
     var FOAM_PILE_LIFE = 5.5;                  // foam piles persist (sec); flames wading through take damage + slow (no damage from the spray itself)
     var DROOP_N = 0.95;                        // supply droop exponent: P = static − C·Q^DROOP_N (C derived per level to hit residual@ratedQ)
-    var DMG_PER_GPM = 2.0, TANK_DRAIN = 1.2, TANK_REGEN = 26, BOSS_WAVE = 15;
+    var DMG_PER_GPM = 2.0, TANK_DRAIN = 1.2, TANK_REGEN = 26, BOSS_WAVE = 15, ACT2_BOSS_WAVE = 25, MAX_ACT = 2;
+    function bossWaveFor(a) { return a >= 2 ? ACT2_BOSS_WAVE : BOSS_WAVE; }
+    // Act 2 per-wave hazards
+    var HAZARDS = [
+      { id: "outage", name: "⚡ Power Outage", desc: "Fire pump offline" },
+      { id: "main", name: "🚰 Main Break", desc: "Tank −40%" },
+      { id: "highrise", name: "🏢 High-Rise", desc: "Flames faster" },
+      { id: "night", name: "🌙 Night", desc: "Shorter reach" }
+    ];
+    var hazard = null, hzPump = false, hzTankMult = 1, hzSpeed = 1, hzReach = 1;
+    function capW() { return Math.round(maxWater * hzTankMult); }    // effective tank cap (Main Break shrinks it)
+    // class-typed resistance: Class B (grease) fires only take real damage from Foam
+    function resist(ty, e) { if (e && e.cls === "B") return ty === "foam" ? 1 : (e.boss ? 0.3 : 0.1); return 1; }   // boss less punishing (no hard wall without foam)
     var LASER_INTERVAL = 0.42, LASER_SPEED = 2.4;   // laser fires a projectile every LASER_INTERVAL s at LASER_SPEED·S/s; Fast Response shortens interval + speeds the bolt
     var SPECIAL_WATER_BONUS = 120;  // tank bump when a special head is installed — ~most of its auto-spray draw, intentionally a touch short
     // supply = static + pump churn, drooping with flow; ~3 psi @ 50 gpm with no pump,
@@ -305,7 +320,8 @@
     function phaseBoost() { var mx = 0; for (var i = 0; i < slots.length; i++) if (slots[i].state === "active" && slots[i].kTier > mx) mx = slots[i].kTier; return mx * K_PHASE_BOOST; }
     function pumpStatic(L) { return L === 0 ? P_STATIC : PUMP_CURVE[L].residual * 1.3; }   // static (churn @ 0 gpm) = 1.3 × residual
     function supplyP(Q) {
-      var c = PUMP_CURVE[pumpLevel], stat = pumpStatic(pumpLevel);
+      var L = hzPump ? 0 : pumpLevel;            // Power Outage hazard: pump offline (static supply only)
+      var c = PUMP_CURVE[L], stat = pumpStatic(L);
       var droopC = (stat - c.residual) / Math.pow(c.ratedQ, DROOP_N);                       // calibrated so P(ratedQ) = residual
       var p = stat + phaseBoost() - droopC * Math.pow(Q, DROOP_N);
       return p < 0 ? 0 : p;
@@ -350,7 +366,7 @@
     function upgradeableCount() { return slots.filter(function (s) { return s.state === "active" && s.kTier < KLADDER.length - 1; }).length; }
     // Radius is FIXED for base heads (K-factor & pressure only raise output within it). EC unlocks a larger radius that grows with supply pressure to a cap.
     function coverageRadius(s) {
-      var base = gap * BASE_COV;
+      var base = gap * BASE_COV * hzReach;        // Night hazard shortens reach
       if (!s.ec) return base;
       var norm = Math.max(0, Math.min(1, pumpLevel / PUMP_MAX));   // EC radius scales with PUMP pressure only (0 at no pump → 1 at max pump)
       return base * (EC_MIN + (EC_MAX - EC_MIN) * norm);
@@ -417,10 +433,18 @@
 
     function startWave(n) {
       wave = n; state = "playing";
-      water = maxWater; integrity = Math.min(100, integrity + 8);
+      integrity = Math.min(100, integrity + 8);
       waveDmg = 0; waveCombatT = 0;             // reset the running Avg. DPS each wave
       if (bossPending) { bossPending = false; bossAlive = true; spawnBoss(); spawnQueue = 0; }
       else { bossAlive = false; spawnQueue = 4 + n * 2; }
+      // Act 2 hazards — one per (non-boss) wave
+      hazard = null; hzPump = false; hzTankMult = 1; hzSpeed = 1; hzReach = 1;
+      if (currentAct >= 2 && !bossAlive) {
+        hazard = HAZARDS[Math.floor(Math.random() * HAZARDS.length)];
+        if (hazard.id === "outage") hzPump = true; else if (hazard.id === "main") hzTankMult = 0.6; else if (hazard.id === "highrise") hzSpeed = 1.3; else if (hazard.id === "night") hzReach = 0.8;
+      }
+      $("hazardInd").hidden = !hazard; if (hazard) $("hazardInd").textContent = hazard.name + " · " + hazard.desc;
+      water = capW();
       spawnT = 0;
       $("waveVal").textContent = bossAlive ? "BOSS" : n;
       hud();
@@ -436,6 +460,14 @@
     }
     // enemy mix: "elo" needs K11.2+ heads (kTier>=2); "splitter" breaks into 2 on death
     function pickType() {
+      if (currentAct >= 2) {                                  // Act 2: multi-class fires
+        var r = Math.random();
+        if (r < 0.27) return "grease";                        // Class B — only Foam
+        if (r < 0.50) return "ember";                         // swarm — rewards AoE
+        if (r < 0.65) return "backdraft";                     // big HP, flashes over
+        if (r < 0.80 && wave >= 10) return "elo";
+        return Math.random() < 0.4 ? "splitter" : "normal";
+      }
       if (wave >= 10 && Math.random() < Math.min(0.42, 0.15 + (wave - 10) * 0.05)) return "elo";
       if (wave >= 5 && Math.random() < 0.22) return "splitter";
       return "normal";
@@ -445,9 +477,16 @@
       var ang = Math.random() * Math.PI * 2, m = S * 0.62 / viewScale;
       var x = W / 2 + Math.cos(ang) * m, y = H / 2 + Math.sin(ang) * m;
       var base = 26 + wave * 13;
+      if (type === "ember") {                                 // a cluster of small fast sparks
+        var n = 4 + Math.floor(Math.random() * 3);
+        for (var k = 0; k < n; k++) { var a2 = ang + (Math.random() - 0.5) * 0.7, mm = m * (0.88 + Math.random() * 0.24); enemies.push({ x: W / 2 + Math.cos(a2) * mm, y: H / 2 + Math.sin(a2) * mm, hp: base * 0.32, max: base * 0.32, spd: (34 + wave * 2.6) * (S / 400), sz: S * 0.034, boss: false, t: Math.random() * 9, hit: 0, type: "ember", minTier: 0, coreDmg: 5, splits: false }); }
+        return;
+      }
       var e = { x: x, y: y, boss: false, t: Math.random() * 9, hit: 0, type: type, minTier: 0, coreDmg: 12, splits: false };
       if (type === "elo") { e.hp = base * 1.7; e.spd = (20 + wave * 1.7) * (S / 400); e.sz = S * 0.062; e.minTier = 2; e.coreDmg = 16; }
       else if (type === "splitter") { e.hp = base * 0.85; e.spd = (24 + wave * 2.2) * (S / 400); e.sz = S * 0.055; e.splits = true; e.coreDmg = 9; }
+      else if (type === "grease") { e.hp = base * 1.5; e.spd = (22 + wave * 1.6) * (S / 400); e.sz = S * 0.058; e.cls = "B"; e.coreDmg = 14; }
+      else if (type === "backdraft") { e.hp = base * 3.4; e.spd = (12 + wave * 0.9) * (S / 400); e.sz = S * 0.088; e.coreDmg = 20; e.flashCd = 3 + Math.random() * 2; e.flashT = 0; }
       else { e.hp = base; e.spd = (26 + wave * 2.4) * (S / 400); e.sz = S * 0.05; }
       e.max = e.hp; enemies.push(e);
     }
@@ -456,8 +495,9 @@
       enemies.push({ x: x + Math.cos(ang) * 6, y: y + Math.sin(ang) * 6, hp: hpv, max: hpv, spd: (34 + wave * 2.4) * (S / 400), sz: S * 0.038, boss: false, t: Math.random() * 9, hit: 0, type: "normal", minTier: 0, coreDmg: 7, splits: false });
     }
     function spawnBoss() {
-      var ang = Math.random() * Math.PI * 2, m = S * 0.62 / viewScale;
-      enemies.push({ x: W / 2 + Math.cos(ang) * m, y: H / 2 + Math.sin(ang) * m, hp: 2600, max: 2600, spd: 16 * (S / 400), sz: S * 0.13, boss: true, t: 0, mt: 0, type: "boss", minTier: 0, coreDmg: 28, splits: false });
+      var ang = Math.random() * Math.PI * 2, m = S * 0.62 / viewScale, cx = W / 2 + Math.cos(ang) * m, cy = H / 2 + Math.sin(ang) * m;
+      if (currentAct >= 2) enemies.push({ x: cx, y: cy, hp: 6500, max: 6500, spd: 14 * (S / 400), sz: S * 0.15, boss: true, conflag: true, t: 0, mt: 0, type: "boss", minTier: 0, coreDmg: 30, splits: false });   // The Conflagration (multi-phase)
+      else enemies.push({ x: cx, y: cy, hp: 2600, max: 2600, spd: 16 * (S / 400), sz: S * 0.13, boss: true, t: 0, mt: 0, type: "boss", minTier: 0, coreDmg: 28, splits: false });
     }
 
     function update(dt) {
@@ -482,7 +522,7 @@
       for (i2 = 0; i2 < act.length; i2++) { var s2 = act[i2]; s2.q = s2.firing ? headFlow(s2, Pop) * eff : 0; totalQ += s2.q; drainQ += s2.q * (typeOf(s2) === "standard" ? 1 : 0.5); }  // auto heads use 50% less water
       var anyFire = totalQ > 0;
       if (anyFire && !hw) { water -= drainQ * TANK_DRAIN * dt * (easyMode ? 0.5 : 1); if (water < 0) water = 0; }   // Easy Mode: heads use 50% less water
-      else if (!anyFire) { water += TANK_REGEN * tankFillMult * dt * (easyMode ? 1.5 : 1); if (water > maxWater) water = maxWater; }
+      else if (!anyFire) { water += TANK_REGEN * tankFillMult * dt * (easyMode ? 1.5 : 1); if (water > capW()) water = capW(); }
       if (hollywoodT > 0) { hollywoodT -= dt; if (hollywoodT <= 0) updateHollywoodBtn(); }
       if (overloadT > 0) overloadT = Math.max(0, overloadT - dt);
       if (overloadCd > 0) overloadCd = Math.max(0, overloadCd - dt);
@@ -501,8 +541,16 @@
       $("psiRead").textContent = spraying
         ? "Residual: " + dispP + " PSI @ " + Math.round(totalQ) + " GPM" + (dryFlash ? " · TANK DRY" : "") + pumpTxt
         : "Static Pressure: " + dispP + " PSI" + pumpTxt;
-      // boss spawns minions
-      for (var b = 0; b < enemies.length; b++) { if (enemies[b].boss) { enemies[b].mt += dt; if (enemies[b].mt > 2.6) { enemies[b].mt = 0; spawnEdge(); } } }
+      // boss spawns minions (Conflagration: phase by HP — armored → Class-B → flashover)
+      for (var b = 0; b < enemies.length; b++) {
+        var bo = enemies[b]; if (!bo.boss) continue;
+        if (bo.conflag) {
+          var fr = bo.hp / bo.max;
+          bo.cls = (fr <= 0.66 && fr > 0.33) ? "B" : null;       // phase 2: only Foam hurts it
+          bo.flashing = fr <= 0.33;                              // phase 3: flashover (faster)
+          bo.mt += dt; if (bo.mt > 2.2) { bo.mt = 0; spawnEdge(fr <= 0.33 ? "ember" : fr <= 0.66 ? "grease" : "normal"); }
+        } else { bo.mt += dt; if (bo.mt > 2.6) { bo.mt = 0; spawnEdge(); } }
+      }
       // --- weapons pass: each firing head applies its type's damage / effect ---
       for (var ei = 0; ei < enemies.length; ei++) enemies[ei].dmgFrame = 0;
       for (var fh = 0; fh < firing.length; fh++) {
@@ -519,16 +567,17 @@
           }
           continue;
         }
-        if (ty === "lawn") { var hits = 0; for (j = 0; j < enemies.length && hits < 3; j++) { em = enemies[j]; if (canHit(s, em)) { em.dmgFrame += per; hits++; } } continue; }
+        if (ty === "lawn") { var hits = 0; for (j = 0; j < enemies.length && hits < 3; j++) { em = enemies[j]; if (canHit(s, em)) { em.dmgFrame += per * resist("lawn", em); hits++; } } continue; }
         if (ty === "foam") { s.foamDropT = (s.foamDropT || 0) + dt; if (s.foamDropT >= (s.fr ? 0.107 : 0.16) && foamPiles.length < 110) { s.foamDropT = 0; var pa = Math.random() * Math.PI * 2, pr = headReach(s) * Math.sqrt(Math.random()); foamPiles.push({ x: s.x + Math.cos(pa) * pr, y: s.y + Math.sin(pa) * pr, r: gap * (0.16 + Math.random() * 0.14), life: FOAM_PILE_LIFE, max: FOAM_PILE_LIFE, dps: per, kTier: s.kTier, seed: Math.random() * 6.28 }); } continue; }   // foam lays piles on the ground; damage happens in the piles, not the spray
-        for (j = 0; j < enemies.length; j++) { em = enemies[j]; if (canHit(s, em)) em.dmgFrame += per; }  // standard + corridor
+        for (j = 0; j < enemies.length; j++) { em = enemies[j]; if (canHit(s, em)) em.dmgFrame += per * resist(ty, em); }  // standard + corridor
       }
       // enemies move + apply damage
       var frameDps = 0;
       for (var i = enemies.length - 1; i >= 0; i--) {
         var e = enemies[i];
         var dx = W / 2 - e.x, dy = H / 2 - e.y, dist = Math.hypot(dx, dy) || 1;
-        var spd = e.spd; if (e.slowT > 0) { spd *= 0.5; e.slowT -= dt; }   // foam slow
+        if (e.type === "backdraft") { e.flashT = (e.flashT || 0) + dt; if (!e.flashing && e.flashT >= (e.flashCd || 4)) { e.flashing = true; e.flashLeft = 2.5; e.flashT = 0; } if (e.flashing) { e.flashLeft -= dt; if (e.flashLeft <= 0) e.flashing = false; } }   // backdraft flashover
+        var spd = e.spd * hzSpeed; if (e.slowT > 0) { spd *= 0.5; e.slowT -= dt; } if (e.flashing) spd *= (e.boss ? 2 : 3);   // foam slow; flashover speed burst; High-Rise hazard
         e.x += (dx / dist) * spd * dt; e.y += (dy / dist) * spd * dt; e.t += dt;
         // reached core
         if (dist < coreR + e.sz * 0.4) {
@@ -562,7 +611,11 @@
           for (var p = 0; p < (e.boss ? 46 : 12); p++) { var an = Math.random() * Math.PI * 2, sp = 50 + Math.random() * 150, lf = 0.4 + Math.random() * 0.35; particles.push({ x: e.x, y: e.y, vx: Math.cos(an) * sp, vy: Math.sin(an) * sp, life: lf, max: lf, r: 2 + Math.random() * 2.6, c: burstC, spray: true }); }
           if (e.splits) { spawnChild(e.x, e.y, e.max * 0.42); spawnChild(e.x, e.y, e.max * 0.42); }
           enemies.splice(i, 1); hud();
-          if (e.boss) { bossAlive = false; win(); return; }
+          if (e.boss) {
+            bossAlive = false;
+            if (currentAct < MAX_ACT) { currentAct++; bossPending = false; spawnFloat(W / 2, H / 2 - coreR * 1.4, "ACT " + currentAct, "#ff5a2f", 2.4); startWave(wave + 1); return; }   // Act 1 cleared → Act 2 (music switches)
+            win(); return;
+          }
           continue;
         }
       }
@@ -591,7 +644,7 @@
       for (var ls = laserShots.length - 1; ls >= 0; ls--) {
         var lp = laserShots[ls]; lp.x += lp.vx * dt; lp.y += lp.vy * dt; lp.life -= dt;
         var heE = null, hbd = 1e9; for (var hi = 0; hi < enemies.length; hi++) { var hen = enemies[hi], hdd = Math.hypot(hen.x - lp.x, hen.y - lp.y); if (hdd < hen.sz + lp.r && hdd < hbd) { hbd = hdd; heE = hen; } }
-        if (heE) { heE.hp -= lp.dmg; heE.hit = 0.12; frameDps += lp.dmg / Math.max(dt, 0.016); spawnFloat(heE.x, heE.y - heE.sz, Math.round(lp.dmg) + "", "#ff8a78", 0.9); laserShots.splice(ls, 1); continue; }
+        if (heE) { var ld = lp.dmg * resist("laser", heE); heE.hp -= ld; heE.hit = 0.12; frameDps += ld / Math.max(dt, 0.016); spawnFloat(heE.x, heE.y - heE.sz, Math.round(ld) + "", "#ff8a78", 0.9); laserShots.splice(ls, 1); continue; }
         if (lp.life <= 0 || lp.x < -20 || lp.x > W + 20 || lp.y < -20 || lp.y > H + 20) laserShots.splice(ls, 1);
       }
       for (var k = 0; k < slots.length; k++) { if (slots[k].flash > 0) slots[k].flash = Math.max(0, slots[k].flash - dt); if (slots[k].hurt > 0) slots[k].hurt = Math.max(0, slots[k].hurt - dt); }
@@ -609,9 +662,9 @@
       // bars
       var iF = $("integFill"), iB = $("integBar"); iF.style.width = integrity + "%"; iF.style.background = integrity > 50 ? "var(--ok)" : integrity > 25 ? "var(--accent)" : "var(--bad)"; iB.classList.toggle("low", integrity <= 25);
       $("integVal").textContent = Math.round(integrity) + " HP" + (shield > 0 ? " · 🛡 " + Math.round(shield) : "");
-      var wF = $("waterFill"), wB = $("waterBar"); wF.style.width = (maxWater ? (water / maxWater * 100) : 0) + "%"; wB.classList.toggle("low", water <= maxWater * 0.18);
-      $("waterVal").textContent = Math.round(water) + " / " + Math.round(maxWater) + " gal";
-      $("lowWater").hidden = !(water <= maxWater * 0.2);
+      var cw = capW(); var wF = $("waterFill"), wB = $("waterBar"); wF.style.width = (cw ? (water / cw * 100) : 0) + "%"; wB.classList.toggle("low", water <= cw * 0.18);
+      $("waterVal").textContent = Math.round(water) + " / " + Math.round(cw) + " gal";
+      $("lowWater").hidden = !(water <= cw * 0.2);
       $("lowWater").textContent = water <= 0 ? "💧 TANK DRY!" : "💧 LOW WATER!";
     }
 
@@ -644,7 +697,7 @@
       return { e: pick.e, t: pick.t, d: pick.d, kid: pick.kid, apply: pick.apply, special: true };
     }
     function waveComplete() {
-      if (wave >= BOSS_WAVE && !bossAlive) { bossPending = true; startWave(wave + 1); return; }
+      if (wave >= bossWaveFor(currentAct) && !bossAlive) { bossPending = true; startWave(wave + 1); return; }
       state = "upgrade";
       $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true;
       // tank + special always in the pool; unlock/kfactor when applicable. Fire pump is its own RARE category (final tier extra-rare).
@@ -730,7 +783,7 @@
     var rotSlot = null, rotDragging = false;
     function beginLawnRotate(s) {
       rotSlot = s; s.rotLocked = false; state = "rotate";
-      $("upgradeOv").classList.remove("show"); $("abar").hidden = true; $("ffBtn").hidden = true; $("pauseBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true;
+      $("upgradeOv").classList.remove("show"); $("abar").hidden = true; $("ffBtn").hidden = true; $("pauseBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true;
       $("selectPrompt").textContent = "🔄 Drag around the head to aim, then tap OK"; $("selectPrompt").hidden = false;
       $("rotOkBtn").hidden = false;
     }
@@ -796,9 +849,9 @@
       overloadT = 15; overloadCd = 60; updateAbar();
     }
 
-    function gameOver() { state = "over"; $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); pendingScore = score; $("overOv").classList.add("show"); mountLb("overOv", "againBtn"); }
-    function win() { state = "win"; $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("winScore").textContent = score.toLocaleString(); pendingScore = score; $("winOv").classList.add("show"); mountLb("winOv", "winAgainBtn"); }
-    function pauseGame() { if (state !== "playing") return; state = "paused"; holding = false; $("pauseOv").classList.add("show"); $("abar").hidden = true; $("ffBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("pauseAutoWrap").hidden = !easyMode; $("pauseAutoToggle").checked = autoPick; }
+    function gameOver() { state = "over"; $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); pendingScore = score; $("overOv").classList.add("show"); mountLb("overOv", "againBtn"); }
+    function win() { state = "win"; $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("winScore").textContent = score.toLocaleString(); pendingScore = score; $("winOv").classList.add("show"); mountLb("winOv", "winAgainBtn"); }
+    function pauseGame() { if (state !== "playing") return; state = "paused"; holding = false; $("pauseOv").classList.add("show"); $("abar").hidden = true; $("ffBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("pauseAutoWrap").hidden = !easyMode; $("pauseAutoToggle").checked = autoPick; }
     function resumeGame() { if (state !== "paused") return; state = "playing"; last = 0; $("pauseOv").classList.remove("show"); $("easyInd").hidden = !easyMode; $("ffBtn").hidden = false; updateHollywoodBtn(); }
 
     // ---- rendering ----
@@ -1113,15 +1166,20 @@
         var sz = en.sz * 2 * fl;
         var glow = en.type === "elo" ? ["rgba(120,180,255,0.55)", "rgba(80,120,255,0)"]
                  : en.type === "splitter" ? ["rgba(120,255,150,0.5)", "rgba(50,200,90,0)"]
+                 : en.cls === "B" ? ["rgba(255,210,60,0.6)", "rgba(220,150,20,0)"]            // grease — amber
+                 : en.type === "backdraft" ? ["rgba(255,70,40,0.6)", "rgba(180,30,20,0)"]
                  : ["rgba(255,140,40,0.5)", "rgba(255,90,40,0)"];
         var g2 = ctx.createRadialGradient(en.x, en.y, 0, en.x, en.y, sz * 0.85);
         g2.addColorStop(0, glow[0]); g2.addColorStop(1, glow[1]);
         ctx.fillStyle = g2; ctx.beginPath(); ctx.arc(en.x, en.y, sz * 0.85, 0, Math.PI * 2); ctx.fill();
-        // ELO "extra-large-orifice required" shield ring — signals small heads won't work
+        // backdraft flashover aura
+        if (en.flashing) { ctx.save(); ctx.globalAlpha = 0.5 + 0.3 * Math.sin(t * 0.03); ctx.lineWidth = 2.5; ctx.strokeStyle = "#ff4530"; ctx.beginPath(); ctx.arc(en.x, en.y, sz * 0.95, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
+        // ELO shield ring (small heads won't work) / Class-B "use Foam" ring
         if (en.type === "elo") { ctx.save(); ctx.setLineDash([3, 3]); ctx.lineWidth = 1.6; ctx.strokeStyle = "rgba(150,210,255,0.85)"; ctx.beginPath(); ctx.arc(en.x, en.y, sz * 0.7, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
+        else if (en.cls === "B") { ctx.save(); ctx.setLineDash([2, 3]); ctx.lineWidth = 1.6; ctx.strokeStyle = "rgba(255,220,90,0.9)"; ctx.beginPath(); ctx.arc(en.x, en.y, sz * 0.72, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
         ctx.font = sz + "px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
         if (en.hit > 0) { ctx.globalAlpha = 0.6; en.hit -= 0.016; }
-        ctx.fillText("🔥", en.x, en.y);
+        ctx.fillText(en.cls === "B" ? "🛢️" : "🔥", en.x, en.y);
         ctx.globalAlpha = 1;
         if (en.boss) { var bw = en.sz * 2.4, bx = en.x - bw / 2, by = en.y - en.sz * 1.5; ctx.fillStyle = "#3a2027"; ctx.fillRect(bx, by, bw, 5); ctx.fillStyle = "#ff5a4f"; ctx.fillRect(bx, by, bw * (en.hp / en.max), 5); }
         else if (en.hp < en.max) { var w2 = en.sz * 1.6, x2 = en.x - w2 / 2, y2 = en.y - en.sz * 1.1; ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.fillRect(x2, y2, w2, 3); ctx.fillStyle = en.type === "elo" ? "#7fb4ff" : en.type === "splitter" ? "#7ef29a" : "#ffb03a"; ctx.fillRect(x2, y2, w2 * (en.hp / en.max), 3); }
@@ -1218,6 +1276,7 @@
       enemies = []; particles = []; floats = []; foamPiles = []; laserShots = []; currentAct = 1; score = 0; integrity = 100; maxWater = Math.round(330 * (easyMode ? 1.5 : 1)); water = maxWater; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
       tankFillMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0; overloadT = 0; overloadCd = 0; selectKind = null; hurtT = 0; dpsNow = 0; dpsShown = 0;
       gameSpeed = 1; inspectSlot = null; pressSlot = null; lastTapSlot = null; rotSlot = null; rotDragging = false; $("ffBtn").textContent = "▶▶"; $("ffBtn").classList.remove("on"); $("rotOkBtn").hidden = true;
+      hazard = null; hzPump = false; hzTankMult = 1; hzSpeed = 1; hzReach = 1; $("hazardInd").hidden = true;
       viewScale = 1; zoomTarget = 1;
       updatePumpIcons(); $("dpsMeter").hidden = true; $("abar").hidden = true;
     }
