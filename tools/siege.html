@@ -101,7 +101,7 @@
     </div>
     <div class="sg-bars">
       <div class="sg-bar-wrap"><span class="lbl">Integrity</span><div class="sg-bar" id="integBar"><i id="integFill"></i><span class="sg-bar-val" id="shieldVal"></span></div></div>
-      <div class="sg-bar-wrap"><span class="lbl">Water Tank</span><div class="sg-bar" id="waterBar"><i id="waterFill"></i><span class="sg-bar-val" id="waterVal">165 / 165 gal</span></div></div>
+      <div class="sg-bar-wrap"><span class="lbl">Water Tank</span><div class="sg-bar" id="waterBar"><i id="waterFill"></i><span class="sg-bar-val" id="waterVal">330 / 330 gal</span></div></div>
       <div class="sg-psi" id="psiRead">Static Pressure: 7 PSI</div>
     </div>
 
@@ -168,11 +168,11 @@
     for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) slots.push({ c: c, r: r, x: 0, y: 0, state: (c === 1 && r === 1) ? "active" : "locked", kTier: 0, q: 0 });
     var enemies = [], particles = [];
     var state = "start";  // start | playing | upgrade | over | win
-    var wave = 1, score = 0, integrity = 100, water = 165, maxWater = 165, holding = false;
+    var wave = 1, score = 0, integrity = 100, water = 330, maxWater = 330, holding = false;
     var spawnQueue = 0, spawnT = 0, bossPending = false, bossAlive = false;
     var pumpLevel = 0, tankLevel = 0, nextSupplyPump = false, pendingSupplyPump = false, dryFlash = false, nowT = 0;
     // special upgrades: refill rate ×, spray reach ×, integrity shield pool, Hollywood charges/timer
-    var tankFillMult = 1, reachMult = 1, shield = 0, hollywoodCharges = 0, hollywoodT = 0;
+    var tankFillMult = 1, shield = 0, hollywoodCharges = 0, hollywoodT = 0;
     var W = 360, H = 430, S = 360, dpr = 1, gap = 70, coreR = 30, colXs = [], rowYs = [];
 
     // --- hydraulics: each head flows Q = K·√P; supply pressure sags as total flow rises ---
@@ -213,9 +213,20 @@
     function activeSlots() { return slots.filter(function (s) { return s.state === "active"; }); }
     function lockedCount() { return slots.filter(function (s) { return s.state === "locked"; }).length; }
     function upgradeableCount() { return slots.filter(function (s) { return s.state === "active" && s.kTier < KLADDER.length - 1; }).length; }
-    function sprayRadius(s) { var f = s.q || 0; return gap * Math.max(0.55, Math.min(1.6, 0.5 + 0.12 * Math.sqrt(f))) * reachMult; }
-    function coverageRadius(s) { var qn = KLADDER[s.kTier] * Math.sqrt(supplyP(0)); return gap * Math.max(0.55, Math.min(1.6, 0.5 + 0.12 * Math.sqrt(qn))); }
+    function sprayRadius(s) { var f = s.q || 0; return gap * Math.max(0.55, Math.min(1.6, 0.5 + 0.12 * Math.sqrt(f))) * (s.ec ? 1.5 : 1); }
+    function coverageRadius(s) { var qn = KLADDER[s.kTier] * Math.sqrt(supplyP(0)); return gap * Math.max(0.55, Math.min(1.6, 0.5 + 0.12 * Math.sqrt(qn))) * (s.ec ? 1.5 : 1); }
     function sprayDps(s) { return (s.q || 0) * DMG_PER_GPM; }
+    // sprinkler finish by K-factor tier: brass → chrome → white poly → black poly → ENT → shiny gold
+    function finish(kTier) {
+      switch (kTier) {
+        case 0: return { body: ["#f6d68a", "#b6792a"], hub: ["#f0cc7e", "#a86f23"], edge: "#6a4514", hi: "rgba(255,240,200,0.55)", slot: "#3a2c12" }; // brass
+        case 1: return { body: ["#f4f7fa", "#9aa6b2"], hub: ["#eef2f6", "#8a96a2"], edge: "#5b656f", hi: "rgba(255,255,255,0.65)", slot: "#2a2f35" }; // chrome
+        case 2: return { body: ["#ffffff", "#d2d7dc"], hub: ["#ffffff", "#c8ced4"], edge: "#9aa1a8", hi: "rgba(255,255,255,0.85)", slot: "#3b4046" }; // white polyester
+        case 3: return { body: ["#5c646d", "#1b2127"], hub: ["#525a63", "#171c22"], edge: "#05080a", hi: "rgba(170,180,190,0.4)", slot: "#0a0d10" }; // black polyester
+        case 4: case 5: return { body: ["#c6cdd3", "#5e6870"], hub: ["#bcc3ca", "#525c64"], edge: "#3c444b", hi: "rgba(230,235,240,0.5)", slot: "#262b30" }; // ENT (16.8, 22.4)
+        default: return { body: ["#fff1a8", "#d4a017"], hub: ["#ffe98f", "#caa011"], edge: "#8a6a10", hi: "rgba(255,250,210,0.8)", slot: "#4a3a08" }; // shiny gold (25.2)
+      }
+    }
 
     function nearestToCenter(filterFn) {
       var best = null, bd = 1e9;
@@ -232,10 +243,10 @@
     }
     function applyUpgrade() {
       var s = nearestToCenter(function (sl) { return sl.state === "active" && sl.kTier < KLADDER.length - 1; });
-      if (s) { s.kTier++; s.flash = 0.6; maxWater += 30; }
+      if (s) { s.kTier++; s.flash = 0.6; maxWater += 60; }
     }
     function applyPump() { if (pumpLevel < PUMP_MAX) { pumpLevel++; for (var i = 0; i < slots.length; i++) if (slots[i].state === "active") slots[i].flash = 0.6; } }
-    function applyCapacity() { tankLevel++; maxWater += 90; water = maxWater; for (var i = 0; i < slots.length; i++) if (slots[i].state === "active") slots[i].flash = 0.6; }
+    function applyCapacity() { tankLevel++; maxWater += 180; water = maxWater; for (var i = 0; i < slots.length; i++) if (slots[i].state === "active") slots[i].flash = 0.6; }
 
     function startWave(n) {
       wave = n; state = "playing";
@@ -364,7 +375,6 @@
     // ---- upgrade categories: each wave offers 3 random of {unlock, kfactor, supply, special} ----
     var SPECIALS = [
       { e: "⏩", t: "Faster refill", d: "Water tank fills 10% faster", apply: function () { tankFillMult *= 1.1; } },
-      { e: "🎯", t: "Longer throw", d: "Heads throw 10% further", apply: function () { reachMult *= 1.1; } },
       { e: "🛡️", t: "Integrity shield", d: "+20% shield: soaks incoming damage", apply: function () { shield += 20; } },
       { e: "🎬", t: "Hollywood Scene", d: "Stored: all heads blast 5s, no water used", apply: function () { hollywoodCharges++; updateHollywoodBtn(); } }
     ];
@@ -375,10 +385,17 @@
         var pump = nextSupplyPump && pumpLevel < PUMP_MAX;
         return pump
           ? { e: "⚙️", t: "Fire pump", d: pumpLevel === 0 ? "Add a fire pump — stronger supply pressure" : (pumpLevel + 1 >= PUMP_MAX ? "Max pump: ~175 psi @ 1000 gpm for K25.2" : "Boost pump to tier " + (pumpLevel + 1) + ": more pressure"), apply: function () { applyPump(); nextSupplyPump = !nextSupplyPump; } }
-          : { e: "🛢️", t: "Bigger tank", d: "+90 gal capacity: spray longer", apply: function () { applyCapacity(); nextSupplyPump = !nextSupplyPump; } };
+          : { e: "🛢️", t: "Bigger tank", d: "+180 gal capacity: spray longer", apply: function () { applyCapacity(); nextSupplyPump = !nextSupplyPump; } };
       }
-      var sp = SPECIALS[Math.floor(Math.random() * SPECIALS.length)];
-      return { e: sp.e, t: sp.t, d: sp.d, apply: sp.apply, special: true };
+      var elig = slots.filter(function (s) { return s.state === "active" && !s.ec; });
+      var pool = SPECIALS.slice();
+      if (elig.length) pool.push("ec");                         // Extended Coverage only if a head can still take it
+      var pick = pool[Math.floor(Math.random() * pool.length)];
+      if (pick === "ec") {
+        var lbl = elig.length === 1 ? ("K" + KLADDER[elig[0].kTier].toFixed(1) + " EC") : "Extended Coverage";
+        return { e: "🎯", t: lbl, d: elig.length === 1 ? "+50% throw — Extended Coverage" : "+50% throw — pick a head", special: true, applyEC: true };
+      }
+      return { e: pick.e, t: pick.t, d: pick.d, apply: pick.apply, special: true };
     }
     function waveComplete() {
       if (wave >= BOSS_WAVE && !bossAlive) { bossPending = true; startWave(wave + 1); return; }
@@ -396,24 +413,34 @@
         var card = document.createElement("div");
         card.className = "sg-card" + (o.special ? " special" : "");
         card.innerHTML = '<div class="e">' + o.e + '</div><div class="t">' + o.t + '</div><div class="d">' + o.d + '</div>' + (o.special ? '<div class="sg-badge">SPECIAL</div>' : '');
-        card.onclick = function () { if (state !== "upgrade") return; if (o.selectHead) beginSelectHead(); else { o.apply(); afterChoice(); } };
+        card.onclick = function () { if (state !== "upgrade") return; if (o.selectHead) beginSelectHead(); else if (o.applyEC) beginEC(); else { o.apply(); afterChoice(); } };
         box.appendChild(card);
       });
       $("upTitle").textContent = "Wave " + wave + " cleared!";
       $("upgradeOv").classList.add("show");
     }
     function afterChoice() { startWave(wave + 1); }
-    // Unlock-a-head: enter a "pick the sprinkler" mode; the tap lands in the pointer handler.
+    // Pick-a-head modes: 'unlock' (tap a dusty head) or 'ec' (tap an active head for Extended Coverage).
+    var selectKind = null;
+    function selectEligible(s) { return selectKind === "unlock" ? s.state === "locked" : (s.state === "active" && !s.ec); }
     function beginSelectHead() {
-      state = "selectHead";
-      $("upgradeOv").classList.remove("show");
-      $("selectPrompt").hidden = false;
+      selectKind = "unlock"; state = "select"; $("upgradeOv").classList.remove("show");
+      $("selectPrompt").textContent = "👆 Tap a dusty sprinkler to fix"; $("selectPrompt").hidden = false;
+    }
+    function beginEC() {
+      var elig = slots.filter(function (s) { return s.state === "active" && !s.ec; });
+      if (elig.length === 1) { elig[0].ec = true; elig[0].flash = 0.6; afterChoice(); return; }
+      selectKind = "ec"; state = "select"; $("upgradeOv").classList.remove("show");
+      $("selectPrompt").textContent = "👆 Tap a head for Extended Coverage"; $("selectPrompt").hidden = false;
     }
     function selectHeadAt(tx, ty) {
-      if (state !== "selectHead") return;
+      if (state !== "select") return;
       var best = null, bd = 1e9;
-      for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (s.state !== "locked") continue; var d = Math.hypot(tx - s.x, ty - s.y); if (d < bd) { bd = d; best = s; } }
-      if (best && bd < gap * 0.7) { best.state = "active"; best.kTier = 0; best.q = 0; best.flash = 0.6; $("selectPrompt").hidden = true; afterChoice(); }
+      for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (!selectEligible(s)) continue; var d = Math.hypot(tx - s.x, ty - s.y); if (d < bd) { bd = d; best = s; } }
+      if (best && bd < gap * 0.7) {
+        if (selectKind === "unlock") { best.state = "active"; best.kTier = 0; best.q = 0; } else { best.ec = true; }
+        best.flash = 0.6; selectKind = null; $("selectPrompt").hidden = true; afterChoice();
+      }
     }
     function updateHollywoodBtn() {
       var b = $("hollywoodBtn");
@@ -436,8 +463,8 @@
     function drawSprinkler(s) {
       var x = s.x, y = s.y, r = gap * 0.32 * (0.5 + 0.5 * ((s.kTier || 0) / (KLADDER.length - 1)));
       var active = s.state === "active";
-      // "pick a head to fix" highlight on dusty/locked heads
-      if (state === "selectHead" && s.state === "locked") {
+      // selection-mode highlight (unlock a dusty head, or pick a head for Extended Coverage)
+      if (state === "select" && selectEligible(s)) {
         ctx.save(); ctx.setLineDash([5, 4]); ctx.lineWidth = 3; ctx.strokeStyle = "#ffb03a";
         ctx.beginPath(); ctx.arc(x, y, r + 8, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
       }
@@ -465,32 +492,33 @@
         for (var pi = 0; pi < 4; pi++) { var px = x + Math.cos(pa[pi][0]) * pa[pi][1], py = y + Math.sin(pa[pi][0]) * pa[pi][1]; if (ti === 0 && pi === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }
       }
       ctx.closePath();
-      ctx.fillStyle = active ? brass(ctx, x, y, r, ["#f6d68a", "#b6792a"]) : brass(ctx, x, y, r, ["#9aa0a4", "#5c6266"]);
+      var fin = active ? finish(s.kTier) : null;
+      ctx.fillStyle = active ? brass(ctx, x, y, r, fin.body) : brass(ctx, x, y, r, ["#9aa0a4", "#5c6266"]);
       ctx.fill();
-      ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = active ? "#6a4514" : "#3a3f43"; ctx.stroke();
-      ctx.lineWidth = Math.max(1, r * 0.04); ctx.strokeStyle = active ? "rgba(255,240,200,0.55)" : "rgba(220,225,230,0.35)";
+      ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = active ? fin.edge : "#3a3f43"; ctx.stroke();
+      ctx.lineWidth = Math.max(1, r * 0.04); ctx.strokeStyle = active ? fin.hi : "rgba(220,225,230,0.35)";
       ctx.beginPath(); ctx.arc(x, y, rRoot * 0.92, 0, Math.PI * 2); ctx.stroke();
       // --- teardrop slots (bulb out, point toward center) ---
       var nslot = 12, rO = r * 0.66, rI = r * 0.40, wO = r * 0.085;
-      ctx.fillStyle = active ? "#3a2c12" : "#23262b";
+      ctx.fillStyle = active ? fin.slot : "#23262b";
       for (var si = 0; si < nslot; si++) {
         var a = si * (Math.PI * 2 / nslot) - Math.PI / 2;
         var ox = x + Math.cos(a) * rO, oy = y + Math.sin(a) * rO, ix = x + Math.cos(a) * rI, iy = y + Math.sin(a) * rI;
         ctx.beginPath(); ctx.arc(ox, oy, wO, a + Math.PI / 2, a - Math.PI / 2, true); ctx.lineTo(ix, iy); ctx.closePath(); ctx.fill();
       }
       // --- central raised hub + orifice ---
-      ctx.fillStyle = active ? brass(ctx, x, y, r * 0.4, ["#f0cc7e", "#a86f23"]) : brass(ctx, x, y, r * 0.4, ["#aab0b4", "#666c70"]);
+      ctx.fillStyle = active ? brass(ctx, x, y, r * 0.4, fin.hub) : brass(ctx, x, y, r * 0.4, ["#aab0b4", "#666c70"]);
       ctx.beginPath(); ctx.arc(x, y, r * 0.36, 0, Math.PI * 2); ctx.fill();
-      ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = active ? "#6a4514" : "#3a3f43"; ctx.stroke();
-      ctx.lineWidth = Math.max(1, r * 0.03); ctx.strokeStyle = active ? "rgba(255,244,210,0.7)" : "rgba(225,230,234,0.5)";
+      ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = active ? fin.edge : "#3a3f43"; ctx.stroke();
+      ctx.lineWidth = Math.max(1, r * 0.03); ctx.strokeStyle = active ? fin.hi : "rgba(225,230,234,0.5)";
       ctx.beginPath(); ctx.arc(x, y, r * 0.27, 0, Math.PI * 2); ctx.stroke();
       ctx.fillStyle = "#0a0e12"; ctx.beginPath(); ctx.arc(x, y, r * 0.16, 0, Math.PI * 2); ctx.fill();
-      ctx.lineWidth = Math.max(1, r * 0.03); ctx.strokeStyle = active ? "rgba(120,80,25,0.85)" : "rgba(60,65,70,0.85)"; ctx.stroke();
+      ctx.lineWidth = Math.max(1, r * 0.03); ctx.strokeStyle = active ? fin.edge : "rgba(60,65,70,0.85)"; ctx.stroke();
       // dusty specks on locked (deterministic so they don't flicker)
       if (!active) { ctx.fillStyle = "rgba(205,210,215,0.4)"; for (var dd = 0; dd < 6; dd++) { var da = dd * 1.7, dr = r * (0.45 + (dd % 3) * 0.16); ctx.beginPath(); ctx.arc(x + Math.cos(da) * dr, y + Math.sin(da) * dr, r * 0.045, 0, Math.PI * 2); ctx.fill(); } }
       if (s.flash > 0) { ctx.globalAlpha = s.flash; ctx.fillStyle = "#bff0ff"; ctx.beginPath(); ctx.arc(x, y, r + 6, 0, Math.PI * 2); ctx.fill(); }
       ctx.globalAlpha = 1;
-      if (active) { ctx.fillStyle = "rgba(232,240,244,0.92)"; ctx.font = "700 " + Math.round(r * 0.5) + "px Inter, Arial, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillText("K" + KLADDER[s.kTier].toFixed(1), x, y + r + 3); }
+      if (active) { ctx.fillStyle = s.ec ? "#ffb03a" : "rgba(232,240,244,0.92)"; ctx.font = "700 " + Math.round(r * 0.5) + "px Inter, Arial, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillText("K" + KLADDER[s.kTier].toFixed(1) + (s.ec ? " EC" : ""), x, y + r + 3); }
     }
     function pipeSeg(x1, y1, x2, y2) {
       ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
@@ -552,16 +580,16 @@
 
     canvas.addEventListener("pointerdown", function (e) {
       e.preventDefault();
-      if (state === "selectHead") { var rect = canvas.getBoundingClientRect(); selectHeadAt(e.clientX - rect.left, e.clientY - rect.top); return; }
+      if (state === "select") { var rect = canvas.getBoundingClientRect(); selectHeadAt(e.clientX - rect.left, e.clientY - rect.top); return; }
       holding = true;
     });
     window.addEventListener("pointerup", function () { holding = false; });
     canvas.addEventListener("pointercancel", function () { holding = false; });
 
     function reset() {
-      for (var i = 0; i < slots.length; i++) { slots[i].state = (slots[i].c === 1 && slots[i].r === 1) ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; }
-      enemies = []; particles = []; score = 0; integrity = 100; maxWater = 165; water = 165; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
-      tankFillMult = 1; reachMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0;
+      for (var i = 0; i < slots.length; i++) { slots[i].state = (slots[i].c === 1 && slots[i].r === 1) ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].ec = false; }
+      enemies = []; particles = []; score = 0; integrity = 100; maxWater = 330; water = 330; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
+      tankFillMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0; selectKind = null;
     }
     function newGame() { resize(); reset(); hud(); startWave(1); ["overOv","winOv","startOv","upgradeOv","pauseOv"].forEach(function (id) { $(id).classList.remove("show"); }); }
 
