@@ -228,6 +228,8 @@
     var KLADDER = [5.6, 8.0, 11.2, 14.0, 16.8, 22.4, 25.2];   // K-factor per upgrade tier
     var P_STATIC = 7;                          // psi at no flow, no pump (weak supply)
     var PUMP_MAX = 3;                          // fire-pump tiers; maxed pump ≈ 175 psi @ 1000 gpm (for K25.2)
+    var TANK_PCT = 0.30;                        // tank upgrades scale by % of CURRENT capacity → compounds to massive end-game tanks
+    var PUMP_OFFER_CHANCE = 0.45, PUMP_FINAL_CHANCE = 0.10;  // pump rarer than other cards; final tier (lvl2→3) very rare
     var PUMP_HEAD = 79.33;                     // churn pressure added per pump tier (0→7, 3→245)
     var DROOP_C = 0.099, DROOP_N = 0.95;       // supply droop: P = churn − DROOP_C·Q^DROOP_N
     var DMG_PER_GPM = 2.0, TANK_DRAIN = 1.2, TANK_REGEN = 26, BOSS_WAVE = 15;
@@ -329,7 +331,7 @@
       el.classList.toggle("blaze", v >= 700);
       if (!(v >= 250 && v < 700)) el.classList.remove("hot");
     }
-    function applyCapacity() { tankLevel++; maxWater += 180; water = maxWater; for (var i = 0; i < slots.length; i++) if (slots[i].state === "active") slots[i].flash = 0.6; }
+    function applyCapacity() { tankLevel++; maxWater = Math.round(maxWater * (1 + TANK_PCT)); water = maxWater; for (var i = 0; i < slots.length; i++) if (slots[i].state === "active") slots[i].flash = 0.6; }
 
     function startWave(n) {
       wave = n; state = "playing";
@@ -503,12 +505,8 @@
     function categoryOffer(cat) {
       if (cat === "unlock") { var rt = UNLOCK_TYPES[Math.floor(Math.random() * UNLOCK_TYPES.length)]; return { e: TYPE_INFO[rt].e, t: "Unlock: " + TYPE_INFO[rt].n, d: unlockDesc(rt), selectHead: true, headType: rt }; }
       if (cat === "kfactor") return { e: "📈", t: "Bigger K-factor", d: "Step a head up the K ladder: more GPM", apply: applyUpgrade };
-      if (cat === "supply") {
-        var pump = nextSupplyPump && pumpLevel < PUMP_MAX;
-        return pump
-          ? { e: "⚙️", t: "Fire pump", d: pumpLevel === 0 ? "Add a fire pump — stronger supply pressure" : (pumpLevel + 1 >= PUMP_MAX ? "Max pump: ~175 psi @ 1000 gpm for K25.2" : "Boost pump to tier " + (pumpLevel + 1) + ": more pressure"), apply: function () { applyPump(); nextSupplyPump = !nextSupplyPump; } }
-          : { e: "🛢️", t: "Bigger tank", d: "+180 gal capacity: spray longer", apply: function () { applyCapacity(); nextSupplyPump = !nextSupplyPump; } };
-      }
+      if (cat === "pump") return { e: "⚙️", t: pumpLevel + 1 >= PUMP_MAX ? "Fire pump · FINAL" : "Fire pump", d: pumpLevel === 0 ? "Add a fire pump — stronger supply pressure" : (pumpLevel + 1 >= PUMP_MAX ? "Top tier: ~175 psi @ 1000 gpm for K25.2 heads" : "Boost pump to tier " + (pumpLevel + 1) + ": more pressure"), apply: applyPump };
+      if (cat === "tank") { var nw = Math.round(maxWater * (1 + TANK_PCT)); return { e: "🛢️", t: "Bigger tank", d: "+" + Math.round(TANK_PCT * 100) + "% capacity → " + nw.toLocaleString() + " gal", apply: applyCapacity }; }
       var elig = slots.filter(function (s) { return s.state === "active" && !s.ec; });
       var pool = SPECIALS.slice();
       if (elig.length) pool.push("ec");                         // Extended Coverage only if a head can still take it
@@ -523,12 +521,15 @@
       if (wave >= BOSS_WAVE && !bossAlive) { bossPending = true; startWave(wave + 1); return; }
       state = "upgrade";
       $("pauseBtn").hidden = true; $("hollywoodBtn").hidden = true;
-      var cats = [];
-      if (lockedCount() > 0) cats.push("unlock");
-      if (upgradeableCount() > 0) cats.push("kfactor");
-      cats.push("supply"); cats.push("special");
-      for (var i = cats.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), tmp = cats[i]; cats[i] = cats[j]; cats[j] = tmp; }
-      var chosen = cats.slice(0, 3);
+      // tank + special always in the pool; unlock/kfactor when applicable. Fire pump is its own RARE category (final tier extra-rare).
+      var others = ["tank", "special"];
+      if (lockedCount() > 0) others.push("unlock");
+      if (upgradeableCount() > 0) others.push("kfactor");
+      for (var i = others.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), tmp = others[i]; others[i] = others[j]; others[j] = tmp; }
+      var chosen = [];
+      if (pumpLevel < PUMP_MAX && Math.random() < (pumpLevel === PUMP_MAX - 1 ? PUMP_FINAL_CHANCE : PUMP_OFFER_CHANCE)) chosen.push("pump");
+      for (var c2 = 0; chosen.length < 3 && c2 < others.length; c2++) chosen.push(others[c2]);
+      for (var m = chosen.length - 1; m > 0; m--) { var n2 = Math.floor(Math.random() * (m + 1)), tt = chosen[m]; chosen[m] = chosen[n2]; chosen[n2] = tt; }  // de-bias card position
       var box = $("sgChoices"); box.innerHTML = "";
       chosen.forEach(function (cat) {
         var o = categoryOffer(cat);
@@ -657,11 +658,19 @@
       ctx.fillStyle = brass(ctx, x, y, r * 0.5, ["#c6ccd1", "#646a70"]); ctx.beginPath(); ctx.arc(x, y, r * 0.5, 0, Math.PI * 2); ctx.fill();
       ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = "#23272c"; ctx.stroke();
       for (var bi = 0; bi < 4; bi++) { var ba = Math.PI / 4 + bi * Math.PI / 2, bx = x + Math.cos(ba) * r * 0.42, by = y + Math.sin(ba) * r * 0.42; ctx.fillStyle = "#d6dbdf"; ctx.beginPath(); ctx.arc(bx, by, r * 0.085, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(bx - r * 0.025, by - r * 0.025, r * 0.03, 0, Math.PI * 2); ctx.fill(); }
-      // red glowing orifice ring + white-hot center
-      var rg = ctx.createRadialGradient(x, y, r * 0.08, x, y, r * 0.32); rg.addColorStop(0, "rgba(255,40,30,0)"); rg.addColorStop(0.6, "rgba(255,62,50," + (0.85 * glow) + ")"); rg.addColorStop(1, "rgba(255,40,30,0)");
-      ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(x, y, r * 0.32, 0, Math.PI * 2); ctx.fill();
-      ctx.lineWidth = Math.max(1.5, r * 0.075); ctx.strokeStyle = "rgba(255,72,58," + glow + ")"; ctx.beginPath(); ctx.arc(x, y, r * 0.22, 0, Math.PI * 2); ctx.stroke();
-      ctx.fillStyle = on ? "#fff" : "rgba(255,245,243," + (0.6 + 0.4 * glow) + ")"; ctx.beginPath(); ctx.arc(x, y, r * 0.14, 0, Math.PI * 2); ctx.fill();
+      // orifice: OPEN (firing) = bold concentric red glow ring around a white center; idle = dim pulsing ring
+      if (on) {
+        var hal = ctx.createRadialGradient(x, y, r * 0.12, x, y, r * 0.46); hal.addColorStop(0, "rgba(255,60,46,0.65)"); hal.addColorStop(1, "rgba(255,40,30,0)");
+        ctx.fillStyle = hal; ctx.beginPath(); ctx.arc(x, y, r * 0.46, 0, Math.PI * 2); ctx.fill();
+        ctx.lineWidth = Math.max(2, r * 0.07); ctx.strokeStyle = "#ff3a2e"; ctx.beginPath(); ctx.arc(x, y, r * 0.33, 0, Math.PI * 2); ctx.stroke();   // outer ring
+        ctx.lineWidth = Math.max(1.5, r * 0.05); ctx.strokeStyle = "#ff6a5a"; ctx.beginPath(); ctx.arc(x, y, r * 0.24, 0, Math.PI * 2); ctx.stroke();  // inner ring
+        ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(x, y, r * 0.16, 0, Math.PI * 2); ctx.fill();                                                   // white orifice
+      } else {
+        var rg = ctx.createRadialGradient(x, y, r * 0.08, x, y, r * 0.3); rg.addColorStop(0, "rgba(255,40,30,0)"); rg.addColorStop(0.6, "rgba(255,62,50," + (0.55 * glow) + ")"); rg.addColorStop(1, "rgba(255,40,30,0)");
+        ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(x, y, r * 0.3, 0, Math.PI * 2); ctx.fill();
+        ctx.lineWidth = Math.max(1.5, r * 0.06); ctx.strokeStyle = "rgba(255,72,58," + glow + ")"; ctx.beginPath(); ctx.arc(x, y, r * 0.22, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = "rgba(255,245,243," + (0.6 + 0.4 * glow) + ")"; ctx.beginPath(); ctx.arc(x, y, r * 0.14, 0, Math.PI * 2); ctx.fill();
+      }
     }
     // foam head — cross-fades between closed (solid) and open/discharging by s.foamOpen (0..1)
     function drawFoamHead(x, y, r, s) {
