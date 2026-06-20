@@ -115,7 +115,14 @@
       </div>
 
       <div class="picker">
-        <label for="topicSelect">Focus area</label>
+        <label for="editionSelect">NFPA 13 edition</label>
+        <select id="editionSelect">
+          <option value="2025">2025</option>
+          <option value="2022">2022</option>
+          <option value="2019">2019</option>
+          <option value="2016">2016</option>
+        </select>
+        <label for="topicSelect" style="margin-top:12px">Focus area</label>
         <select id="topicSelect"></select>
         <div class="count" id="topicCount">—</div>
       </div>
@@ -163,43 +170,51 @@
 
   <script src="./sprinkflow-auth.js"></script>
   <script src="./nfpa-study-questions.js"></script>
+  <script src="./nfpa-study-2016.js"></script>
   <script>
   (function () {
     "use strict";
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("../sw.js").catch(() => {});
 
     var $ = function (id) { return document.getElementById(id); };
-    var QS = window.NFPA_STUDY_QUESTIONS || [];
-    var CH = window.NFPA_STUDY_CHAPTERS || [];
-    var SRC = window.NFPA_STUDY_SOURCE || "NFPA 13, 2025 edition";
+    var EDITIONS = window.NFPA_STUDY_EDITIONS || { "2025": { label: window.NFPA_STUDY_SOURCE || "NFPA 13, 2025 edition", chapters: window.NFPA_STUDY_CHAPTERS || [], questions: window.NFPA_STUDY_QUESTIONS || [] } };
     var TOPICS = ["All topics", "General", "Water & Piping", "Components & Systems", "Sprinklers", "Storage", "Plans & Acceptance"];
-
-    $("srcName").textContent = SRC; $("srcFoot").textContent = SRC;
+    var QS = [], CH = [], SRC = "", activeEd = "2025";
 
     function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" })[c]; }); }
     function shuffle(a) { a = a.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
 
-    // topic dropdown
-    $("topicSelect").innerHTML = TOPICS.map(function (t) {
-      var n = t === "All topics" ? QS.length : QS.filter(function (q) { return q.topic === t; }).length;
-      return '<option value="' + esc(t) + '">' + esc(t) + ' (' + n + ')</option>';
-    }).join("");
     function updateCount() {
       var t = $("topicSelect").value;
       var n = t === "All topics" ? QS.length : QS.filter(function (q) { return q.topic === t; }).length;
       $("topicCount").textContent = n + " question" + (n === 1 ? "" : "s") + " in this focus area";
     }
+    function rebuildForEdition(ed) {
+      if (!EDITIONS[ed]) ed = "2025";
+      activeEd = ed;
+      var e = EDITIONS[ed];
+      QS = e.questions || []; CH = e.chapters || []; SRC = e.label || ("NFPA 13, " + ed + " edition");
+      $("srcName").textContent = SRC; $("srcFoot").textContent = SRC;
+      $("topicSelect").innerHTML = TOPICS.map(function (t) {
+        var n = t === "All topics" ? QS.length : QS.filter(function (q) { return q.topic === t; }).length;
+        return '<option value="' + esc(t) + '">' + esc(t) + ' (' + n + ')</option>';
+      }).join("");
+      updateCount();
+      var open = $("chapMap").classList.contains("open");
+      $("chapMapBody").innerHTML = CH.map(function (c) {
+        return '<div class="chap"><span class="num">' + c.n + '</span><span class="ttl">' + esc(c.t) + '</span></div>';
+      }).join("");
+      $("chapMapToggle").innerHTML = "🗺 Chapter map (" + ed + ') <span id="chapMapChevron">' + (open ? "▴" : "▾") + "</span>";
+      try { localStorage.setItem("nfpaStudyEdition", ed); } catch (e2) {}
+    }
     $("topicSelect").addEventListener("change", updateCount);
-    updateCount();
-
-    // chapter map
-    $("chapMapBody").innerHTML = CH.map(function (c) {
-      return '<div class="chap"><span class="num">' + c.n + '</span><span class="ttl">' + esc(c.t) + '</span></div>';
-    }).join("");
+    $("editionSelect").addEventListener("change", function () { rebuildForEdition($("editionSelect").value); });
     $("chapMapToggle").onclick = function () {
       var m = $("chapMap"); m.classList.toggle("open");
-      $("chapMapChevron").textContent = m.classList.contains("open") ? "▴" : "▾";
+      var ch = $("chapMapChevron"); if (ch) ch.textContent = m.classList.contains("open") ? "▴" : "▾";
     };
+    (function () { var saved = null; try { saved = localStorage.getItem("nfpaStudyEdition"); } catch (e) {} if (saved && EDITIONS[saved]) $("editionSelect").value = saved; })();
+    rebuildForEdition($("editionSelect").value);
 
     // ---- study state ----
     var deck = [], ptr = 0, cur = null, seen = 0, correct = 0, streak = 0, locked = false;
