@@ -1,5 +1,5 @@
 // SprinkFlow Tools PWA service worker — offline-first for the static tools.
-const CACHE = "sprinkflow-tools-v63";
+const CACHE = "sprinkflow-tools-v64";
 const ASSETS = [
   "./",
   "./index.html",
