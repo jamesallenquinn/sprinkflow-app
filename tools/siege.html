@@ -231,6 +231,7 @@
     var PUMP_HEAD = 79.33;                     // churn pressure added per pump tier (0→7, 3→245)
     var DROOP_C = 0.099, DROOP_N = 0.95;       // supply droop: P = churn − DROOP_C·Q^DROOP_N
     var DMG_PER_GPM = 2.0, TANK_DRAIN = 1.2, TANK_REGEN = 26, BOSS_WAVE = 15;
+    var SPECIAL_WATER_BONUS = 120;  // tank bump when a special head is installed — ~most of its auto-spray draw, intentionally a touch short
     // supply = static + pump churn, drooping with flow; ~3 psi @ 50 gpm with no pump,
     // ~175 psi @ 1000 gpm at full pump (the operating point for three K25.2 heads).
     function supplyP(Q) { var p = (P_STATIC + pumpLevel * PUMP_HEAD) - DROOP_C * Math.pow(Q, DROOP_N); return p < 0 ? 0 : p; }
@@ -560,7 +561,7 @@
       var best = null, bd = 1e9;
       for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (!selectEligible(s)) continue; var d = Math.hypot(tx - s.x, ty - s.y); if (d < bd) { bd = d; best = s; } }
       if (best && bd < gap * 0.7) {
-        if (selectKind === "unlock") { best.state = "active"; best.kTier = 0; best.q = 0; best.ec = false; best.type = pendingType; best.aim = 0; if (pendingType === "corridor") best.axis = Math.random() < 0.5 ? "x" : "y"; }
+        if (selectKind === "unlock") { best.state = "active"; best.kTier = 0; best.q = 0; best.ec = false; best.type = pendingType; best.aim = 0; if (pendingType === "corridor") best.axis = Math.random() < 0.5 ? "x" : "y"; if (pendingType !== "standard") { maxWater += SPECIAL_WATER_BONUS; water = Math.min(maxWater, water + SPECIAL_WATER_BONUS); } }
         else { best.ec = true; }
         best.flash = 0.6; selectKind = null; $("selectPrompt").hidden = true; afterChoice();
       }
