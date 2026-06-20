@@ -297,7 +297,7 @@ function mulberry32(a){
     t=t+Math.imul(t^t>>>7, 61|t)^t; return ((t^t>>>14)>>>0)/4294967296; };
 }
 function drawStructure(g){
-  if(state.structure==='woodbeam') return drawWoodBeam(g);
+  if(state.structure==='woodbeam') return (state.fastener==='woodside') ? drawWoodSection(g) : drawWoodBeam(g);
   if(state.structure!=='concrete') return;
   const x0=70, x1=W-70, yT=DECK_TOP, yB=deckBot();
   g.save();
@@ -358,6 +358,23 @@ function drawWoodBeam(g){
   ink(g,2.4); L(g,x0,yB,x1,yB);
 }
 
+// Wood member shown as a 2x6 cross-section (end view) with 45° section hatch —
+// used with the side-mount SAMMY (screws into the right face; rod drops below).
+function drawWoodSection(g){
+  const x = state.pipe ? state.pipe.x : AXIS;
+  const w = 1.5*E(), h = 5.5*E();
+  const xR = x, xL = x - w, yB = deckBot(), yT = yB - h;
+  g.save(); g.beginPath(); g.rect(xL,yT,w,h); g.clip();
+  g.fillStyle="#ffffff"; g.fillRect(xL,yT,w,h);
+  // 45° section hatch (cut lumber)
+  g.strokeStyle="#5c6671"; g.lineWidth=0.9;
+  for(let d=-h; d<w+h; d+=7){ g.beginPath(); g.moveTo(xL+d, yB); g.lineTo(xL+d+h, yB-h); g.stroke(); }
+  g.restore();
+  // outline (heavier on the mounting/right face)
+  ink(g,1.8); g.strokeRect(xL, yT, w, h);
+  ink(g,2.4); L(g, xR, yT, xR, yB);
+}
+
 /* ---------- Fastener (wedge anchor) + all-thread rod ---------- */
 function rodSize(){
   // NFPA 13 hanger-rod diameter by pipe size (3/8" through 4", 1/2" above)
@@ -398,7 +415,11 @@ function drawFastener(g){
     case 'castin':        drawCastIn(g, x); break;
     case 'concretesammy': drawSammyPart(g, x, db, 'cst'); break;  // real ITW CST trace
     case 'woodvertical':  drawSammyPart(g, x, db, 'gst'); break;  // real ITW GST trace
-    case 'woodside':      drawSammyPart(g, x, db, 'swg'); break;  // real ITW SWG trace
+    case 'woodside': {                                            // real ITW SWG into 2x6 side face
+      const xL = x - 1.5*E();                                     // beam left face
+      g.save(); g.beginPath(); g.rect(xL, 0, W, H); g.clip();     // mask screw past the far face
+      drawSammyPart(g, x, db, 'swg'); g.restore(); break;
+    }
   }
 }
 
@@ -406,19 +427,22 @@ function drawFastener(g){
 // rod-attach point. Canonical units: stud thickness = 1, screw points up (vertical
 // parts) or into -x (side); scaled to the rod diameter. White mask hides the
 // structure hatch behind the body.
+const SAMMY_FLIP = { gst:-1, cst:-1, swg:1 };   // GST/CST traced upside-down -> flip vertical
+const SAMMY_SCALE = { gst:0.72, cst:0.72, swg:0.5 }; // display scale per part (tunable)
 function drawSammyPart(g, ax, ay, key){
   const part = SAMMY[key]; if(!part || !part.seg) return;
   const rdd = (rodSize()==='1/2"') ? 0.5 : 0.375;
-  const k = rdd * E() * 0.72;                 // px per canonical unit (tunable display scale)
+  const k = rdd * E() * (SAMMY_SCALE[key]||0.72); // px per canonical unit
+  const fy = SAMMY_FLIP[key] || 1;            // vertical flip per part
   const seg = part.seg;
   // white mask over the body footprint
   let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
-  for(const s of seg){ x0=Math.min(x0,s[0],s[2]); x1=Math.max(x1,s[0],s[2]); y0=Math.min(y0,s[1],s[3]); y1=Math.max(y1,s[1],s[3]); }
+  for(const s of seg){ x0=Math.min(x0,s[0],s[2]); x1=Math.max(x1,s[0],s[2]); y0=Math.min(y0,s[1]*fy,s[3]*fy); y1=Math.max(y1,s[1]*fy,s[3]*fy); }
   g.fillStyle="#ffffff";
   g.fillRect(ax+x0*k-1, ay+y0*k-1, (x1-x0)*k+2, (y1-y0)*k+2);
   ink(g,1.0);
   g.beginPath();
-  for(const s of seg){ g.moveTo(ax+s[0]*k, ay+s[1]*k); g.lineTo(ax+s[2]*k, ay+s[3]*k); }
+  for(const s of seg){ g.moveTo(ax+s[0]*k, ay+s[1]*fy*k); g.lineTo(ax+s[2]*k, ay+s[3]*fy*k); }
   g.stroke();
 }
 
