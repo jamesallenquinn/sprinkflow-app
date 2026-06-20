@@ -148,15 +148,17 @@ const TITLE_TOP = 852;             // title block band top
 const STRUCTURES = {
   concrete: { name:"Concrete Deck", ico:"▤", on:true,
     keynote:"STRUCTURAL CONCRETE DECK (BY OTHERS)",
-    fasteners:["dropin","wedge"] },
+    fasteners:["dropin","wedge","castin","concretesammy"] },
   woodbeam: { name:"Wood Beam", ico:"▦", on:false, fasteners:["lag","throughbolt"] },
   steelbeam:{ name:"Steel Beam", ico:"▥", on:false, fasteners:["beamclamp","cclamp"] },
   barjoist: { name:"Steel Bar Joist", ico:"◿", on:false, fasteners:["topclip"] },
   steelbar: { name:"Steel Bar / Angle", ico:"▱", on:false, fasteners:["beamclamp"] },
 };
 const FASTENERS = {
-  dropin:{ name:"Hilti HDI Drop-In Anchor", on:true },   // note built dynamically (rod size)
-  wedge:{ name:"Wedge Anchor", on:false, note:'1/2"Ø x 3-1/4" MIN. EMBED WEDGE ANCHOR, ICC-ES LISTED' },
+  dropin:{ name:"Hilti HDI Drop-In Anchor", on:true },        // notes built dynamically (rod size)
+  wedge:{ name:"Wedge Anchor", on:true },
+  castin:{ name:"Cast-In Concrete Insert", on:true },
+  concretesammy:{ name:"SAMMY Concrete Screw", on:true },
   lag:{ name:"Lag Screw" }, throughbolt:{ name:"Through-Bolt" },
   beamclamp:{ name:"Beam Clamp" }, cclamp:{ name:"C-Clamp w/ Retaining Strap" },
   topclip:{ name:"Top-Chord Clip" },
@@ -342,31 +344,78 @@ function geom(){
   const bossTop = state.ring
     ? (state.rodToPipe ? (p.y - pipeR) : (p.y - ringTopPx))
     : (p.y - pipeR - 24);
-  // drop-in is flush in the deck (rod enters underside); wedge protrudes with a nut
-  const rodTop = (state.fastener==='wedge') ? deckBot() + 6 : deckBot();
+  // where the rod meets the fastener: flush at the deck underside (drop-in / cast-in
+  // insert — rod threads up inside), or below a protruding nut/collar (wedge / SAMMY)
+  const hwp = rodHwPx();
+  let rodTop = deckBot();
+  if(state.fastener==='dropin') rodTop = deckBot() - 0.6875*E();      // rod threads 11/16" up into HDI
+  else if(state.fastener==='wedge') rodTop = deckBot() + hwp*2.4;     // below washer + hex nut
+  else if(state.fastener==='concretesammy') rodTop = deckBot() + hwp*1.0; // below hex collar
   return {p, pipeR, ringR, bossTop, rodTop, nutY:rodTop, od, rd, ringTopPx};
 }
 
 function drawFastener(g){
-  const G = geom(); if(!G) return;
+  const G = geom(); if(!G || state.structure!=='concrete') return;
   const x = state.pipe.x;
-
-  if(state.fastener==='dropin' && state.structure==='concrete'){
-    drawDropIn(g, x);
-  } else if(state.fastener==='wedge' && state.structure==='concrete'){
-    // embedded wedge anchor body (kept for future)
-    const db=deckBot();
-    ink(g,2.0);
-    L(g, x, DECK_TOP+14, x, db);
-    ink(g,1.6);
-    g.beginPath(); g.moveTo(x-5,DECK_TOP+30); g.lineTo(x,DECK_TOP+20); g.lineTo(x+5,DECK_TOP+30); g.stroke();
-    g.beginPath(); g.moveTo(x-5,DECK_TOP+40); g.lineTo(x,DECK_TOP+30); g.lineTo(x+5,DECK_TOP+40); g.stroke();
-    ink(g,2.0);
-    L(g, x-13, db, x+13, db);
-    g.fillStyle="#ffffff";
-    g.beginPath(); g.rect(x-8, db, 16, 12); g.fill(); g.stroke();
-    L(g, x-8, db+6, x+8, db+6);
+  switch(state.fastener){
+    case 'dropin':        drawDropIn(g, x); break;
+    case 'wedge':         drawWedge(g, x); break;
+    case 'castin':        drawCastIn(g, x); break;
+    case 'concretesammy': drawConcreteSammy(g, x); break;
   }
+}
+
+// Wedge / expansion anchor (Kwik-Bolt style): threaded stud embedded in the deck
+// with an expansion clip near the embedded end; protrudes below the slab with a
+// washer + hex nut, then the all-thread rod continues below.
+function drawWedge(g, x){
+  const hw=rodHwPx(), ty=DECK_TOP+12, db=deckBot();
+  ink(g,1.4);
+  L(g, x-hw, ty, x-hw, db); L(g, x+hw, ty, x+hw, db);
+  ink(g,0.6); const sp=Math.max(2.4, hw*1.9);
+  for(let y=ty+sp; y<db-1; y+=sp) L(g, x-hw, y, x+hw, y);
+  // expansion clip splaying out near the embedded (upper) end
+  ink(g,1.3);
+  g.beginPath(); g.moveTo(x-hw, ty+10); g.lineTo(x-hw-hw*0.9, ty+2); g.lineTo(x-hw, ty+4); g.stroke();
+  g.beginPath(); g.moveTo(x+hw, ty+10); g.lineTo(x+hw+hw*0.9, ty+2); g.lineTo(x+hw, ty+4); g.stroke();
+  // washer + hex nut at the slab underside
+  const nw=hw*1.9, nh=hw*2.2, ww=hw*2.7;
+  ink(g,1.6); L(g, x-ww, db, x+ww, db);
+  g.fillStyle="#ffffff"; g.beginPath(); g.rect(x-nw, db, nw*2, nh); g.fill(); g.stroke();
+  L(g, x-nw, db+nh/2, x+nw, db+nh/2);
+}
+
+// Cast-in concrete insert (malleable iron, by others): dovetail body cast into the
+// slab with an internally-threaded bore; rod threads up into it flush at the underside.
+function drawCastIn(g, x){
+  const hw=rodHwPx(), bw=Math.max(7, hw*2.4), fl=hw*0.9, ty=DECK_TOP+8, db=deckBot();
+  ink(g,1.6); g.fillStyle="#ffffff";
+  g.beginPath();
+  g.moveTo(x-bw, db); g.lineTo(x-bw, ty+7); g.lineTo(x-bw-fl, ty); g.lineTo(x+bw+fl, ty);
+  g.lineTo(x+bw, ty+7); g.lineTo(x+bw, db); g.closePath(); g.fill(); g.stroke();
+  // internal threaded bore, open at the underside
+  ink(g,1.0);
+  L(g, x-hw, db, x-hw, ty+11); L(g, x+hw, db, x+hw, ty+11); L(g, x-hw, ty+11, x+hw, ty+11);
+  ink(g,0.6); const sp=Math.max(2.2, hw*1.7);
+  for(let y=db-3; y>ty+13; y-=sp) L(g, x-hw, y, x+hw, y);
+}
+
+// SAMMY-type concrete screw anchor: screw shank driven into the slab (sawtooth
+// threads) with a hex collar / rod boss at the slab face; rod threads in below.
+function drawConcreteSammy(g, x){
+  const hw=rodHwPx(), ty=DECK_TOP+12, db=deckBot();
+  ink(g,1.4);
+  L(g, x-hw, ty, x-hw, db-2); L(g, x+hw, ty, x+hw, db-2);
+  ink(g,0.8); const sp=Math.max(2.6, hw*2.0);
+  for(let y=ty+sp; y<db-3; y+=sp){
+    g.beginPath(); g.moveTo(x-hw, y); g.lineTo(x-hw-hw*0.6, y+sp*0.45); g.stroke();
+    g.beginPath(); g.moveTo(x+hw, y); g.lineTo(x+hw+hw*0.6, y+sp*0.45); g.stroke();
+  }
+  // hex collar / rod boss straddling the slab face
+  const cw=hw*1.9, ch=hw*1.8;
+  ink(g,1.5); g.fillStyle="#ffffff";
+  g.beginPath(); g.rect(x-cw, db-ch*0.45, cw*2, ch); g.fill(); g.stroke();
+  L(g, x-cw, db-ch*0.45+ch/2, x+cw, db-ch*0.45+ch/2);
 }
 
 // All-thread rod, drawn BEFORE the ring so the ring occludes it (ring in front).
@@ -383,18 +432,23 @@ function drawRod(g){
 // Hilti HDI drop-in anchor: hollow internally-threaded sleeve, set flush in deck.
 // Rod threads up into it from the underside (no protruding nut/washer).
 function drawDropIn(g, x){
-  const aw=Math.max(6, rodHwPx()*2.4), ty=DECK_TOP+10, by=deckBot(); // sized off the rod
+  // True scale: OD ≈ rod dia + 1/8" (≈1/2" sleeve for 3/8" rod, 5/8" for 1/2" rod),
+  // 2" embedment up from the slab underside; rod threads 11/16" up into the bore.
+  const rdd = (rodSize()==='1/2"') ? 0.5 : 0.375;
+  const aw = ((rdd + 0.125)/2) * E();     // outer half-width
+  const hw = rodHwPx();                    // internal threaded bore = rod radius
+  const by = deckBot();                    // flush at slab underside
+  const ty = by - 2*E();                   // 2" embedment
   ink(g,1.6); g.fillStyle="#ffffff";
   g.beginPath(); g.rect(x-aw, ty, aw*2, by-ty); g.fill(); g.stroke();
-  // setting shoulder / lip at top corners
-  const sh=Math.min(4, aw*0.4);
+  // internal threaded bore (open at underside), capped by the expander plug near the top
+  const plug = ty + 0.32*E();
+  ink(g,1.0);
+  L(g, x-hw, by, x-hw, plug); L(g, x+hw, by, x+hw, plug); L(g, x-hw, plug, x+hw, plug);
+  // expander plug / cone at the embedded end
   ink(g,0.9);
-  L(g, x-aw+sh, ty, x-aw+sh, ty+5); L(g, x-aw, ty+5, x-aw+sh, ty+5);
-  L(g, x+aw-sh, ty, x+aw-sh, ty+5); L(g, x+aw, ty+5, x+aw-sh, ty+5);
-  // internal expansion-slot lines
-  const slot=aw*0.5;
-  L(g, x-slot, ty+10, x-slot, by-6);
-  L(g, x+slot, ty+10, x+slot, by-6);
+  g.beginPath(); g.moveTo(x-aw, ty); g.lineTo(x-hw, plug); g.stroke();
+  g.beginPath(); g.moveTo(x+aw, ty); g.lineTo(x+hw, plug); g.stroke();
 }
 
 function drawAllThread(g, x, y1, y2, drawNut, hw){
@@ -487,8 +541,13 @@ function activeKeynotes(){
 }
 
 function fastenerNote(){
-  if(state.fastener==='dropin')
-    return `${rodSize()}Ø HILTI HDI DROP-IN ANCHOR, ICC-ES ESR-3779, EMBED PER MFR`;
+  const rs=rodSize();
+  switch(state.fastener){
+    case 'dropin':        return `${rs}Ø HILTI HDI DROP-IN ANCHOR, ICC-ES ESR-3779, EMBED PER MFR`;
+    case 'wedge':         return `${rs}Ø WEDGE ANCHOR x 3-1/4" MIN. EMBED, ICC-ES LISTED`;
+    case 'castin':        return `${rs}Ø CAST-IN CONCRETE INSERT (BY OTHERS), MALLEABLE IRON`;
+    case 'concretesammy': return `SAMMY CONCRETE SCREW ANCHOR FOR ${rs}Ø ROD, ICC-ES LISTED`;
+  }
   return FASTENERS[state.fastener].note || FASTENERS[state.fastener].name.toUpperCase();
 }
 
