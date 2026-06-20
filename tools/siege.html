@@ -57,6 +57,9 @@
     .sg-card .d { font:500 .76rem/1.3 Inter; color:var(--muted); }
     .sg-card[hidden] { display:none; }
     .sg-hint { text-align:center; color:var(--muted); font:500 .76rem Inter; padding:8px 0 2px; }
+    .sg-pausebtn { position:absolute; top:10px; right:10px; z-index:6; width:42px; height:42px; border-radius:12px; border:1px solid var(--line); background:rgba(13,17,22,.72); backdrop-filter:blur(2px); color:var(--ink); font-size:16px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+    .sg-pausebtn:active { transform:scale(.94); }
+    .sg-pausebtn[hidden] { display:none; }
   </style>
 </head>
 <body>
@@ -78,6 +81,14 @@
 
     <div class="sg-stage">
       <canvas id="game" width="360" height="430"></canvas>
+      <button id="pauseBtn" class="sg-pausebtn" aria-label="Pause" hidden>❚❚</button>
+
+      <div class="sg-ov" id="pauseOv">
+        <div class="ic">❚❚</div>
+        <h1>Paused</h1>
+        <button class="sg-btn" id="resumeBtn">▶ Resume</button>
+        <button class="sg-btn ghost" id="pauseRestartBtn" style="margin-top:10px">↻ Restart</button>
+      </div>
 
       <div class="sg-ov show" id="startOv">
         <div class="ic">💦</div>
@@ -127,7 +138,7 @@
     var state = "start";  // start | playing | upgrade | over | win
     var wave = 1, score = 0, integrity = 100, water = 0, maxWater = 100, holding = false;
     var spawnQueue = 0, spawnT = 0, bossPending = false, bossAlive = false;
-    var W = 360, H = 430, S = 360, dpr = 1, gap = 70, coreR = 30;
+    var W = 360, H = 430, S = 360, dpr = 1, gap = 70, coreR = 30, colXs = [], rowYs = [];
 
     function resize() {
       var pw = (canvas.parentElement && canvas.parentElement.clientWidth) || 0;
@@ -138,8 +149,10 @@
       dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.style.width = W + "px"; canvas.style.height = H + "px";
       canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
-      gap = S * 0.2; coreR = S * 0.09;
-      for (var i = 0; i < slots.length; i++) { slots[i].x = W / 2 + (slots[i].c - 1) * gap; slots[i].y = H / 2 + (slots[i].r - 1) * gap; }
+      gap = W * 0.28; coreR = S * 0.085;
+      colXs = [W * 0.2, W * 0.5, W * 0.8];
+      rowYs = [H * 0.26, H * 0.5, H * 0.74];
+      for (var i = 0; i < slots.length; i++) { slots[i].x = colXs[slots[i].c]; slots[i].y = rowYs[slots[i].r]; }
     }
     window.addEventListener("resize", resize);
 
@@ -175,7 +188,8 @@
       spawnT = 0;
       $("waveVal").textContent = bossAlive ? "BOSS" : n;
       hud();
-      $("upgradeOv").classList.remove("show"); $("startOv").classList.remove("show");
+      $("upgradeOv").classList.remove("show"); $("startOv").classList.remove("show"); $("pauseOv").classList.remove("show");
+      $("pauseBtn").hidden = false;
     }
     function hud() {
       $("scoreVal").textContent = score.toLocaleString();
@@ -262,6 +276,7 @@
       var canUnlock = lockedCount() > 0, canUp = upgradeableCount() > 0;
       if (!canUnlock && !canUp) { bossPending = true; startWave(wave + 1); return; }
       state = "upgrade";
+      $("pauseBtn").hidden = true;
       $("cardUnlock").hidden = !canUnlock; $("cardWater").hidden = !canUp;
       $("upTitle").textContent = "Wave " + wave + " cleared!";
       $("upgradeOv").classList.add("show");
@@ -273,8 +288,10 @@
       startWave(wave + 1);
     }
 
-    function gameOver() { state = "over"; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); $("overOv").classList.add("show"); }
-    function win() { state = "win"; $("winScore").textContent = score.toLocaleString(); $("winOv").classList.add("show"); }
+    function gameOver() { state = "over"; $("pauseBtn").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); $("overOv").classList.add("show"); }
+    function win() { state = "win"; $("pauseBtn").hidden = true; $("winScore").textContent = score.toLocaleString(); $("winOv").classList.add("show"); }
+    function pauseGame() { if (state !== "playing") return; state = "paused"; holding = false; $("pauseOv").classList.add("show"); }
+    function resumeGame() { if (state !== "paused") return; state = "playing"; last = 0; $("pauseOv").classList.remove("show"); }
 
     // ---- rendering ----
     function brass(ctx, x, y, r, grad) { var g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r); g.addColorStop(0, grad[0]); g.addColorStop(1, grad[1]); return g; }
@@ -326,17 +343,15 @@
     }
     function pipeSeg(x1, y1, x2, y2) {
       ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
-      ctx.lineWidth = gap * 0.22; ctx.strokeStyle = "#040506"; ctx.stroke();
-      ctx.lineWidth = gap * 0.16; ctx.strokeStyle = "#191c20"; ctx.stroke();
-      ctx.lineWidth = gap * 0.05; ctx.strokeStyle = "#33373d"; ctx.stroke();
+      ctx.lineWidth = gap * 0.16; ctx.strokeStyle = "#040506"; ctx.stroke();
+      ctx.lineWidth = gap * 0.11; ctx.strokeStyle = "#191c20"; ctx.stroke();
+      ctx.lineWidth = gap * 0.035; ctx.strokeStyle = "#33373d"; ctx.stroke();
     }
     function drawPipes() {
       ctx.lineCap = "butt";
-      var pad = S * 0.2, lx = W / 2 - gap;
-      // vertical cross-main on the left column, off the top & bottom edges
-      pipeSeg(lx, -pad, lx, H + pad);
-      // 3 branch lines through each row, off the left & right edges
-      for (var row = 0; row < 3; row++) { var y = H / 2 + (row - 1) * gap; pipeSeg(-pad, y, W + pad, y); }
+      var pad = S * 0.2;
+      // 3 horizontal branch lines, each running off the left & right edges
+      for (var row = 0; row < 3; row++) { pipeSeg(-pad, rowYs[row], W + pad, rowYs[row]); }
     }
     function render(t) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -387,14 +402,18 @@
       for (var i = 0; i < slots.length; i++) { slots[i].state = (slots[i].c === 1 && slots[i].r === 1) ? "active" : "locked"; slots[i].up = false; slots[i].flash = 0; }
       enemies = []; particles = []; score = 0; integrity = 100; maxWater = 100; water = 100; wave = 1; bossPending = false; bossAlive = false; holding = false;
     }
-    function newGame() { resize(); reset(); hud(); startWave(1); ["overOv","winOv","startOv","upgradeOv"].forEach(function (id) { $(id).classList.remove("show"); }); }
+    function newGame() { resize(); reset(); hud(); startWave(1); ["overOv","winOv","startOv","upgradeOv","pauseOv"].forEach(function (id) { $(id).classList.remove("show"); }); }
 
     $("playBtn").onclick = newGame;
     $("againBtn").onclick = newGame;
     $("winAgainBtn").onclick = newGame;
     $("cardUnlock").onclick = function () { if (state === "upgrade") chooseUnlock(); };
     $("cardWater").onclick = function () { if (state === "upgrade") chooseWater(); };
-    document.addEventListener("visibilitychange", function () { if (document.hidden) { last = 0; holding = false; } else { resize(); if (state !== "playing") render(0); } });
+    $("pauseBtn").onclick = function () { if (state === "playing") pauseGame(); else if (state === "paused") resumeGame(); };
+    $("resumeBtn").onclick = resumeGame;
+    $("pauseRestartBtn").onclick = newGame;
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape" || e.key === "p" || e.key === "P") { if (state === "playing") pauseGame(); else if (state === "paused") resumeGame(); } });
+    document.addEventListener("visibilitychange", function () { if (document.hidden) { last = 0; holding = false; pauseGame(); } else { resize(); if (state !== "playing") render(0); } });
     window.addEventListener("load", function () { resize(); if (state !== "playing") render(0); });
 
     resize(); render(0);
