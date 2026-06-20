@@ -100,6 +100,17 @@
     .who b { color:var(--accent); }
     .signout { background:none; border:0; color:var(--water); font:600 .85rem Inter; cursor:pointer; text-decoration:underline; }
 
+    /* auto-advance toggle */
+    .auto-toggle { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; box-sizing:border-box; margin:12px 0 0; padding:13px 16px; background:var(--surface); border:1px solid var(--line); border-radius:14px; cursor:pointer; text-align:left; }
+    .auto-toggle > span:first-child { font:600 .95rem Inter; color:var(--ink); }
+    .auto-toggle .sub { display:block; font:500 .76rem Inter; color:var(--muted); margin-top:2px; }
+    .auto-toggle input { position:absolute; opacity:0; width:0; height:0; }
+    .auto-toggle .switch { position:relative; width:46px; height:26px; border-radius:99px; background:var(--surface-soft); border:1px solid var(--line-strong); flex:none; transition:background .15s, border-color .15s; }
+    .auto-toggle .switch::after { content:""; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:var(--muted); transition:transform .15s, background .15s; }
+    .auto-toggle input:checked + .switch { background:var(--accent); border-color:var(--accent); }
+    .auto-toggle input:checked + .switch::after { transform:translateX(20px); background:#1a0d06; }
+    .auto-toggle input:focus-visible + .switch { outline:2px solid var(--accent); outline-offset:2px; }
+
     /* results */
     .result { text-align:center; padding:18px 6px; }
     .result .score-big { font:700 3.4rem/1 'Space Grotesk'; background:var(--grad-fw); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
@@ -156,6 +167,11 @@
         <p>12 questions, 15 seconds each — then survive the endless ⚡ Lightning Round, where the clock keeps shrinking and points keep climbing. Top the global leaderboard of sprinkler nerds.</p>
         <button class="btn primary" id="playBtn">▶ Play</button>
         <button class="btn ghost" id="howBtn" style="margin-top:10px">How scoring works</button>
+        <label class="auto-toggle">
+          <span>⚡ Auto-advance<span class="sub">Jump to the next question right after you answer</span></span>
+          <input type="checkbox" id="autoAdvanceToggle" />
+          <span class="switch" aria-hidden="true"></span>
+        </label>
         <div class="who" id="whoLine">Not signed in — <span style="margin-left:4px"></span></div>
       </div>
 
@@ -239,7 +255,7 @@
     var ROUND = 12, PER_Q = 15; // questions per round, seconds per question
     var $ = function (id) { return document.getElementById(id); };
     var els = {};
-    ["screen-start","screen-game","screen-result","playBtn","howBtn","whoLine","lbList","lbList2",
+    ["screen-start","screen-game","screen-result","playBtn","howBtn","autoAdvanceToggle","whoLine","lbList","lbList2",
      "qNumLabel","qNumVal","scoreVal","streakVal","streakFire","timerBar","timerFill","dots","qTag","qText","choices","lightBanner",
      "fiftyBtn","skipBtn","refBox","nextWrap","nextBtn","finalScore","finalCorrect","finalLightning","finalStreak",
      "rankMsg","againBtn","postBtn","toBoardBtn","modal","signinForm","emailInput","passInput",
@@ -346,6 +362,7 @@
     var score = 0, streak = 0, bestStreak = 0, correctCount = 0;
     var locked = false, tInt = null, tRemain = 0, tDur = PER_Q, fiftyUsed = false, skipUsed = false, pendingScore = null;
     var LIGHT_STEP = 0.2, LIGHT_FLOOR = 2.0;                       // lightning: -0.2 s/question, floored at 2 s
+    var autoAdvance = false, autoTimer = null;                     // auto-advance to next question after answering
 
     function shuffle(a) { a = a.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
 
@@ -404,6 +421,7 @@
 
     function renderQ() {
       locked = false;
+      if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
       var q = curQ;
       if (mode === "lightning") {
         els.qNumLabel.textContent = "Lightning";
@@ -481,15 +499,21 @@
       else if (isLight && lightDead) els.nextBtn.textContent = "Game over — see results →";
       else els.nextBtn.textContent = "Next →";
       els.nextWrap.classList.remove("hidden");
+      if (autoAdvance) {
+        if (autoTimer) clearTimeout(autoTimer);
+        autoTimer = setTimeout(goNext, (isLight && lightDead) ? 2400 : 1700);
+      }
     }
 
     function bump(el) { el.style.transform = "scale(1.25)"; setTimeout(function () { el.style.transform = ""; }, 180); }
 
-    els.nextBtn.onclick = function () {
+    function goNext() {
+      if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
       if (mode === "main" && qIndex >= ROUND) { enterLightning(); return; }
       if (mode === "lightning" && lightDead) { endGame(); return; }
       advance();
-    };
+    }
+    els.nextBtn.onclick = goNext;
 
     els.fiftyBtn.onclick = function () {
       if (fiftyUsed || locked) return;
@@ -549,6 +573,13 @@
     }
 
     // ---- wire start/result buttons ----
+    autoAdvance = localStorage.getItem("nfpaQuizAutoAdvance") === "1";
+    els.autoAdvanceToggle.checked = autoAdvance;
+    els.autoAdvanceToggle.addEventListener("change", function () {
+      autoAdvance = els.autoAdvanceToggle.checked;
+      try { localStorage.setItem("nfpaQuizAutoAdvance", autoAdvance ? "1" : "0"); } catch (e) {}
+    });
+
     els.playBtn.onclick = startGame;
     els.againBtn.onclick = startGame;
     els.toBoardBtn.onclick = function () { show("start"); loadLeaderboard("lbList"); };
