@@ -512,7 +512,7 @@
       for (i2 = 0; i2 < act.length; i2++) {
         var sh = act[i2], fire;
         if (hw) fire = true;
-        else if (typeOf(sh) === "standard") fire = holding;
+        else if (typeOf(sh) === "standard") fire = holding || (sh.kTier >= 2 && hasTarget(sh));   // AutoShot: K11.2+ standard heads auto-discharge at flames in range
         else fire = hasTarget(sh);              // specials run automatically when they can hit something
         sh.firing = fire; if (fire) firing.push(sh);
       }
@@ -887,7 +887,7 @@
       // label only while inspecting (tap & hold this head ~1s) — keeps the playfield clean
       if (s === inspectSlot) {
         var grade = ty === "standard" ? (s.kTier >= 3 ? "ESFR" : s.kTier >= 2 ? "ELO" : "") : TYPE_INFO[ty].n;
-        var label = (s.fr ? "Fast Response " : "") + (grade ? grade + " " : "") + "K" + KLADDER[s.kTier].toFixed(1) + (s.ec ? " EC" : "") + (s.hp ? " 300psi" : "");
+        var label = (s.fr ? "Fast Response " : "") + (grade ? grade + " " : "") + "K" + KLADDER[s.kTier].toFixed(1) + (s.ec ? " EC" : "") + (s.hp ? " 300psi" : "") + (ty === "standard" && s.kTier >= 2 ? " AutoShot" : "");
         var fs = Math.max(9, Math.round(r * 0.44 / viewScale)); ctx.font = "700 " + fs + "px Inter, Arial, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";
         var ly = y + r + 4 / viewScale, tw = ctx.measureText(label).width;
         ctx.fillStyle = "rgba(8,12,16,0.82)"; ctx.fillRect(x - tw / 2 - 5, ly - 2, tw + 10, fs + 6);   // backing pill for readability
