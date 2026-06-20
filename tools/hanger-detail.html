@@ -5,33 +5,36 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="theme-color" content="#1b1f24" />
+<meta name="theme-color" content="#0d1116" />
 <title>Hanger Detail — SprinkFlow</title>
 <link rel="manifest" href="../manifest.webmanifest" />
 <link rel="icon" href="../assets/icon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="../assets/logo.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
 <style>
   :root{
-    --bg:#1b1f24; --panel:#23282f; --panel2:#2c333b; --line:#3a424c;
-    --ink:#e8edf2; --muted:#9aa6b2; --accent:#4da3ff; --accent2:#2b6cb0;
-    --good:#34c759; --tap:56px;
+    --bg:#0d1116; --panel:#171d24; --panel2:#202832; --line:#2d3742; --line-strong:#536171;
+    --ink:#f5f7f8; --muted:#aab4bd; --accent:#ffb03a; --accent2:#ff5a2f;
+    --good:#3ddc97; --tap:56px;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0; height:100%; overflow:hidden; background:var(--bg);
-    color:var(--ink); font-family:Arial, Helvetica, sans-serif;
+    color:var(--ink); font-family:"Inter", system-ui, -apple-system, sans-serif;
     -webkit-user-select:none; user-select:none; touch-action:none;}
   #app{display:flex; flex-direction:column; height:100%;}
 
   /* Top bar */
-  header{display:flex; align-items:center; gap:8px; padding:8px 10px;
+  header{display:flex; align-items:center; gap:8px;
+    padding:max(env(safe-area-inset-top,0px),8px) 10px 8px;
     background:var(--panel); border-bottom:1px solid var(--line); flex:0 0 auto;}
-  header .title{font-size:15px; font-weight:bold; letter-spacing:.3px;}
+  header .title{font-family:"Space Grotesk","Inter",sans-serif; font-size:15px; font-weight:700; letter-spacing:.2px;}
   header .spacer{flex:1;}
   .iconbtn{height:40px; min-width:40px; padding:0 12px; border:1px solid var(--line);
     background:var(--panel2); color:var(--ink); border-radius:9px; font-size:13px;
     font-weight:bold; display:inline-flex; align-items:center; gap:6px;}
   .iconbtn:active{background:#39424d;}
-  .iconbtn.primary{background:var(--accent2); border-color:var(--accent2);}
+  .iconbtn.primary{background:linear-gradient(120deg,#ff5a2f,#ffb03a); border-color:transparent; color:#1a0d06;}
 
   /* Canvas area */
   #stage{position:relative; flex:1 1 auto; min-height:0; overflow:hidden;
@@ -62,7 +65,7 @@
     align-items:center; justify-content:center; gap:2px; font-size:11px; font-weight:bold;}
   .tool .ic{font-size:19px; line-height:1;}
   .tool[aria-disabled="true"]{opacity:.38;}
-  .tool.active{background:var(--accent2); border-color:var(--accent); box-shadow:0 0 0 2px rgba(77,163,255,.25) inset;}
+  .tool.active{background:var(--accent2); border-color:var(--accent); box-shadow:0 0 0 2px rgba(255,176,58,.3) inset;}
   .tool .done{position:absolute; transform:translate(16px,-15px); color:var(--good); font-size:13px;}
   .toolwrap{position:relative; flex:1; display:flex;}
 
@@ -81,7 +84,7 @@
   .opt small{display:block; color:var(--muted); font-weight:normal; font-size:12px; margin-top:2px;}
   .opt .gico{font-size:24px; width:30px; text-align:center;}
   .opt[disabled]{opacity:.4;}
-  .opt.sel{border-color:var(--accent); box-shadow:0 0 0 2px rgba(77,163,255,.25) inset;}
+  .opt.sel{border-color:var(--accent); box-shadow:0 0 0 2px rgba(255,176,58,.3) inset;}
   .chips{display:flex; flex-wrap:wrap; gap:8px;}
   .chip{padding:10px 14px; border:1px solid var(--line); background:var(--panel2);
     color:var(--ink); border-radius:20px; font-size:14px; font-weight:bold;}
@@ -101,7 +104,7 @@
     <a class="iconbtn" href="../index.html" aria-label="Back to SprinkFlow" style="text-decoration:none;">‹</a>
     <span class="title">Hanger Detail</span>
     <span class="spacer"></span>
-    <button class="iconbtn" id="btnEdit">✎ Title</button>
+    <button class="iconbtn" id="btnEdit" aria-label="Options">⚙</button>
     <button class="iconbtn" id="btnUndo">↺ Reset</button>
     <button class="iconbtn primary" id="btnExport">⤓ PNG</button>
   </header>
@@ -199,6 +202,7 @@ const state = {
   detailScale:1,        // zoom of the drawing content within the fixed sheet
   keynotePos:{},        // per-keynote bubble position {at:{x,y}} (movable)
   keynoteArrow:{},      // per-keynote arrow-tip position {at:{x,y}} (movable; default = component)
+  keynoteShape:'bubble',// bubble | square | rectangle | plain (no outline)
   title:"PIPE HANGER DETAIL — CONCRETE DECK",
   detailNo:"1",
 };
@@ -580,9 +584,16 @@ function drawKeynotes(g){
     const sx=bx+dx/dl*R, sy=byy+dy/dl*R;
     ink(g,1.0); g.beginPath(); g.moveTo(sx,sy); g.lineTo(a.x,a.y); g.stroke();
     arrow(g, sx, sy, a.x, a.y);                         // arrowhead at the tip
-    // bubble
-    ink(g,1.8); g.fillStyle="#ffffff";
-    g.beginPath(); g.arc(bx, byy, R, 0, 7); g.fill(); g.stroke();
+    // bubble / tag (shape selectable: bubble | square | rectangle | plain)
+    const shape = state.keynoteShape || 'bubble';
+    g.fillStyle="#ffffff";
+    if(shape==='bubble'){
+      ink(g,1.8); g.beginPath(); g.arc(bx, byy, R, 0, 7); g.fill(); g.stroke();
+    } else if(shape==='square'){
+      const s=R*1.65; ink(g,1.8); g.beginPath(); g.rect(bx-s, byy-s, s*2, s*2); g.fill(); g.stroke();
+    } else if(shape==='rectangle'){
+      const hwR=R*1.6, hhR=R*1.05; ink(g,1.8); g.beginPath(); g.rect(bx-hwR, byy-hhR, hwR*2, hhR*2); g.fill(); g.stroke();
+    } // 'plain' = no outline/fill, just the number on the white sheet
     g.fillStyle="#111418"; g.textAlign="center"; g.textBaseline="middle";
     g.fillText(String(k.n), bx, byy+1);
     g.textBaseline="alphabetic";
@@ -922,11 +933,24 @@ document.getElementById('btnUndo').onclick=()=>{
   flash("Tap <b>Pipe</b> to pick a size, then tap the canvas to place it.");
 };
 document.getElementById('btnEdit').onclick=()=>{
-  showSheet(`<h3>Detail Title</h3>
+  const shapes=[['bubble','● Bubble'],['square','■ Square'],['rectangle','▬ Rectangle'],['plain','№ No outline']];
+  const chips=shapes.map(([k,lbl])=>`<button class="chip ${state.keynoteShape===k?'sel':''}" data-shape="${k}">${lbl}</button>`).join('');
+  showSheet(`<h3>Detail Options</h3>
     <div class="field"><label>Title</label><input id="tIn" value="${escapeAttr(state.title)}"></div>
     <div class="field"><label>Detail number</label><input id="nIn" value="${escapeAttr(state.detailNo)}"></div>
+    <div class="field"><label>Keynote style</label><div class="chips" id="shapeChips">${chips}</div></div>
+    <button class="opt" style="justify-content:center;margin:0 0 8px;" data-act="resetkeys">↺ Reset keynote positions</button>
     <div class="row"><button class="ghost" data-act="close">Cancel</button>
     <button class="opt" style="justify-content:center;margin:0;" data-act="save">Save</button></div>`);
+  sheet.querySelectorAll('#shapeChips .chip').forEach(c=> c.onclick=()=>{
+    state.keynoteShape=c.dataset.shape;
+    sheet.querySelectorAll('#shapeChips .chip').forEach(x=>x.classList.toggle('sel', x===c));
+    draw();
+  });
+  sheet.querySelector('[data-act="resetkeys"]').onclick=()=>{
+    state.keynotePos={}; state.keynoteArrow={};
+    draw(); flash("Keynotes reset to default positions.");
+  };
   sheet.querySelector('[data-act="save"]').onclick=()=>{
     state.title=(document.getElementById('tIn').value||state.title).toUpperCase();
     state.detailNo=document.getElementById('nIn').value||state.detailNo;
