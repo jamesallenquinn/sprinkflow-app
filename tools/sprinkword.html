@@ -205,18 +205,41 @@
     }
     var DAY = dayNumber();
     var PUZZLE_NO = DAY + 1;
-    var TODAY = ANSWERS.length ? ANSWERS[((DAY % ANSWERS.length) + ANSWERS.length) % ANSWERS.length] : { w: "RISER", hint: "" };
+    var len = ANSWERS.length || 1;
+    var idx = ((DAY % len) + len) % len;
+
+    // ---- preview / testing override (no effect on the real daily streak) ----
+    // ?n=N  -> play puzzle number N ;  ?word=ABCDE -> play that specific word.
+    var PREVIEW = false;
+    (function () {
+      var p = new URLSearchParams(location.search);
+      var pWord = (p.get("word") || "").trim().toUpperCase();
+      var pN = parseInt(p.get("n") || p.get("try") || "", 10);
+      if (/^[A-Z]{5}$/.test(pWord)) {
+        PREVIEW = true;
+        var found = null;
+        for (var i = 0; i < ANSWERS.length; i++) if (ANSWERS[i].w === pWord) found = ANSWERS[i];
+        ANSWERS = [found || { w: pWord, hint: "(preview word — no hint set)" }];
+        idx = 0; PUZZLE_NO = "preview";
+      } else if (isFinite(pN) && pN >= 1) {
+        PREVIEW = true;
+        idx = ((pN - 1) % len + len) % len; PUZZLE_NO = pN + " (preview)";
+      }
+    })();
+
+    var TODAY = ANSWERS.length ? ANSWERS[idx] : { w: "RISER", hint: "" };
     var ANSWER = TODAY.w, HINT = TODAY.hint;
     function isWord(w) { return w === ANSWER || !DICT_LOADED || DICT[w] === 1; }
 
     // ---- storage ----
+    var STATE_KEY = PREVIEW ? "sprinkword.preview" : "sprinkword.state";
     function load(key, def) { try { return JSON.parse(localStorage.getItem(key)) || def; } catch (e) { return def; } }
     function save(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
 
-    var state = load("sprinkword.state", null);
-    if (!state || state.day !== DAY) {
-      state = { day: DAY, guesses: [], status: "playing" };
-      save("sprinkword.state", state);
+    var state = PREVIEW ? null : load(STATE_KEY, null);
+    if (PREVIEW || !state || state.day !== DAY) {
+      state = { day: PREVIEW ? "preview-" + ANSWER : DAY, guesses: [], status: "playing" };
+      save(STATE_KEY, state);
     }
     var stats = load("sprinkword.stats", { played: 0, wins: 0, cur: 0, max: 0, lastWinDay: -999, dist: { 1:0,2:0,3:0,4:0,5:0,6:0 } });
 
@@ -334,24 +357,26 @@
       cur = "";
       if (guess === ANSWER) { finish("won"); }
       else if (state.guesses.length >= ROWS) { finish("lost"); }
-      save("sprinkword.state", state);
+      save(STATE_KEY, state);
     }
 
     function finish(result) {
       state.status = result;
-      save("sprinkword.state", state);
-      // update stats once
-      stats.played++;
-      if (result === "won") {
-        stats.wins++;
-        stats.dist[state.guesses.length] = (stats.dist[state.guesses.length] || 0) + 1;
-        stats.cur = (stats.lastWinDay === DAY - 1) ? stats.cur + 1 : 1;
-        stats.lastWinDay = DAY;
-        if (stats.cur > stats.max) stats.max = stats.cur;
-      } else {
-        stats.cur = 0;
+      save(STATE_KEY, state);
+      // preview games never count toward real stats / streak
+      if (!PREVIEW) {
+        stats.played++;
+        if (result === "won") {
+          stats.wins++;
+          stats.dist[state.guesses.length] = (stats.dist[state.guesses.length] || 0) + 1;
+          stats.cur = (stats.lastWinDay === DAY - 1) ? stats.cur + 1 : 1;
+          stats.lastWinDay = DAY;
+          if (stats.cur > stats.max) stats.max = stats.cur;
+        } else {
+          stats.cur = 0;
+        }
+        save("sprinkword.stats", stats);
       }
-      save("sprinkword.stats", stats);
       setTimeout(function () {
         if (result === "won") toast(["Genius!", "Magnificent!", "Impressive!", "Splendid!", "Great!", "Phew!"][state.guesses.length - 1] || "Solved!");
         else toast("The word was " + ANSWER);
