@@ -187,7 +187,7 @@
     // grid: 3x3 sprinkler slots. col/row 0..2. center (1,1) starts active.
     var slots = [];
     for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) slots.push({ c: c, r: r, x: 0, y: 0, state: (c === 1 && r === 1) ? "active" : "locked", kTier: 0, q: 0, type: (c === 1 && r === 1) ? "standard" : null, ec: false, aim: 0 });
-    var enemies = [], particles = [];
+    var enemies = [], particles = [], foamPiles = [];
     var state = "start";  // start | playing | upgrade | over | win
     var wave = 1, score = 0, integrity = 100, water = 330, maxWater = 330, holding = false;
     var spawnQueue = 0, spawnT = 0, bossPending = false, bossAlive = false;
@@ -230,6 +230,7 @@
     var PUMP_MAX = 3;                          // fire-pump tiers; maxed pump ≈ 175 psi @ 1000 gpm (for K25.2)
     var TANK_PCT = 0.30;                        // tank upgrades scale by % of CURRENT capacity → compounds to massive end-game tanks
     var PUMP_OFFER_CHANCE = 0.45, PUMP_FINAL_CHANCE = 0.10;  // pump rarer than other cards; final tier (lvl2→3) very rare
+    var FOAM_PILE_LIFE = 5.5;                  // foam piles persist (sec); flames wading through take damage + slow (no damage from the spray itself)
     var PUMP_HEAD = 79.33;                     // churn pressure added per pump tier (0→7, 3→245)
     var DROOP_C = 0.099, DROOP_N = 0.95;       // supply droop: P = churn − DROOP_C·Q^DROOP_N
     var DMG_PER_GPM = 2.0, TANK_DRAIN = 1.2, TANK_REGEN = 26, BOSS_WAVE = 15;
@@ -279,7 +280,8 @@
     // pick the largest preset zoom at which no active head's coverage bubble is clipped by the screen
     function chooseZoom() {
       var cx = W / 2, cy = H / 2, maxX = 1e-6, maxY = 1e-6;
-      for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (s.state !== "active") continue; var R = coverageRadius(s); maxX = Math.max(maxX, Math.abs(s.x - cx) + R); maxY = Math.max(maxY, Math.abs(s.y - cy) + R); }
+      // only Extended-Coverage heads grow the required view; corridor's long axis & normal heads don't push the zoom out
+      for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (s.state !== "active") continue; var R = s.ec ? coverageRadius(s) : gap * 0.6; maxX = Math.max(maxX, Math.abs(s.x - cx) + R); maxY = Math.max(maxY, Math.abs(s.y - cy) + R); }
       var zfit = Math.min((W / 2) / maxX, (H / 2) / maxY) * 0.98;
       var chosen = ZPRESETS[ZPRESETS.length - 1];
       for (var p = 0; p < ZPRESETS.length; p++) { if (ZPRESETS[p] <= zfit) { chosen = ZPRESETS[p]; break; } }
@@ -418,7 +420,7 @@
           s.laserTgt = tgt; if (tgt) tgt.dmgFrame += per; continue;
         }
         if (ty === "lawn") { var hits = 0; for (j = 0; j < enemies.length && hits < 3; j++) { em = enemies[j]; if (canHit(s, em)) { em.dmgFrame += per; hits++; } } continue; }
-        if (ty === "foam") { for (j = 0; j < enemies.length; j++) { em = enemies[j]; if (canHit(s, em)) { em.dmgFrame += per; em.slowT = 0.4; } } continue; }
+        if (ty === "foam") { s.foamDropT = (s.foamDropT || 0) + dt; if (s.foamDropT >= 0.16 && foamPiles.length < 110) { s.foamDropT = 0; var pa = Math.random() * Math.PI * 2, pr = headReach(s) * Math.sqrt(Math.random()); foamPiles.push({ x: s.x + Math.cos(pa) * pr, y: s.y + Math.sin(pa) * pr, r: gap * (0.16 + Math.random() * 0.14), life: FOAM_PILE_LIFE, max: FOAM_PILE_LIFE, dps: per, kTier: s.kTier, seed: Math.random() * 6.28 }); } continue; }   // foam lays piles on the ground; damage happens in the piles, not the spray
         for (j = 0; j < enemies.length; j++) { em = enemies[j]; if (canHit(s, em)) em.dmgFrame += per; }  // standard + corridor
       }
       // enemies move + apply damage
@@ -440,6 +442,10 @@
           }
           continue;
         }
+        // foam piles: flames wading through take damage (strongest overlapping pile) + slow
+        var pileDmg = 0, inFoam = false;
+        for (var fp = 0; fp < foamPiles.length; fp++) { var pl = foamPiles[fp]; if (Math.hypot(e.x - pl.x, e.y - pl.y) <= pl.r + e.sz * 0.35) { inFoam = true; if (pl.kTier >= e.minTier) pileDmg = Math.max(pileDmg, pl.dps); } }
+        if (inFoam) { e.dmgFrame += pileDmg; e.slowT = 0.4; }
         // apply this frame's accumulated damage
         if (e.dmgFrame > 0) {
           {
@@ -459,22 +465,27 @@
           continue;
         }
       }
-      // spray droplets from sprinklers
+      // spray droplets — each head type throws droplets that match its actual spray pattern
       if (spraying) for (var a2 = 0; a2 < act.length; a2++) {
-        var s2 = act[a2], t2 = typeOf(s2); if (s2.q <= 0 || t2 === "laser" || t2 === "corridor") continue; var R = sprayRadius(s2) * TYPE_INFO[t2].rng, nd = Math.max(1, Math.min(9, Math.round(s2.q / 3.5)));
+        var s2 = act[a2]; if (s2.q <= 0) continue; var t2 = typeOf(s2), nd = Math.max(1, Math.min(9, Math.round(s2.q / 3.5)));
         for (var d = 0; d < nd; d++) {
-          if (particles.length > 540) break;
-          var an2 = Math.random() * Math.PI * 2;
-          var lifeD = 0.30 + Math.random() * 0.30;
-          var reach = R * (0.45 + Math.random() * 0.55);
-          var spd2 = reach / lifeD;
-          particles.push({ x: s2.x + Math.cos(an2) * R * 0.12, y: s2.y + Math.sin(an2) * R * 0.12, vx: Math.cos(an2) * spd2, vy: Math.sin(an2) * spd2, life: lifeD, max: lifeD, r: 1.6 + Math.random() * 2.4, c: "#a6e9ff", spray: true });
+          if (particles.length > 560) break;
+          var lifeD = 0.30 + Math.random() * 0.30, ang, reach, col = "#a6e9ff", rr = 1.6 + Math.random() * 2.4;
+          if (t2 === "laser") { if (!s2.laserTgt) break; ang = Math.atan2(s2.laserTgt.y - s2.y, s2.laserTgt.x - s2.x); reach = Math.min(Math.hypot(s2.laserTgt.x - s2.x, s2.laserTgt.y - s2.y), headReach(s2)) * (0.45 + Math.random() * 0.55); col = "#ff8a78"; }
+          else if (t2 === "lawn") { ang = (s2.aim || 0) + (Math.random() * 2 - 1) * 0.6; reach = headReach(s2) * (0.5 + Math.random() * 0.5); col = "#cdeacf"; }       // rotating cone
+          else if (t2 === "corridor") { var ax = corridorAxis(s2), pos = Math.random() < 0.5; ang = (ax === "x" ? (pos ? 0 : Math.PI) : (pos ? Math.PI / 2 : -Math.PI / 2)) + (Math.random() * 2 - 1) * 0.05; reach = coverageRadius(s2) * 3 * (0.4 + Math.random() * 0.6); }   // long, one-axis
+          else if (t2 === "foam") { ang = Math.random() * Math.PI * 2; reach = headReach(s2) * (0.4 + Math.random() * 0.6); col = "#ffffff"; rr = 2.6 + Math.random() * 3; lifeD += 0.15; }  // white foam
+          else if (t2 === "moon") { ang = Math.random() * Math.PI * 2; reach = headReach(s2) * (0.4 + Math.random() * 0.6); col = "#bfe0ff"; }
+          else { ang = Math.random() * Math.PI * 2; reach = sprayRadius(s2) * (0.45 + Math.random() * 0.55); }                                                                  // standard radial
+          var spd2 = reach / lifeD, sox = Math.cos(ang), soy = Math.sin(ang);
+          particles.push({ x: s2.x + sox * reach * 0.12, y: s2.y + soy * reach * 0.12, vx: sox * spd2, vy: soy * spd2, life: lifeD, max: lifeD, r: rr, c: col, spray: true });
         }
       }
       // particles
       for (var q = particles.length - 1; q >= 0; q--) { var pt = particles[q]; pt.life -= dt; if (pt.life <= 0) { particles.splice(q, 1); continue; } pt.x += pt.vx * dt; pt.y += pt.vy * dt; }
       // floating combat text + flash decay
       for (var fq = floats.length - 1; fq >= 0; fq--) { var ft = floats[fq]; ft.life -= dt; if (ft.life <= 0) { floats.splice(fq, 1); continue; } ft.y += ft.vy * dt; ft.vy *= 0.92; }
+      for (var fp2 = foamPiles.length - 1; fp2 >= 0; fp2--) { foamPiles[fp2].life -= dt; if (foamPiles[fp2].life <= 0) foamPiles.splice(fp2, 1); }
       for (var k = 0; k < slots.length; k++) { if (slots[k].flash > 0) slots[k].flash = Math.max(0, slots[k].flash - dt); if (slots[k].hurt > 0) slots[k].hurt = Math.max(0, slots[k].hurt - dt); }
       if (hurtT > 0) hurtT = Math.max(0, hurtT - dt);
       // live damage-per-second meter (smoothed): rises fast, falls quick when you stop spraying
@@ -607,8 +618,8 @@
       if (s.hurt > 0) { ctx.globalAlpha = Math.min(1, s.hurt / 0.45); ctx.fillStyle = "#ff3b30"; ctx.beginPath(); ctx.arc(x, y, r + 5, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; }
       // label: standard grade (ELO/ESFR) or the special's name, + K-factor + EC
       var grade = ty === "standard" ? (s.kTier >= 3 ? "ESFR" : s.kTier >= 2 ? "ELO" : "") : TYPE_INFO[ty].n;
-      ctx.fillStyle = s.ec ? "#ffb03a" : "rgba(232,240,244,0.92)"; ctx.font = "700 " + Math.round(r * 0.46) + "px Inter, Arial, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";
-      ctx.fillText((grade ? grade + " " : "") + "K" + KLADDER[s.kTier].toFixed(1) + (s.ec ? " EC" : ""), x, y + r + 3);
+      ctx.fillStyle = s.ec ? "#ffb03a" : "rgba(232,240,244,0.92)"; ctx.font = "700 " + Math.max(7, Math.round(r * 0.46 / viewScale)) + "px Inter, Arial, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";   // /viewScale → constant on-screen size when zoomed out
+      ctx.fillText((grade ? grade + " " : "") + "K" + KLADDER[s.kTier].toFixed(1) + (s.ec ? " EC" : ""), x, y + r + 3 / viewScale);
     }
     // empty pipe outlet — a square head plug
     function drawPlug(x, y, r) {
@@ -859,6 +870,17 @@
       // 3 horizontal branch lines, each running off the left & right edges
       for (var row = 0; row < 3; row++) { pipeSeg(-pad, rowYs[row], W + pad, rowYs[row]); }
     }
+    // white foam piles on the ground (flames wade through them)
+    function drawFoamPiles() {
+      for (var i = 0; i < foamPiles.length; i++) {
+        var pl = foamPiles[i], a = Math.min(0.82, pl.life / pl.max * 0.95), b;
+        ctx.globalAlpha = a;
+        ctx.fillStyle = "#e8f1ff"; ctx.beginPath(); ctx.arc(pl.x, pl.y, pl.r, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.92)";
+        for (b = 0; b < 5; b++) { var ba = b * 1.6 + pl.seed; ctx.beginPath(); ctx.arc(pl.x + Math.cos(ba) * pl.r * 0.5, pl.y + Math.sin(ba) * pl.r * 0.5, pl.r * (0.36 + (b % 2) * 0.12), 0, Math.PI * 2); ctx.fill(); }
+      }
+      ctx.globalAlpha = 1;
+    }
     function render(t) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
@@ -869,6 +891,7 @@
       cg.addColorStop(0, "rgba(255,176,58,0.10)"); cg.addColorStop(1, "rgba(255,176,58,0)");
       ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(W / 2, H / 2, coreR, 0, Math.PI * 2); ctx.fill();
       drawPipes();
+      drawFoamPiles();
       for (var i = 0; i < slots.length; i++) drawSprinkler(slots[i]);
       // enemies
       for (var e = 0; e < enemies.length; e++) {
@@ -907,7 +930,7 @@
       for (var fi = 0; fi < floats.length; fi++) {
         var f = floats[fi], fa = Math.min(1, f.life / f.max * 1.6);
         ctx.globalAlpha = fa; ctx.fillStyle = f.color;
-        ctx.font = "800 " + Math.round(13 * f.sc) + "px 'Space Grotesk', Arial, sans-serif";
+        ctx.font = "800 " + Math.max(8, Math.round(13 * f.sc / viewScale)) + "px 'Space Grotesk', Arial, sans-serif";
         ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.strokeText(f.text, f.x, f.y); ctx.fillText(f.text, f.x, f.y);
       }
       ctx.globalAlpha = 1;
@@ -933,7 +956,7 @@
 
     function reset() {
       for (var i = 0; i < slots.length; i++) { var ctr = slots[i].c === 1 && slots[i].r === 1; slots[i].state = ctr ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].hurt = 0; slots[i].ec = false; slots[i].type = ctr ? "standard" : null; slots[i].aim = 0; }
-      enemies = []; particles = []; floats = []; score = 0; integrity = 100; maxWater = 330; water = 330; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
+      enemies = []; particles = []; floats = []; foamPiles = []; score = 0; integrity = 100; maxWater = 330; water = 330; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
       tankFillMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0; selectKind = null; hurtT = 0; dpsNow = 0; dpsShown = 0;
       viewScale = 1; zoomTarget = 1;
       updatePumpIcons(); $("dpsMeter").hidden = true;
