@@ -186,7 +186,7 @@
 
     // grid: 3x3 sprinkler slots. col/row 0..2. center (1,1) starts active.
     var slots = [];
-    for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) slots.push({ c: c, r: r, x: 0, y: 0, state: (c === 1 && r === 1) ? "active" : "locked", kTier: 0, q: 0 });
+    for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) slots.push({ c: c, r: r, x: 0, y: 0, state: (c === 1 && r === 1) ? "active" : "locked", kTier: 0, q: 0, type: (c === 1 && r === 1) ? "standard" : null, ec: false, aim: 0 });
     var enemies = [], particles = [];
     var state = "start";  // start | playing | upgrade | over | win
     var wave = 1, score = 0, integrity = 100, water = 330, maxWater = 330, holding = false;
@@ -201,6 +201,28 @@
     // battlefield zoom: stays at 1 until a head's coverage reaches the screen edge, then
     // steps out to a preset so the 9 heads stay centered but you see (and fight) further out
     var viewScale = 1, zoomTarget = 1, ZPRESETS = [1, 0.68, 0.5];
+    // ---- sprinkler types ----  (rng/dmg = range & damage multipliers vs a standard head)
+    var TYPE_INFO = {
+      standard: { n: "Standard", e: "💧", rng: 1.0, dmg: 1.0 },
+      laser:    { n: "Laser",    e: "🔴", rng: 1.9, dmg: 3.4 },
+      foam:     { n: "Foam",     e: "🫧", rng: 1.25, dmg: 0.6 },
+      lawn:     { n: "Lawn",     e: "🌀", rng: 1.6, dmg: 1.1 },
+      corridor: { n: "Corridor", e: "📏", rng: 1.0, dmg: 1.0 },
+      moon:     { n: "Moon",     e: "🌙", rng: 1.15, dmg: 0 }
+    };
+    var UNLOCK_TYPES = ["standard", "laser", "foam", "lawn", "corridor", "moon"];
+    function typeOf(s) { return s.type || "standard"; }
+    function corridorAxis(s) { return s.axis || "x"; }
+    function headReach(s) { return coverageRadius(s) * TYPE_INFO[typeOf(s)].rng; }
+    function inRange(s, e) {
+      var dx = e.x - s.x, dy = e.y - s.y, ty = typeOf(s);
+      if (ty === "corridor") { var R = coverageRadius(s), ax = corridorAxis(s), along = ax === "x" ? Math.abs(dx) : Math.abs(dy), cross = ax === "x" ? Math.abs(dy) : Math.abs(dx); return along <= R * 3 && cross <= R * 0.35; }
+      if (ty === "lawn") { if (Math.hypot(dx, dy) > headReach(s)) return false; var rel = Math.atan2(dy, dx) - (s.aim || 0); rel = Math.atan2(Math.sin(rel), Math.cos(rel)); return Math.abs(rel) <= 0.62; }
+      return Math.hypot(dx, dy) <= headReach(s);
+    }
+    function canHit(s, e) { return typeOf(s) === "moon" ? inRange(s, e) : (s.kTier >= e.minTier && inRange(s, e)); }
+    function hasTarget(s) { for (var i = 0; i < enemies.length; i++) if (canHit(s, enemies[i])) return true; return false; }
+    function moonBuff(s) { var b = 1, A = activeSlots(); for (var k = 0; k < A.length; k++) { var o = A[k]; if (o !== s && typeOf(o) === "moon" && Math.abs(o.c - s.c) + Math.abs(o.r - s.r) === 1) b += 0.35; } return b; }
 
     // --- hydraulics: each head flows Q = K·√P; supply pressure sags as total flow rises ---
     var KLADDER = [5.6, 8.0, 11.2, 14.0, 16.8, 22.4, 25.2];   // K-factor per upgrade tier
@@ -355,31 +377,54 @@
       if (state !== "playing") return;
       // spawn
       if (spawnQueue > 0) { spawnT += dt; if (spawnT >= Math.max(0.35, 1.1 - wave * 0.03)) { spawnT = 0; spawnQueue--; spawnEdge(); } }
-      // --- hydraulics: solve operating point, set per-head flow, drain/refill tank ---
+      // --- hydraulics: standard heads fire on hold; specials auto-fire when a flame is in range ---
       var act = activeSlots();
       var hw = hollywoodT > 0;                  // Hollywood Scene: all heads blast, no water drain
-      var wantSpray = (holding || hw) && state === "playing";
-      var op = (wantSpray && act.length) ? solveOp(act) : { P: supplyP(0), Q: 0 };
+      var i2, firing = [];
+      for (i2 = 0; i2 < act.length; i2++) {
+        var sh = act[i2], fire;
+        if (hw) fire = true;
+        else if (typeOf(sh) === "standard") fire = holding;
+        else fire = hasTarget(sh);              // specials run automatically when they can hit something
+        sh.firing = fire; if (fire) firing.push(sh);
+      }
+      var op = firing.length ? solveOp(firing) : { P: supplyP(0), Q: 0 };
       var eff = (water > 0 || hw) ? 1 : 0.10;   // empty tank → 10% trickle (full during Hollywood)
-      var i2, totalQ = 0;
-      for (i2 = 0; i2 < act.length; i2++) { act[i2].q = wantSpray ? headFlow(act[i2], op.P) * eff : 0; totalQ += act[i2].q; }
-      if (wantSpray && !hw) { water -= totalQ * TANK_DRAIN * dt; if (water < 0) water = 0; }
-      else if (!wantSpray) { water += TANK_REGEN * tankFillMult * dt; if (water > maxWater) water = maxWater; }
+      var totalQ = 0;
+      for (i2 = 0; i2 < act.length; i2++) { var s2 = act[i2]; s2.q = s2.firing ? headFlow(s2, op.P) * eff : 0; totalQ += s2.q; }
+      var anyFire = totalQ > 0;
+      if (anyFire && !hw) { water -= totalQ * TANK_DRAIN * dt; if (water < 0) water = 0; }
+      else if (!anyFire) { water += TANK_REGEN * tankFillMult * dt; if (water > maxWater) water = maxWater; }
       if (hollywoodT > 0) { hollywoodT -= dt; if (hollywoodT <= 0) updateHollywoodBtn(); }
-      dryFlash = wantSpray && !hw && water <= 0;
-      var spraying = wantSpray && totalQ > 0;
+      dryFlash = anyFire && !hw && water <= 0;
+      var spraying = anyFire;
+      for (i2 = 0; i2 < act.length; i2++) if (typeOf(act[i2]) === "lawn") act[i2].aim = (act[i2].aim || 0) + dt * 1.1;  // lawn cone sweeps
       var dispP = Math.round(spraying ? supplyP(totalQ) : supplyP(0)), pumpTxt = pumpLevel > 0 ? " · Pump " + pumpLevel : "";
       $("psiRead").textContent = spraying
         ? "Residual: " + dispP + " PSI @ " + Math.round(totalQ) + " GPM" + (dryFlash ? " · TANK DRY" : "") + pumpTxt
         : "Static Pressure: " + dispP + " PSI" + pumpTxt;
       // boss spawns minions
       for (var b = 0; b < enemies.length; b++) { if (enemies[b].boss) { enemies[b].mt += dt; if (enemies[b].mt > 2.6) { enemies[b].mt = 0; spawnEdge(); } } }
-      // enemies move + take damage
+      // --- weapons pass: each firing head applies its type's damage / effect ---
+      for (var ei = 0; ei < enemies.length; ei++) enemies[ei].dmgFrame = 0;
+      for (var fh = 0; fh < firing.length; fh++) {
+        var s = firing[fh], ty = typeOf(s), per = s.q * DMG_PER_GPM * TYPE_INFO[ty].dmg * moonBuff(s), em, j;
+        if (ty === "moon") { for (j = 0; j < enemies.length; j++) if (inRange(s, enemies[j])) { integrity = Math.min(100, integrity + s.q * 0.05 * dt); break; } continue; }
+        if (ty === "laser") {                                  // single-target: nearest in range
+          var tgt = null, bd = 1e9; for (j = 0; j < enemies.length; j++) { em = enemies[j]; if (!canHit(s, em)) continue; var dd = Math.hypot(em.x - s.x, em.y - s.y); if (dd < bd) { bd = dd; tgt = em; } }
+          s.laserTgt = tgt; if (tgt) tgt.dmgFrame += per; continue;
+        }
+        if (ty === "lawn") { var hits = 0; for (j = 0; j < enemies.length && hits < 3; j++) { em = enemies[j]; if (canHit(s, em)) { em.dmgFrame += per; hits++; } } continue; }
+        if (ty === "foam") { for (j = 0; j < enemies.length; j++) { em = enemies[j]; if (canHit(s, em)) { em.dmgFrame += per; em.slowT = 0.4; } } continue; }
+        for (j = 0; j < enemies.length; j++) { em = enemies[j]; if (canHit(s, em)) em.dmgFrame += per; }  // standard + corridor
+      }
+      // enemies move + apply damage
       var frameDps = 0;
       for (var i = enemies.length - 1; i >= 0; i--) {
         var e = enemies[i];
         var dx = W / 2 - e.x, dy = H / 2 - e.y, dist = Math.hypot(dx, dy) || 1;
-        e.x += (dx / dist) * e.spd * dt; e.y += (dy / dist) * e.spd * dt; e.t += dt;
+        var spd = e.spd; if (e.slowT > 0) { spd *= 0.5; e.slowT -= dt; }   // foam slow
+        e.x += (dx / dist) * spd * dt; e.y += (dy / dist) * spd * dt; e.t += dt;
         // reached core
         if (dist < coreR + e.sz * 0.4) {
           if (e.boss) {
@@ -392,12 +437,11 @@
           }
           continue;
         }
-        // spray damage — ELO flames only take damage from K11.2+ heads (kTier>=2)
-        if (spraying) {
-          var dmg = 0;
-          for (var a = 0; a < act.length; a++) { var s = act[a]; if (s.kTier < e.minTier) continue; if (Math.hypot(e.x - s.x, e.y - s.y) <= sprayRadius(s)) dmg += sprayDps(s); }
-          if (dmg > 0) {
-            e.hp -= dmg * dt; e.hit = 0.12; frameDps += dmg;          // dmg is already per-second
+        // apply this frame's accumulated damage
+        if (e.dmgFrame > 0) {
+          {
+            var dmg = e.dmgFrame;
+            e.hp -= dmg * dt; e.hit = 0.12; frameDps += dmg;
             e.dmgT = (e.dmgT || 0) + dt;
             if (e.dmgT > 0.33) { spawnFloat(e.x, e.y - e.sz, Math.round(dmg) + "", "#5fd0f5", 0.95); e.dmgT = 0; }  // blue damage-done text
           }
@@ -414,7 +458,7 @@
       }
       // spray droplets from sprinklers
       if (spraying) for (var a2 = 0; a2 < act.length; a2++) {
-        var s2 = act[a2]; if (s2.q <= 0) continue; var R = sprayRadius(s2), nd = Math.max(1, Math.min(9, Math.round(s2.q / 3.5)));
+        var s2 = act[a2], t2 = typeOf(s2); if (s2.q <= 0 || t2 === "laser" || t2 === "corridor") continue; var R = sprayRadius(s2) * TYPE_INFO[t2].rng, nd = Math.max(1, Math.min(9, Math.round(s2.q / 3.5)));
         for (var d = 0; d < nd; d++) {
           if (particles.length > 540) break;
           var an2 = Math.random() * Math.PI * 2;
@@ -454,8 +498,9 @@
       { e: "🛡️", t: "Integrity shield", d: "+20% shield: soaks incoming damage", apply: function () { shield += 20; } },
       { e: "🎬", t: "Hollywood Scene", d: "Stored: all heads blast 5s, no water used", apply: function () { hollywoodCharges++; updateHollywoodBtn(); } }
     ];
+    function unlockDesc(t) { return { standard: "Radial spray — your bread & butter", laser: "Auto-blasts the nearest flame (single target)", foam: "Foam ring: damages + slows flames in radius", lawn: "Rotating cone — hits up to 3 flames", corridor: "Extreme reach along one axis only", moon: "No damage — heals integrity & buffs neighbors" }[t]; }
     function categoryOffer(cat) {
-      if (cat === "unlock") return { e: "🔓", t: "Unlock head", d: "Pick a dusty sprinkler to fix", selectHead: true };
+      if (cat === "unlock") { var rt = UNLOCK_TYPES[Math.floor(Math.random() * UNLOCK_TYPES.length)]; return { e: TYPE_INFO[rt].e, t: "Unlock: " + TYPE_INFO[rt].n, d: unlockDesc(rt), selectHead: true, headType: rt }; }
       if (cat === "kfactor") return { e: "📈", t: "Bigger K-factor", d: "Step a head up the K ladder: more GPM", apply: applyUpgrade };
       if (cat === "supply") {
         var pump = nextSupplyPump && pumpLevel < PUMP_MAX;
@@ -489,7 +534,7 @@
         var card = document.createElement("div");
         card.className = "sg-card" + (o.special ? " special" : "");
         card.innerHTML = '<div class="e">' + o.e + '</div><div class="t">' + o.t + '</div><div class="d">' + o.d + '</div>' + (o.special ? '<div class="sg-badge">SPECIAL</div>' : '');
-        card.onclick = function () { if (state !== "upgrade") return; if (o.selectHead) beginSelectHead(); else if (o.applyEC) beginEC(); else { o.apply(); afterChoice(); } };
+        card.onclick = function () { if (state !== "upgrade") return; if (o.selectHead) { pendingType = o.headType; beginSelectHead(); } else if (o.applyEC) beginEC(); else { o.apply(); afterChoice(); } };
         box.appendChild(card);
       });
       $("upTitle").textContent = "Wave " + wave + " cleared!";
@@ -497,11 +542,11 @@
     }
     function afterChoice() { startWave(wave + 1); }
     // Pick-a-head modes: 'unlock' (tap a dusty head) or 'ec' (tap an active head for Extended Coverage).
-    var selectKind = null;
+    var selectKind = null, pendingType = "standard";
     function selectEligible(s) { return selectKind === "unlock" ? s.state === "locked" : (s.state === "active" && !s.ec); }
     function beginSelectHead() {
       selectKind = "unlock"; state = "select"; $("upgradeOv").classList.remove("show");
-      $("selectPrompt").textContent = "👆 Tap a dusty sprinkler to fix"; $("selectPrompt").hidden = false;
+      $("selectPrompt").textContent = "👆 Tap a plug to install your " + TYPE_INFO[pendingType].n; $("selectPrompt").hidden = false;
     }
     function beginEC() {
       var elig = slots.filter(function (s) { return s.state === "active" && !s.ec; });
@@ -515,7 +560,8 @@
       var best = null, bd = 1e9;
       for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (!selectEligible(s)) continue; var d = Math.hypot(tx - s.x, ty - s.y); if (d < bd) { bd = d; best = s; } }
       if (best && bd < gap * 0.7) {
-        if (selectKind === "unlock") { best.state = "active"; best.kTier = 0; best.q = 0; } else { best.ec = true; }
+        if (selectKind === "unlock") { best.state = "active"; best.kTier = 0; best.q = 0; best.ec = false; best.type = pendingType; best.aim = 0; if (pendingType === "corridor") best.axis = Math.random() < 0.5 ? "x" : "y"; }
+        else { best.ec = true; }
         best.flash = 0.6; selectKind = null; $("selectPrompt").hidden = true; afterChoice();
       }
     }
@@ -539,64 +585,98 @@
     function brass(ctx, x, y, r, grad) { var g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r); g.addColorStop(0, grad[0]); g.addColorStop(1, grad[1]); return g; }
     function drawSprinkler(s) {
       var x = s.x, y = s.y, r = gap * 0.32 * (0.5 + 0.5 * ((s.kTier || 0) / (KLADDER.length - 1)));
-      var active = s.state === "active";
-      // selection-mode highlight (unlock a dusty head, or pick a head for Extended Coverage)
+      var active = s.state === "active", ty = typeOf(s);
       if (state === "select" && selectEligible(s)) {
         ctx.save(); ctx.setLineDash([5, 4]); ctx.lineWidth = 3; ctx.strokeStyle = "#ffb03a";
         ctx.beginPath(); ctx.arc(x, y, r + 8, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
       }
-      // spray field while flowing (alpha tracks GPM)
-      if (active && s.q > 0) {
-        var R = sprayRadius(s), aff = Math.max(0.05, Math.min(0.18, s.q * 0.012)), g = ctx.createRadialGradient(x, y, 0, x, y, R);
-        g.addColorStop(0, "rgba(80,200,240," + aff + ")"); g.addColorStop(1, "rgba(80,200,240,0)");
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
-      }
-      // faint blue spray/hitbox outline (coverage when idle, actual reach when flowing)
-      if (active) {
-        var ringR = s.q > 0 ? sprayRadius(s) : coverageRadius(s);
-        ctx.save(); ctx.setLineDash([4, 4]); ctx.lineWidth = 1; ctx.strokeStyle = "rgba(110,200,240,0.22)";
-        ctx.beginPath(); ctx.arc(x, y, ringR, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
-      }
-      if (active && dryFlash) { var dp = 0.35 + 0.35 * Math.sin(nowT * 0.02); ctx.globalAlpha = dp; ctx.strokeStyle = "#ff5a4f"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, r + 6, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1; }
-      if (active && s.kTier > 0) { ctx.strokeStyle = "rgba(108,214,242,0.7)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2); ctx.stroke(); }
-      // --- gear-toothed deflector disk ---
-      ctx.globalAlpha = active ? 1 : 0.82;
-      var teeth = 16, step = Math.PI * 2 / teeth, rRoot = r * 0.84;
+      if (!active) { drawPlug(x, y, r); return; }                 // empty slot = square head plug on the pipe
+      drawHeadField(s, x, y, r, ty);                               // coverage / firing visuals
+      if (dryFlash) { var dp = 0.35 + 0.35 * Math.sin(nowT * 0.02); ctx.globalAlpha = dp; ctx.strokeStyle = "#ff5a4f"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, r + 6, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1; }
+      if (s.kTier > 0) { ctx.strokeStyle = "rgba(108,214,242,0.7)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2); ctx.stroke(); }
+      // body per type
+      if (ty === "foam") drawFoamHead(x, y, r);
+      else if (ty === "lawn") drawLawnHead(x, y, r, s);
+      else if (ty === "moon") drawMoonHead(x, y, r);
+      else if (ty === "corridor") drawCorridorHead(x, y, r, s);
+      else drawDeflector(x, y, r, s, ty === "laser");
+      if (s.flash > 0) { ctx.globalAlpha = s.flash; ctx.fillStyle = "#bff0ff"; ctx.beginPath(); ctx.arc(x, y, r + 6, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; }
+      if (s.hurt > 0) { ctx.globalAlpha = Math.min(1, s.hurt / 0.45); ctx.fillStyle = "#ff3b30"; ctx.beginPath(); ctx.arc(x, y, r + 5, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; }
+      // label: standard grade (ELO/ESFR) or the special's name, + K-factor + EC
+      var grade = ty === "standard" ? (s.kTier >= 3 ? "ESFR" : s.kTier >= 2 ? "ELO" : "") : TYPE_INFO[ty].n;
+      ctx.fillStyle = s.ec ? "#ffb03a" : "rgba(232,240,244,0.92)"; ctx.font = "700 " + Math.round(r * 0.46) + "px Inter, Arial, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+      ctx.fillText((grade ? grade + " " : "") + "K" + KLADDER[s.kTier].toFixed(1) + (s.ec ? " EC" : ""), x, y + r + 3);
+    }
+    // empty pipe outlet — a square head plug
+    function drawPlug(x, y, r) {
+      var w = r * 1.05;
+      ctx.fillStyle = "#2a3038"; ctx.beginPath(); ctx.rect(x - w, y - w, 2 * w, 2 * w); ctx.fill();
+      ctx.lineWidth = Math.max(1.5, r * 0.08); ctx.strokeStyle = "#4a525b"; ctx.stroke();
+      ctx.fillStyle = "#171c22"; ctx.beginPath(); ctx.rect(x - w * 0.55, y - w * 0.55, 1.1 * w, 1.1 * w); ctx.fill();
+      ctx.strokeStyle = "#5a626b"; ctx.lineWidth = Math.max(1, r * 0.05);
+      ctx.beginPath(); ctx.moveTo(x - w * 0.42, y); ctx.lineTo(x + w * 0.42, y); ctx.moveTo(x, y - w * 0.42); ctx.lineTo(x, y + w * 0.42); ctx.stroke();
+    }
+    // gear deflector (standard; laser adds a red indicator light)
+    function drawDeflector(x, y, r, s, isLaser) {
+      var fin = finish(s.kTier), teeth = 16, step = Math.PI * 2 / teeth, rRoot = r * 0.84, ti, pi;
       ctx.beginPath();
-      for (var ti = 0; ti < teeth; ti++) {
-        var b = ti * step - Math.PI / 2;
-        var pa = [[b, rRoot], [b + step * 0.18, r], [b + step * 0.5, r], [b + step * 0.68, rRoot]];
-        for (var pi = 0; pi < 4; pi++) { var px = x + Math.cos(pa[pi][0]) * pa[pi][1], py = y + Math.sin(pa[pi][0]) * pa[pi][1]; if (ti === 0 && pi === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }
-      }
+      for (ti = 0; ti < teeth; ti++) { var b = ti * step - Math.PI / 2, pa = [[b, rRoot], [b + step * 0.18, r], [b + step * 0.5, r], [b + step * 0.68, rRoot]]; for (pi = 0; pi < 4; pi++) { var px = x + Math.cos(pa[pi][0]) * pa[pi][1], py = y + Math.sin(pa[pi][0]) * pa[pi][1]; if (ti === 0 && pi === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); } }
       ctx.closePath();
-      var fin = active ? finish(s.kTier) : null;
-      ctx.fillStyle = active ? brass(ctx, x, y, r, fin.body) : brass(ctx, x, y, r, ["#9aa0a4", "#5c6266"]);
-      ctx.fill();
-      ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = active ? fin.edge : "#3a3f43"; ctx.stroke();
-      ctx.lineWidth = Math.max(1, r * 0.04); ctx.strokeStyle = active ? fin.hi : "rgba(220,225,230,0.35)";
-      ctx.beginPath(); ctx.arc(x, y, rRoot * 0.92, 0, Math.PI * 2); ctx.stroke();
-      // --- teardrop slots (bulb out, point toward center) ---
-      var nslot = 12, rO = r * 0.66, rI = r * 0.40, wO = r * 0.085;
-      ctx.fillStyle = active ? fin.slot : "#23262b";
-      for (var si = 0; si < nslot; si++) {
-        var a = si * (Math.PI * 2 / nslot) - Math.PI / 2;
-        var ox = x + Math.cos(a) * rO, oy = y + Math.sin(a) * rO, ix = x + Math.cos(a) * rI, iy = y + Math.sin(a) * rI;
-        ctx.beginPath(); ctx.arc(ox, oy, wO, a + Math.PI / 2, a - Math.PI / 2, true); ctx.lineTo(ix, iy); ctx.closePath(); ctx.fill();
-      }
-      // --- central raised hub + orifice ---
-      ctx.fillStyle = active ? brass(ctx, x, y, r * 0.4, fin.hub) : brass(ctx, x, y, r * 0.4, ["#aab0b4", "#666c70"]);
-      ctx.beginPath(); ctx.arc(x, y, r * 0.36, 0, Math.PI * 2); ctx.fill();
-      ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = active ? fin.edge : "#3a3f43"; ctx.stroke();
-      ctx.lineWidth = Math.max(1, r * 0.03); ctx.strokeStyle = active ? fin.hi : "rgba(225,230,234,0.5)";
-      ctx.beginPath(); ctx.arc(x, y, r * 0.27, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = brass(ctx, x, y, r, fin.body); ctx.fill();
+      ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = fin.edge; ctx.stroke();
+      ctx.lineWidth = Math.max(1, r * 0.04); ctx.strokeStyle = fin.hi; ctx.beginPath(); ctx.arc(x, y, rRoot * 0.92, 0, Math.PI * 2); ctx.stroke();
+      var nslot = 12, rO = r * 0.66, rI = r * 0.40, wO = r * 0.085; ctx.fillStyle = fin.slot;
+      for (var si = 0; si < nslot; si++) { var a = si * (Math.PI * 2 / nslot) - Math.PI / 2, ox = x + Math.cos(a) * rO, oy = y + Math.sin(a) * rO, ix = x + Math.cos(a) * rI, iy = y + Math.sin(a) * rI; ctx.beginPath(); ctx.arc(ox, oy, wO, a + Math.PI / 2, a - Math.PI / 2, true); ctx.lineTo(ix, iy); ctx.closePath(); ctx.fill(); }
+      ctx.fillStyle = brass(ctx, x, y, r * 0.4, fin.hub); ctx.beginPath(); ctx.arc(x, y, r * 0.36, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = fin.edge; ctx.stroke();
       ctx.fillStyle = "#0a0e12"; ctx.beginPath(); ctx.arc(x, y, r * 0.16, 0, Math.PI * 2); ctx.fill();
-      ctx.lineWidth = Math.max(1, r * 0.03); ctx.strokeStyle = active ? fin.edge : "rgba(60,65,70,0.85)"; ctx.stroke();
-      // dusty specks on locked (deterministic so they don't flicker)
-      if (!active) { ctx.fillStyle = "rgba(205,210,215,0.4)"; for (var dd = 0; dd < 6; dd++) { var da = dd * 1.7, dr = r * (0.45 + (dd % 3) * 0.16); ctx.beginPath(); ctx.arc(x + Math.cos(da) * dr, y + Math.sin(da) * dr, r * 0.045, 0, Math.PI * 2); ctx.fill(); } }
-      if (s.flash > 0) { ctx.globalAlpha = s.flash; ctx.fillStyle = "#bff0ff"; ctx.beginPath(); ctx.arc(x, y, r + 6, 0, Math.PI * 2); ctx.fill(); }
-      if (s.hurt > 0) { ctx.globalAlpha = Math.min(1, s.hurt / 0.45); ctx.fillStyle = "#ff3b30"; ctx.beginPath(); ctx.arc(x, y, r + 5, 0, Math.PI * 2); ctx.fill(); }
-      ctx.globalAlpha = 1;
-      if (active) { ctx.fillStyle = s.ec ? "#ffb03a" : "rgba(232,240,244,0.92)"; ctx.font = "700 " + Math.round(r * 0.5) + "px Inter, Arial, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillText("K" + KLADDER[s.kTier].toFixed(1) + (s.ec ? " EC" : ""), x, y + r + 3); }
+      if (isLaser) { var on = s.q > 0, lit = on || (Math.sin(nowT * 0.02) > 0); ctx.fillStyle = on ? "#ff2b22" : (lit ? "#ff5a4f" : "#5a1512"); ctx.beginPath(); ctx.arc(x, y - r * 0.55, r * 0.17, 0, Math.PI * 2); ctx.fill(); if (on) { ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.arc(x, y - r * 0.55, r * 0.32, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; } }
+    }
+    function drawFoamHead(x, y, r) {
+      ctx.fillStyle = brass(ctx, x, y, r, ["#ff7a5f", "#c22a14"]); ctx.beginPath(); ctx.arc(x, y, r * 0.9, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = Math.max(1, r * 0.06); ctx.strokeStyle = "#7a1408"; ctx.stroke();
+      ctx.fillStyle = "#ffd9cb"; ctx.beginPath(); ctx.arc(x, y, r * 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.92)"; var bub = [[-0.42, -0.5, 0.28], [0.05, -0.64, 0.34], [0.46, -0.44, 0.26], [-0.08, -0.34, 0.22]];
+      for (var i = 0; i < bub.length; i++) { ctx.beginPath(); ctx.arc(x + bub[i][0] * r, y + bub[i][1] * r, bub[i][2] * r, 0, Math.PI * 2); ctx.fill(); }
+    }
+    function drawLawnHead(x, y, r, s) {
+      ctx.fillStyle = brass(ctx, x, y, r, ["#3a4046", "#15181c"]); ctx.beginPath(); ctx.arc(x, y, r * 0.85, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = Math.max(1, r * 0.06); ctx.strokeStyle = "#05070a"; ctx.stroke();
+      ctx.fillStyle = "#0a0d10"; ctx.beginPath(); ctx.arc(x, y, r * 0.3, 0, Math.PI * 2); ctx.fill();
+      var a = s.aim || 0; ctx.strokeStyle = "#9aa6b2"; ctx.lineWidth = Math.max(2, r * 0.16); ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * r * 0.95, y + Math.sin(a) * r * 0.95); ctx.stroke();
+      ctx.fillStyle = "#cdd2d6"; ctx.beginPath(); ctx.arc(x + Math.cos(a) * r * 0.95, y + Math.sin(a) * r * 0.95, r * 0.13, 0, Math.PI * 2); ctx.fill();
+    }
+    function drawCorridorHead(x, y, r, s) {
+      var fin = finish(s.kTier), ax = corridorAxis(s), L = r * 1.7, Wd = r * 0.5, i;
+      ctx.fillStyle = brass(ctx, x, y, r, fin.body); ctx.strokeStyle = fin.edge; ctx.lineWidth = Math.max(1, r * 0.05);
+      ctx.beginPath(); if (ax === "x") ctx.rect(x - L, y - Wd / 2, 2 * L, Wd); else ctx.rect(x - Wd / 2, y - L, Wd, 2 * L); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = fin.slot; ctx.lineWidth = Math.max(1, r * 0.08);
+      for (i = -3; i <= 3; i++) { ctx.beginPath(); if (ax === "x") { ctx.moveTo(x + i * L * 0.28, y - Wd / 2); ctx.lineTo(x + i * L * 0.28, y + Wd / 2); } else { ctx.moveTo(x - Wd / 2, y + i * L * 0.28); ctx.lineTo(x + Wd / 2, y + i * L * 0.28); } ctx.stroke(); }
+      ctx.fillStyle = brass(ctx, x, y, r * 0.5, fin.hub); ctx.beginPath(); ctx.arc(x, y, r * 0.42, 0, Math.PI * 2); ctx.fill(); ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = fin.edge; ctx.stroke();
+      ctx.fillStyle = "#0a0e12"; ctx.beginPath(); ctx.arc(x, y, r * 0.16, 0, Math.PI * 2); ctx.fill();
+    }
+    function drawMoonHead(x, y, r) {
+      ctx.fillStyle = brass(ctx, x, y, r, ["#7fc4ff", "#2a6cc4"]); ctx.beginPath(); ctx.arc(x, y, r * 0.9, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = Math.max(1, r * 0.06); ctx.strokeStyle = "#14407a"; ctx.stroke();
+      ctx.fillStyle = "#dff0ff"; ctx.beginPath(); ctx.arc(x, y, r * 0.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#ffe9a0"; ctx.beginPath(); ctx.arc(x, y, r * 0.34, 0, Math.PI * 2); ctx.fill();        // moon
+      ctx.fillStyle = "#dff0ff"; ctx.beginPath(); ctx.arc(x + r * 0.16, y - r * 0.08, r * 0.3, 0, Math.PI * 2); ctx.fill();  // crescent cutout
+    }
+    function drawHeadField(s, x, y, r, ty) {
+      var firing = s.q > 0;
+      if (ty === "laser") { if (firing && s.laserTgt) { ctx.strokeStyle = "rgba(255,60,40,0.85)"; ctx.lineWidth = Math.max(2, r * 0.2); ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(s.laserTgt.x, s.laserTgt.y); ctx.stroke(); ctx.lineWidth = 1; } return; }
+      if (ty === "corridor") {
+        var R = coverageRadius(s), ax = corridorAxis(s);
+        if (firing) { ctx.fillStyle = "rgba(80,200,240,0.10)"; if (ax === "x") ctx.fillRect(x - R * 3, y - R * 0.35, R * 6, R * 0.7); else ctx.fillRect(x - R * 0.35, y - R * 3, R * 0.7, R * 6); }
+        ctx.save(); ctx.setLineDash([4, 4]); ctx.lineWidth = 1; ctx.strokeStyle = "rgba(110,200,240,0.22)";
+        if (ax === "x") ctx.strokeRect(x - R * 3, y - R * 0.35, R * 6, R * 0.7); else ctx.strokeRect(x - R * 0.35, y - R * 3, R * 0.7, R * 6); ctx.restore(); return;
+      }
+      if (ty === "lawn") { var Rl = headReach(s), a = s.aim || 0; ctx.fillStyle = firing ? "rgba(120,220,150,0.16)" : "rgba(110,200,240,0.07)"; ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, Rl, a - 0.62, a + 0.62); ctx.closePath(); ctx.fill(); return; }
+      var R2 = headReach(s);
+      if (firing) { var col = ty === "foam" ? "rgba(255,255,255,0.16)" : ty === "moon" ? "rgba(120,200,255,0.16)" : "rgba(80,200,240,0.14)", g = ctx.createRadialGradient(x, y, 0, x, y, R2); g.addColorStop(0, col); g.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R2, 0, Math.PI * 2); ctx.fill(); }
+      ctx.save(); ctx.setLineDash([4, 4]); ctx.lineWidth = 1; ctx.strokeStyle = ty === "moon" ? "rgba(140,200,255,0.3)" : ty === "foam" ? "rgba(255,255,255,0.26)" : "rgba(110,200,240,0.22)";
+      ctx.beginPath(); ctx.arc(x, y, R2, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
     }
     function pipeSeg(x1, y1, x2, y2) {
       ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
@@ -683,7 +763,7 @@
     canvas.addEventListener("pointercancel", function () { holding = false; });
 
     function reset() {
-      for (var i = 0; i < slots.length; i++) { slots[i].state = (slots[i].c === 1 && slots[i].r === 1) ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].hurt = 0; slots[i].ec = false; }
+      for (var i = 0; i < slots.length; i++) { var ctr = slots[i].c === 1 && slots[i].r === 1; slots[i].state = ctr ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].hurt = 0; slots[i].ec = false; slots[i].type = ctr ? "standard" : null; slots[i].aim = 0; }
       enemies = []; particles = []; floats = []; score = 0; integrity = 100; maxWater = 330; water = 330; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
       tankFillMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0; selectKind = null; hurtT = 0; dpsNow = 0; dpsShown = 0;
       viewScale = 1; zoomTarget = 1;
