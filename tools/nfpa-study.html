@@ -47,6 +47,19 @@
     .map .chap .num { flex:none; width:30px; color:var(--study); font-weight:700; }
     .map .chap .ttl { color:var(--muted); }
 
+    /* leaderboard + sign-in */
+    .st-who { font:500 .86rem Inter; color:var(--muted); text-align:center; margin:18px 0 6px; min-height:20px; }
+    .st-who b { color:var(--study); } .st-who button { background:none; border:0; color:var(--study); font:600 .84rem Inter; cursor:pointer; text-decoration:underline; }
+    .st-lb { border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+    .st-lb-h { font:700 .95rem 'Space Grotesk'; padding:12px 14px; border-bottom:1px solid var(--line); }
+    .st-lb-row { display:flex; align-items:center; gap:10px; padding:9px 14px; border-bottom:1px solid var(--line); font:600 .9rem Inter; }
+    .st-lb-row:last-child { border-bottom:0; }
+    .st-lb-row .rk { width:22px; color:var(--muted); font:700 .92rem 'Space Grotesk'; text-align:center; }
+    .st-lb-row .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .st-lb-row .st { color:var(--study); font:700 .95rem 'Space Grotesk'; }
+    .st-lb-row.me { background:rgba(55,183,228,.10); }
+    .st-lb-empty { padding:16px 14px; text-align:center; color:var(--muted); font:500 .86rem Inter; }
+
     /* HUD */
     .hud { display:flex; align-items:center; gap:10px; margin:6px 0 14px; }
     .hud .pill { flex:1; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:8px 10px; text-align:center; }
@@ -113,6 +126,12 @@
         <button id="chapMapToggle">🗺 Chapter map (2025) <span id="chapMapChevron">▾</span></button>
         <div class="body" id="chapMapBody"></div>
       </div>
+
+      <div class="st-who" id="stWho"></div>
+      <div class="st-lb">
+        <div class="st-lb-h">🏅 Study Leaderboard <span style="font-weight:500;color:var(--muted);font-size:.78rem">· best correct streak</span></div>
+        <div id="stLbList"><div class="st-lb-empty">Loading…</div></div>
+      </div>
     </section>
 
     <!-- STUDY -->
@@ -142,6 +161,7 @@
 
   <div class="toast" id="toast"></div>
 
+  <script src="./sprinkflow-auth.js"></script>
   <script src="./nfpa-study-questions.js"></script>
   <script>
   (function () {
@@ -184,6 +204,41 @@
     // ---- study state ----
     var deck = [], ptr = 0, cur = null, seen = 0, correct = 0, streak = 0, locked = false;
     var letters = ["A", "B", "C", "D"];
+    var bestStreak = (function () { var v = parseInt(localStorage.getItem("nfpaStudyBest") || "0", 10); return isFinite(v) ? v : 0; })();
+
+    // ---- leaderboard (shared SprinkFlow sign-in) ----
+    function lbName() { return (window.SFAuth && SFAuth.displayName()) || ""; }
+    function renderWho() {
+      var who = $("stWho");
+      if (window.SFAuth && SFAuth.isSignedIn()) {
+        who.innerHTML = 'Signed in as <b>' + esc(SFAuth.displayName()) + '</b> · <button id="stSignOut">sign out</button>';
+        $("stSignOut").onclick = function () { SFAuth.signOut(); };
+      } else {
+        who.innerHTML = 'Sign in to post your best streak to the global board · <button id="stSignIn">sign in</button>';
+        $("stSignIn").onclick = openSignIn;
+      }
+    }
+    function openSignIn() {
+      if (!window.SFAuth) return;
+      SFAuth.openSignIn({ onSuccess: function () { renderWho(); submitScore(); loadLeaderboard(); } });
+    }
+    function loadLeaderboard() {
+      if (!window.SFAuth) return;
+      SFAuth.read("study_scores?select=display_name,best_streak&order=best_streak.desc&limit=12").then(function (rows) {
+        var list = $("stLbList");
+        if (!Array.isArray(rows) || !rows.length) { list.innerHTML = '<div class="st-lb-empty">No streaks yet. Sign in and start a run! 🏅</div>'; return; }
+        var me = lbName().toLowerCase();
+        list.innerHTML = rows.map(function (r, i) {
+          var mine = me && String(r.display_name).toLowerCase() === me ? " me" : "";
+          var medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
+          return '<div class="st-lb-row' + mine + '"><div class="rk">' + medal + '</div><div class="nm">' + esc(r.display_name) + '</div><div class="st">' + (r.best_streak || 0) + '</div></div>';
+        }).join("");
+      });
+    }
+    function submitScore() {
+      if (!window.SFAuth || !SFAuth.isSignedIn()) return;
+      SFAuth.rpc("submit_study_score", { p_display_name: SFAuth.displayName(), p_streak: bestStreak });
+    }
 
     function show(name) {
       $("screen-start").classList.add("hidden");
@@ -231,7 +286,14 @@
         if (i === cur.a) b.classList.add("correct");
         else if (i === choice) b.classList.add("wrong");
       });
-      if (ok) { correct++; streak++; } else { streak = 0; }
+      if (ok) {
+        correct++; streak++;
+        if (streak > bestStreak) {
+          bestStreak = streak;
+          try { localStorage.setItem("nfpaStudyBest", String(bestStreak)); } catch (e) {}
+          if (window.SFAuth && SFAuth.isSignedIn()) { submitScore(); loadLeaderboard(); }
+        }
+      } else { streak = 0; }
       $("seenVal").textContent = seen;
       $("correctVal").textContent = correct;
       $("streakVal").textContent = streak;
@@ -252,6 +314,12 @@
     $("startBtn").onclick = startStudy;
     $("nextBtn").onclick = nextQuestion;
     $("changeTopic").onclick = function (e) { e.preventDefault(); show("start"); };
+
+    // ---- init leaderboard ----
+    if (window.SFAuth) SFAuth.onChange(function () { renderWho(); loadLeaderboard(); });
+    renderWho();
+    submitScore();
+    loadLeaderboard();
   })();
   </script>
 </body>

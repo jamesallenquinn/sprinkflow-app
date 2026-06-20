@@ -39,6 +39,13 @@
     .brow.shake { animation:shake .4s; }
     @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px)} 40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)} }
 
+    /* hint */
+    .hintbar { text-align:center; min-height:20px; padding:0 6px 4px; }
+    .hintbtn { background:none; border:1px solid var(--line); color:var(--accent); font:600 .82rem Inter; padding:7px 14px; border-radius:999px; cursor:pointer; }
+    .hintbtn:active { background:rgba(255,176,58,.1); }
+    .hinttext { font:500 .9rem/1.4 Inter; color:var(--ink); background:rgba(255,176,58,.08); border:1px solid rgba(255,176,58,.3); border-radius:12px; padding:10px 14px; max-width:440px; margin:0 auto; }
+    .hinttext b { color:var(--accent); }
+
     /* keyboard */
     .kb { display:flex; flex-direction:column; gap:7px; padding:8px 0 4px; }
     .krow { display:flex; gap:5px; justify-content:center; }
@@ -59,7 +66,18 @@
     /* modal */
     .modal-bk { position:fixed; inset:0; background:rgba(5,8,11,.72); backdrop-filter:blur(3px); display:none; align-items:center; justify-content:center; z-index:70; padding:16px; }
     .modal-bk.show { display:flex; }
-    .modal { width:100%; max-width:420px; background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:22px 20px calc(20px + env(safe-area-inset-bottom,0px)); position:relative; }
+    .modal { width:100%; max-width:420px; background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:22px 20px calc(20px + env(safe-area-inset-bottom,0px)); position:relative; max-height:92vh; overflow:auto; }
+    .sw-who { font:500 .86rem Inter; color:var(--muted); text-align:center; margin:16px 0 6px; min-height:20px; }
+    .sw-who b { color:var(--accent); } .sw-who button { background:none; border:0; color:var(--water); font:600 .84rem Inter; cursor:pointer; text-decoration:underline; }
+    .sw-lb { border:1px solid var(--line); border-radius:14px; overflow:hidden; margin-top:4px; }
+    .sw-lb-h { font:700 .92rem 'Space Grotesk'; padding:11px 14px; border-bottom:1px solid var(--line); }
+    .sw-lb-row { display:flex; align-items:center; gap:10px; padding:9px 14px; border-bottom:1px solid var(--line); font:600 .9rem Inter; }
+    .sw-lb-row:last-child { border-bottom:0; }
+    .sw-lb-row .rk { width:22px; color:var(--muted); font:700 .92rem 'Space Grotesk'; text-align:center; }
+    .sw-lb-row .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .sw-lb-row .st { color:var(--accent); font:700 .95rem 'Space Grotesk'; }
+    .sw-lb-row.me { background:rgba(255,176,58,.10); }
+    .sw-lb-empty { padding:16px 14px; text-align:center; color:var(--muted); font:500 .86rem Inter; }
     .modal h2 { font:700 1.3rem 'Space Grotesk'; margin:0 0 4px; }
     .modal h2 .grad { background:var(--grad-fire); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
     .modal p { color:var(--muted); font-size:.92rem; line-height:1.5; margin:0 0 12px; }
@@ -102,6 +120,11 @@
       <div class="board" id="board"></div>
     </div>
 
+    <div class="hintbar" id="hintbar">
+      <button class="hintbtn" id="hintBtn">💡 Need a hint?</button>
+      <div class="hinttext" id="hintText" hidden></div>
+    </div>
+
     <div class="kb" id="keyboard"></div>
     <div class="src-foot">A SprinkFlow daily puzzle · new word every day</div>
   </main>
@@ -138,6 +161,13 @@
       </div>
       <div style="font:700 .8rem Inter;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:6px">Guess distribution</div>
       <div class="dist" id="dist"></div>
+
+      <div class="sw-who" id="swWho"></div>
+      <div class="sw-lb">
+        <div class="sw-lb-h">🏆 Streak Leaderboard <span style="font-weight:500;color:var(--muted);font-size:.78rem">· longest daily streak</span></div>
+        <div id="swLbList"><div class="sw-lb-empty">Loading…</div></div>
+      </div>
+
       <div class="next-row" id="nextRow" style="display:none">
         <div class="countdown"><div class="k">Next SprinkWord</div><div class="v" id="countdown">--:--:--</div></div>
         <button class="btn share" id="shareBtn">🔗 Share</button>
@@ -145,6 +175,8 @@
     </div>
   </div>
 
+  <script src="./sprinkflow-auth.js"></script>
+  <script src="./sprinkword-dictionary.js"></script>
   <script src="./sprinkword-words.js"></script>
   <script>
   (function () {
@@ -152,9 +184,17 @@
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("../sw.js").catch(() => {});
 
     var $ = function (id) { return document.getElementById(id); };
-    var ANSWERS = (window.SPRINKWORD_ANSWERS || []).map(function (w) { return String(w).toUpperCase(); })
-      .filter(function (w) { return /^[A-Z]{5}$/.test(w); });
+    var ANSWERS = (window.SPRINKWORD_ANSWERS || []).map(function (e) {
+      return (typeof e === "string") ? { w: e.toUpperCase(), hint: "" } : { w: String(e.w || "").toUpperCase(), hint: e.hint || "" };
+    }).filter(function (e) { return /^[A-Z]{5}$/.test(e.w); });
     var ROWS = 6, COLS = 5;
+    // guess dictionary (concatenated 5-char words)
+    var DICT = (function () {
+      var s = window.SPRINKWORD_DICT || "", set = Object.create(null);
+      for (var i = 0; i + 5 <= s.length; i += 5) set[s.substr(i, 5)] = 1;
+      return set;
+    })();
+    var DICT_LOADED = Object.keys(DICT).length > 100;
 
     // ---- daily puzzle selection (local-midnight rollover) ----
     var LAUNCH = Date.UTC(2026, 5, 19); // 2026-06-19
@@ -165,7 +205,9 @@
     }
     var DAY = dayNumber();
     var PUZZLE_NO = DAY + 1;
-    var ANSWER = ANSWERS.length ? ANSWERS[((DAY % ANSWERS.length) + ANSWERS.length) % ANSWERS.length] : "RISER";
+    var TODAY = ANSWERS.length ? ANSWERS[((DAY % ANSWERS.length) + ANSWERS.length) % ANSWERS.length] : { w: "RISER", hint: "" };
+    var ANSWER = TODAY.w, HINT = TODAY.hint;
+    function isWord(w) { return w === ANSWER || !DICT_LOADED || DICT[w] === 1; }
 
     // ---- storage ----
     function load(key, def) { try { return JSON.parse(localStorage.getItem(key)) || def; } catch (e) { return def; } }
@@ -283,6 +325,7 @@
 
     function submit() {
       if (cur.length < COLS) { toast("Not enough letters"); shakeRow(); return; }
+      if (!isWord(cur)) { toast("Not in word list"); shakeRow(); return; }
       var guess = cur;
       var r = state.guesses.length;
       state.guesses.push(guess);
@@ -334,6 +377,9 @@
         return '<div class="d"><span class="n">' + n + '</span><div class="bar' + (n === solvedRow ? " cur" : "") + '" style="width:' + w + '%">' + v + "</div></div>";
       }).join("");
       $("nextRow").style.display = (state.status === "playing") ? "none" : "flex";
+      renderWho();
+      submitScore();        // keep the board fresh / auto-post on finish when signed in
+      loadLeaderboard();
       $("statsModal").classList.add("show");
       startCountdown();
     }
@@ -366,6 +412,51 @@
       else toast("Sharing not supported");
     }
 
+    // ---- hint ----
+    function escapeHtml(s) { return String(s).replace(/[&<>"']/g, function (c) { return ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" })[c]; }); }
+    function setupHint() {
+      if (!HINT) { $("hintbar").style.display = "none"; return; }
+      $("hintBtn").onclick = function () {
+        $("hintText").innerHTML = "<b>Hint:</b> " + escapeHtml(HINT);
+        $("hintText").hidden = false;
+        $("hintBtn").style.display = "none";
+      };
+    }
+
+    // ---- leaderboard (shared SprinkFlow sign-in) ----
+    function lbName() { return (window.SFAuth && SFAuth.displayName()) || ""; }
+    function renderWho() {
+      var who = $("swWho");
+      if (window.SFAuth && SFAuth.isSignedIn()) {
+        who.innerHTML = 'Signed in as <b>' + escapeHtml(SFAuth.displayName()) + '</b> · <button id="swSignOut">sign out</button>';
+        $("swSignOut").onclick = function () { SFAuth.signOut(); };
+      } else {
+        who.innerHTML = 'Sign in to post your streak to the global board · <button id="swSignIn">sign in</button>';
+        $("swSignIn").onclick = openSignIn;
+      }
+    }
+    function openSignIn() {
+      if (!window.SFAuth) return;
+      SFAuth.openSignIn({ onSuccess: function () { renderWho(); submitScore(); loadLeaderboard(); } });
+    }
+    function loadLeaderboard() {
+      if (!window.SFAuth) return;
+      SFAuth.read("sprinkword_scores?select=display_name,best_streak,current_streak&order=best_streak.desc,current_streak.desc&limit=12").then(function (rows) {
+        var list = $("swLbList");
+        if (!Array.isArray(rows) || !rows.length) { list.innerHTML = '<div class="sw-lb-empty">No streaks yet. Solve daily to claim the top spot! 🔥</div>'; return; }
+        var me = lbName().toLowerCase();
+        list.innerHTML = rows.map(function (r, i) {
+          var mine = me && String(r.display_name).toLowerCase() === me ? " me" : "";
+          var medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
+          return '<div class="sw-lb-row' + mine + '"><div class="rk">' + medal + '</div><div class="nm">' + escapeHtml(r.display_name) + '</div><div class="st">🔥 ' + (r.best_streak || 0) + '</div></div>';
+        }).join("");
+      });
+    }
+    function submitScore() {
+      if (!window.SFAuth || !SFAuth.isSignedIn()) return;
+      SFAuth.rpc("submit_sprinkword_score", { p_display_name: SFAuth.displayName(), p_current: stats.cur, p_max: stats.max, p_wins: stats.wins });
+    }
+
     // ---- modals ----
     function closeModals() { $("howModal").classList.remove("show"); $("statsModal").classList.remove("show"); }
     [].forEach.call(document.querySelectorAll("[data-close]"), function (b) { b.onclick = closeModals; });
@@ -393,6 +484,8 @@
 
     // ---- init ----
     $("puzzleLabel").textContent = "SprinkWord #" + PUZZLE_NO;
+    setupHint();
+    if (window.SFAuth) SFAuth.onChange(function () { renderWho(); loadLeaderboard(); });
     buildKeyboard();
     renderSaved();
     if (state.status === "playing") {

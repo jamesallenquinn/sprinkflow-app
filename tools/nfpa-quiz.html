@@ -247,11 +247,11 @@
 
     // ---- session (stored locally) ----
     var session = null; // { token, userId, email }
-    try { session = JSON.parse(localStorage.getItem("nfpaQuizSession") || "null"); } catch (e) {}
-    function saveSession(s) { session = s; try { localStorage.setItem("nfpaQuizSession", JSON.stringify(s)); } catch (e) {} renderWho(); }
-    function clearSession() { session = null; try { localStorage.removeItem("nfpaQuizSession"); } catch (e) {} renderWho(); }
-    function getHandle() { return (localStorage.getItem("nfpaQuizHandle") || "").trim(); }
-    function setHandle(h) { try { localStorage.setItem("nfpaQuizHandle", (h || "").slice(0, 24)); } catch (e) {} }
+    try { session = JSON.parse(localStorage.getItem("sf.session") || "null"); } catch (e) {}
+    function saveSession(s) { session = s; try { localStorage.setItem("sf.session", JSON.stringify(s)); } catch (e) {} renderWho(); }
+    function clearSession() { session = null; try { localStorage.removeItem("sf.session"); } catch (e) {} renderWho(); }
+    function getHandle() { return (localStorage.getItem("sf.handle") || "").trim(); }
+    function setHandle(h) { try { localStorage.setItem("sf.handle", (h || "").slice(0, 24)); } catch (e) {} }
 
     function renderWho() {
       if (session && session.email) {
