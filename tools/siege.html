@@ -205,7 +205,7 @@
 
     // grid: 3x3 sprinkler slots. col/row 0..2. center (1,1) starts active.
     var slots = [];
-    for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) slots.push({ c: c, r: r, x: 0, y: 0, state: (c === 1 && r === 1) ? "active" : "locked", kTier: 0, q: 0, type: (c === 1 && r === 1) ? "standard" : null, ec: false, aim: 0 });
+    for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) slots.push({ c: c, r: r, x: 0, y: 0, state: (c === 1 && r === 1) ? "active" : "locked", kTier: 0, q: 0, type: (c === 1 && r === 1) ? "standard" : null, ec: false, hp: false, aim: 0 });
     var enemies = [], particles = [], foamPiles = [];
     var state = "start";  // start | playing | upgrade | over | win
     var wave = 1, score = 0, integrity = 100, water = 330, maxWater = 330, holding = false;
@@ -251,19 +251,35 @@
     var K_PHASE_BOOST = 6;                      // psi added to supply per K-ladder tier reached (max active kTier) — bigger heads earn more pressure
     var BASE_COV = 0.95;                        // FIXED spray radius (× gap) — K-factor & pressure raise OUTPUT, not radius
     var EC_MIN = 1.15, EC_MAX = 1.9;            // Extended Coverage radius multiplier; scales with supply pressure (pump) min→max
-    var PUMP_MAX = 3;                          // fire-pump tiers; maxed pump ≈ 175 psi @ 1000 gpm (for K25.2)
+    var PUMP_MAX = 5;                          // fire-pump tiers (L0..L5); see PUMP_CURVE
+    // per-level supply: residual pressure at a rated flow; static (churn @ 0 gpm) = 1.3 × residual
+    var PUMP_CURVE = [
+      { residual: 7,   ratedQ: 25 },           // L0 start (static 10, special-cased below)
+      { residual: 50,  ratedQ: 500 },          // L1
+      { residual: 100, ratedQ: 1500 },         // L2
+      { residual: 175, ratedQ: 2500 },         // L3
+      { residual: 225, ratedQ: 5000 },         // L4
+      { residual: 300, ratedQ: 10000 }         // L5
+    ];
+    var PUMP_CHANCE = [0.55, 0.45, 0.30, 0.16, 0.10];   // offer chance per current pumpLevel (escalating rarity; top tiers ~10%)
+    var HEAD_PSI_CAP = 175, HEAD_PSI_CAP_HP = 300;       // a head's flow caps at 175 psi unless it has the High-Pressure upgrade (300)
     var TANK_PCT = 0.30;                        // tank upgrades scale by % of CURRENT capacity → compounds to massive end-game tanks
-    var PUMP_OFFER_CHANCE = 0.45, PUMP_FINAL_CHANCE = 0.10;  // pump rarer than other cards; final tier (lvl2→3) very rare
     var FOAM_PILE_LIFE = 5.5;                  // foam piles persist (sec); flames wading through take damage + slow (no damage from the spray itself)
-    var PUMP_HEAD = 80;                        // churn pressure added per pump tier
-    var DROOP_C = 0.141, DROOP_N = 0.95;       // supply droop: P = churn − DROOP_C·Q^DROOP_N (tuned: 10 psi → 7 psi at 25 gpm)
+    var DROOP_N = 0.95;                        // supply droop exponent: P = static − C·Q^DROOP_N (C derived per level to hit residual@ratedQ)
     var DMG_PER_GPM = 2.0, TANK_DRAIN = 1.2, TANK_REGEN = 26, BOSS_WAVE = 15;
     var SPECIAL_WATER_BONUS = 120;  // tank bump when a special head is installed — ~most of its auto-spray draw, intentionally a touch short
     // supply = static + pump churn, drooping with flow; ~3 psi @ 50 gpm with no pump,
     // ~175 psi @ 1000 gpm at full pump (the operating point for three K25.2 heads).
     function phaseBoost() { var mx = 0; for (var i = 0; i < slots.length; i++) if (slots[i].state === "active" && slots[i].kTier > mx) mx = slots[i].kTier; return mx * K_PHASE_BOOST; }
-    function supplyP(Q) { var p = (P_STATIC + pumpLevel * PUMP_HEAD + phaseBoost()) - DROOP_C * Math.pow(Q, DROOP_N); return p < 0 ? 0 : p; }
-    function headFlow(s, P) { return KLADDER[s.kTier] * Math.sqrt(P > 0 ? P : 0); }
+    function pumpStatic(L) { return L === 0 ? P_STATIC : PUMP_CURVE[L].residual * 1.3; }   // static (churn @ 0 gpm) = 1.3 × residual
+    function supplyP(Q) {
+      var c = PUMP_CURVE[pumpLevel], stat = pumpStatic(pumpLevel);
+      var droopC = (stat - c.residual) / Math.pow(c.ratedQ, DROOP_N);                       // calibrated so P(ratedQ) = residual
+      var p = stat + phaseBoost() - droopC * Math.pow(Q, DROOP_N);
+      return p < 0 ? 0 : p;
+    }
+    function headCap(s) { return s.hp ? HEAD_PSI_CAP_HP : HEAD_PSI_CAP; }                   // 175 psi unless High-Pressure (300)
+    function headFlow(s, P) { var pp = Math.min(P, headCap(s)); return KLADDER[s.kTier] * Math.sqrt(pp > 0 ? pp : 0); }
     function solveOp(act) {
       var P = supplyP(0), i, Q;
       for (var it = 0; it < 12; it++) { Q = 0; for (i = 0; i < act.length; i++) Q += headFlow(act[i], P); P = P * 0.4 + supplyP(Q) * 0.6; if (P < 0) P = 0; }
@@ -550,16 +566,19 @@
     function categoryOffer(cat) {
       if (cat === "unlock") { var rt = UNLOCK_TYPES[Math.floor(Math.random() * UNLOCK_TYPES.length)]; return { e: TYPE_INFO[rt].e, t: "Unlock: " + TYPE_INFO[rt].n, d: unlockDesc(rt), kid: TYPE_INFO[rt].n, selectHead: true, headType: rt }; }
       if (cat === "kfactor") return { e: "📈", t: "Bigger K-factor", d: "Step a head up the K ladder: more GPM", kid: "Power Up", apply: applyUpgrade };
-      if (cat === "pump") return { e: "⚙️", t: pumpLevel + 1 >= PUMP_MAX ? "Fire pump · FINAL" : "Fire pump", d: pumpLevel === 0 ? "Add a fire pump — stronger supply pressure" : (pumpLevel + 1 >= PUMP_MAX ? "Top tier: ~175 psi @ 1000 gpm for K25.2 heads" : "Boost pump to tier " + (pumpLevel + 1) + ": more pressure"), kid: "Pump", apply: applyPump };
+      if (cat === "pump") { var nl = pumpLevel + 1, pc = PUMP_CURVE[nl]; return { e: "⚙️", t: nl >= PUMP_MAX ? "Fire pump · FINAL" : "Fire pump", d: pumpLevel === 0 ? "Add a fire pump — " + pc.residual + " psi @ " + pc.ratedQ.toLocaleString() + " gpm" : (pc.residual + " psi @ " + pc.ratedQ.toLocaleString() + " gpm" + (nl >= PUMP_MAX ? " (max)" : "")), kid: "Pump", apply: applyPump }; }
       if (cat === "tank") { var nw = Math.round(maxWater * (1 + TANK_PCT)); return { e: "🛢️", t: "Bigger tank", d: "+" + Math.round(TANK_PCT * 100) + "% capacity → " + nw.toLocaleString() + " gal", kid: "Water", apply: applyCapacity }; }
       var elig = slots.filter(function (s) { return s.state === "active" && !s.ec; });
+      var eligHP = slots.filter(function (s) { return s.state === "active" && !s.hp; });
       var pool = SPECIALS.slice();
       if (elig.length) pool.push("ec");                         // Extended Coverage only if a head can still take it
+      if (eligHP.length) pool.push("hp");                       // High Pressure only if a head can still take it
       var pick = pool[Math.floor(Math.random() * pool.length)];
       if (pick === "ec") {
         var lbl = elig.length === 1 ? ("K" + KLADDER[elig[0].kTier].toFixed(1) + " EC") : "Extended Coverage";
         return { e: "🎯", t: lbl, d: elig.length === 1 ? "+50% throw — Extended Coverage" : "+50% throw — pick a head", kid: "Bigger", special: true, applyEC: true };
       }
+      if (pick === "hp") return { e: "🔺", t: "High Pressure", d: "Pick a head — it can exceed 175 psi, up to 300", kid: "300 PSI", special: true, applyHP: true };
       return { e: pick.e, t: pick.t, d: pick.d, kid: pick.kid, apply: pick.apply, special: true };
     }
     function waveComplete() {
@@ -572,7 +591,7 @@
       if (upgradeableCount() > 0) others.push("kfactor");
       for (var i = others.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), tmp = others[i]; others[i] = others[j]; others[j] = tmp; }
       var chosen = [];
-      if (pumpLevel < PUMP_MAX && Math.random() < (pumpLevel === PUMP_MAX - 1 ? PUMP_FINAL_CHANCE : PUMP_OFFER_CHANCE)) chosen.push("pump");
+      if (pumpLevel < PUMP_MAX && Math.random() < PUMP_CHANCE[pumpLevel]) chosen.push("pump");
       for (var c2 = 0; chosen.length < 3 && c2 < others.length; c2++) chosen.push(others[c2]);
       for (var m = chosen.length - 1; m > 0; m--) { var n2 = Math.floor(Math.random() * (m + 1)), tt = chosen[m]; chosen[m] = chosen[n2]; chosen[n2] = tt; }  // de-bias card position
       var offers = chosen.map(function (cat) { var o = categoryOffer(cat); o.cat = cat; return o; });
@@ -598,7 +617,7 @@
       var P0 = supplyP(0);
       if (cat === "kfactor") return 6 + bestGain;
       if (cat === "unlock") return 8;
-      if (cat === "pump") return pumpLevel >= PUMP_MAX ? 0 : (3 + (Math.sqrt(P0 + PUMP_HEAD) - Math.sqrt(P0)) * sumK * 0.10);
+      if (cat === "pump") return pumpLevel >= PUMP_MAX ? 0 : (3 + (Math.sqrt(Math.min(300, pumpStatic(pumpLevel + 1))) - Math.sqrt(Math.min(175, P0))) * sumK * 0.10);
       if (cat === "tank") return 1.5;
       return 3;   // special (EC / refill / etc) — utility
     }
@@ -606,11 +625,12 @@
     function doOffer(o, auto) {
       if (o.selectHead) { pendingType = o.headType; if (auto) autoUnlock(); else beginSelectHead(); }
       else if (o.applyEC) { if (auto) autoEC(); else beginEC(); }
+      else if (o.applyHP) { if (auto) autoHP(); else beginHP(); }
       else { o.apply(); afterChoice(); }
     }
     function autoUnlock() {
       var best = nearestToCenter(function (sl) { return sl.state === "locked" && slots.some(function (o) { return o.state === "active" && Math.abs(o.c - sl.c) + Math.abs(o.r - sl.r) === 1; }); }) || nearestToCenter(function (sl) { return sl.state === "locked"; });
-      if (best) { best.state = "active"; best.kTier = 0; best.q = 0; best.ec = false; best.type = pendingType; best.aim = 0; best.foamOpen = 0; best.moonOpen = 0; if (pendingType === "corridor") best.axis = Math.random() < 0.5 ? "x" : "y"; if (pendingType !== "standard") { maxWater += SPECIAL_WATER_BONUS * (easyMode ? 1.5 : 1); water = Math.min(maxWater, water + SPECIAL_WATER_BONUS * (easyMode ? 1.5 : 1)); } best.flash = 0.6; }
+      if (best) { best.state = "active"; best.kTier = 0; best.q = 0; best.ec = false; best.hp = false; best.type = pendingType; best.aim = 0; best.foamOpen = 0; best.moonOpen = 0; if (pendingType === "corridor") best.axis = Math.random() < 0.5 ? "x" : "y"; if (pendingType !== "standard") { maxWater += SPECIAL_WATER_BONUS * (easyMode ? 1.5 : 1); water = Math.min(maxWater, water + SPECIAL_WATER_BONUS * (easyMode ? 1.5 : 1)); } best.flash = 0.6; }
       afterChoice();
     }
     function autoEC() {
@@ -618,10 +638,15 @@
       if (elig.length) { elig.sort(function (a, b) { return b.kTier - a.kTier; }); elig[0].ec = true; elig[0].flash = 0.6; }
       afterChoice();
     }
+    function autoHP() {
+      var elig = slots.filter(function (s) { return s.state === "active" && !s.hp; });
+      if (elig.length) { elig.sort(function (a, b) { return b.kTier - a.kTier; }); elig[0].hp = true; elig[0].flash = 0.6; }
+      afterChoice();
+    }
     function afterChoice() { startWave(wave + 1); }
     // Pick-a-head modes: 'unlock' (tap a dusty head) or 'ec' (tap an active head for Extended Coverage).
     var selectKind = null, pendingType = "standard";
-    function selectEligible(s) { return selectKind === "unlock" ? s.state === "locked" : (s.state === "active" && !s.ec); }
+    function selectEligible(s) { if (selectKind === "unlock") return s.state === "locked"; if (selectKind === "hp") return s.state === "active" && !s.hp; return s.state === "active" && !s.ec; }
     function beginSelectHead() {
       selectKind = "unlock"; state = "select"; $("upgradeOv").classList.remove("show");
       $("selectPrompt").textContent = "👆 Tap a plug to install your " + TYPE_INFO[pendingType].n; $("selectPrompt").hidden = false;
@@ -632,13 +657,20 @@
       selectKind = "ec"; state = "select"; $("upgradeOv").classList.remove("show");
       $("selectPrompt").textContent = "👆 Tap a head for Extended Coverage"; $("selectPrompt").hidden = false;
     }
+    function beginHP() {
+      var elig = slots.filter(function (s) { return s.state === "active" && !s.hp; });
+      if (elig.length === 1) { elig[0].hp = true; elig[0].flash = 0.6; afterChoice(); return; }
+      selectKind = "hp"; state = "select"; $("upgradeOv").classList.remove("show");
+      $("selectPrompt").textContent = "👆 Tap a head for High Pressure (300 psi)"; $("selectPrompt").hidden = false;
+    }
     function selectHeadAt(tx, ty) {
       if (state !== "select") return;
       tx = W / 2 + (tx - W / 2) / viewScale; ty = H / 2 + (ty - H / 2) / viewScale;   // screen → world
       var best = null, bd = 1e9;
       for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (!selectEligible(s)) continue; var d = Math.hypot(tx - s.x, ty - s.y); if (d < bd) { bd = d; best = s; } }
       if (best && bd < gap * 0.7) {
-        if (selectKind === "unlock") { best.state = "active"; best.kTier = 0; best.q = 0; best.ec = false; best.type = pendingType; best.aim = 0; best.foamOpen = 0; best.moonOpen = 0; if (pendingType === "corridor") best.axis = Math.random() < 0.5 ? "x" : "y"; if (pendingType !== "standard") { var wb = SPECIAL_WATER_BONUS * (easyMode ? 1.5 : 1); maxWater += wb; water = Math.min(maxWater, water + wb); } }
+        if (selectKind === "unlock") { best.state = "active"; best.kTier = 0; best.q = 0; best.ec = false; best.hp = false; best.type = pendingType; best.aim = 0; best.foamOpen = 0; best.moonOpen = 0; if (pendingType === "corridor") best.axis = Math.random() < 0.5 ? "x" : "y"; if (pendingType !== "standard") { var wb = SPECIAL_WATER_BONUS * (easyMode ? 1.5 : 1); maxWater += wb; water = Math.min(maxWater, water + wb); } }
+        else if (selectKind === "hp") { best.hp = true; }
         else { best.ec = true; }
         best.flash = 0.6; selectKind = null; $("selectPrompt").hidden = true; afterChoice();
       }
@@ -684,7 +716,7 @@
       // label: standard grade (ELO/ESFR) or the special's name, + K-factor + EC
       var grade = ty === "standard" ? (s.kTier >= 3 ? "ESFR" : s.kTier >= 2 ? "ELO" : "") : TYPE_INFO[ty].n;
       ctx.fillStyle = s.ec ? "#ffb03a" : "rgba(232,240,244,0.92)"; ctx.font = "700 " + Math.max(7, Math.round(r * 0.46 / viewScale)) + "px Inter, Arial, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";   // /viewScale → constant on-screen size when zoomed out
-      ctx.fillText((grade ? grade + " " : "") + "K" + KLADDER[s.kTier].toFixed(1) + (s.ec ? " EC" : ""), x, y + r + 3 / viewScale);
+      ctx.fillText((grade ? grade + " " : "") + "K" + KLADDER[s.kTier].toFixed(1) + (s.ec ? " EC" : "") + (s.hp ? " ⊕300" : ""), x, y + r + 3 / viewScale);
     }
     // empty pipe outlet — a square head plug
     function drawPlug(x, y, r) {
@@ -1020,7 +1052,7 @@
     canvas.addEventListener("pointercancel", function () { holding = false; });
 
     function reset() {
-      for (var i = 0; i < slots.length; i++) { var ctr = slots[i].c === 1 && slots[i].r === 1; slots[i].state = ctr ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].hurt = 0; slots[i].ec = false; slots[i].type = ctr ? "standard" : null; slots[i].aim = 0; }
+      for (var i = 0; i < slots.length; i++) { var ctr = slots[i].c === 1 && slots[i].r === 1; slots[i].state = ctr ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].hurt = 0; slots[i].ec = false; slots[i].hp = false; slots[i].type = ctr ? "standard" : null; slots[i].aim = 0; }
       enemies = []; particles = []; floats = []; foamPiles = []; score = 0; integrity = 100; maxWater = Math.round(330 * (easyMode ? 1.5 : 1)); water = maxWater; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
       tankFillMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0; selectKind = null; hurtT = 0; dpsNow = 0; dpsShown = 0;
       viewScale = 1; zoomTarget = 1;
