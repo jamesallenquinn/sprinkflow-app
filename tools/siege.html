@@ -115,6 +115,7 @@
     .sg-ability .cd[hidden] { display:none; }
     .sg-ability .badge { position:absolute; bottom:0; right:4px; font:800 .64rem Inter; color:var(--accent); text-shadow:0 1px 2px #000; pointer-events:none; }
     .sg-ability .badge[hidden] { display:none; }
+    .sg-ability .ab-ic { width:84%; height:84%; object-fit:contain; pointer-events:none; }
     .sg-prompt { position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:6; background:var(--accent); color:#1a0d06; font:700 .82rem 'Space Grotesk'; padding:8px 14px; border-radius:999px; box-shadow:0 4px 14px rgba(0,0,0,.4); animation:hbpulse 1s ease-in-out infinite; white-space:nowrap; }
     .sg-prompt[hidden] { display:none; }
     .sg-lowwater { position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:6; background:var(--bad,#ff5a4f); color:#1a0606; font:800 .8rem 'Space Grotesk'; letter-spacing:.03em; padding:7px 14px; border-radius:999px; box-shadow:0 4px 14px rgba(0,0,0,.4); animation:hbpulse .8s ease-in-out infinite; white-space:nowrap; }
@@ -164,7 +165,7 @@
       <button id="ffBtn" class="sg-pausebtn sg-ffbtn" aria-label="Fast forward" hidden>▶▶</button>
       <button id="musicBtn" class="sg-pausebtn sg-musicbtn" aria-label="Toggle sound">🔇</button>
       <div class="sg-abar" id="abar" hidden>
-        <button class="sg-ability" id="overloadBtn" aria-label="Overload Fire Pump">⚡<div class="cd" id="overloadCdEl" hidden></div></button>
+        <button class="sg-ability" id="overloadBtn" aria-label="Overload Fire Pump"><img class="ab-ic" src="../assets/overload-pump.png" alt="" /><div class="cd" id="overloadCdEl" hidden></div></button>
         <button class="sg-ability" id="hollywoodBtn" aria-label="Hollywood Scene" hidden>🎬<div class="badge" id="hollyBadge"></div></button>
       </div>
       <div id="selectPrompt" class="sg-prompt" hidden>👆 Tap a dusty sprinkler to fix</div>
@@ -855,6 +856,9 @@
     function resumeGame() { if (state !== "paused") return; state = "playing"; last = 0; $("pauseOv").classList.remove("show"); $("easyInd").hidden = !easyMode; $("ffBtn").hidden = false; updateHollywoodBtn(); }
 
     // ---- rendering ----
+    function loadImg(src) { var im = new Image(); im.src = src; return im; }
+    var IMG = { plug: loadImg("../assets/pipe-plug.png"), bg1: loadImg("../assets/bg-act1.png"), bg2: loadImg("../assets/bg-act2.png"), bg3: loadImg("../assets/bg-act3.png") };
+    function imgReady(im) { return im && im.complete && im.naturalWidth > 0; }
     function brass(ctx, x, y, r, grad) { var g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r); g.addColorStop(0, grad[0]); g.addColorStop(1, grad[1]); return g; }
     function drawSprinkler(s) {
       var x = s.x, y = s.y, r = gap * 0.32 * (0.5 + 0.5 * ((s.kTier || 0) / (KLADDER.length - 1)));
@@ -886,8 +890,9 @@
         ctx.fillStyle = s.ec || s.hp || s.fr ? "#ffb03a" : "#eaf2f6"; ctx.fillText(label, x, ly);
       }
     }
-    // empty pipe outlet — a square head plug
+    // empty pipe outlet — bolted plug art (falls back to drawn plug until the image loads)
     function drawPlug(x, y, r) {
+      if (imgReady(IMG.plug)) { var d = r * 2.4; ctx.drawImage(IMG.plug, x - d / 2, y - d / 2, d, d); return; }
       var w = r * 1.05;
       ctx.fillStyle = "#2a3038"; ctx.beginPath(); ctx.rect(x - w, y - w, 2 * w, 2 * w); ctx.fill();
       ctx.lineWidth = Math.max(1.5, r * 0.08); ctx.strokeStyle = "#4a525b"; ctx.stroke();
@@ -1150,6 +1155,9 @@
       if (typeof updateMusic === "function") updateMusic();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
+      // act background (wood = Act 1, steel = Act 2; act 3 reserved), darkened so heads & flames pop
+      var bg = currentAct >= 3 ? IMG.bg3 : currentAct >= 2 ? IMG.bg2 : IMG.bg1;
+      if (imgReady(bg)) { ctx.drawImage(bg, 0, 0, W, H); ctx.fillStyle = "rgba(9,13,17,0.52)"; ctx.fillRect(0, 0, W, H); }
       ctx.save();
       if (viewScale !== 1) { ctx.translate(W / 2, H / 2); ctx.scale(viewScale, viewScale); ctx.translate(-W / 2, -H / 2); }
       // core target glow
