@@ -698,12 +698,42 @@
       ctx.fillStyle = brass(ctx, x, y, r * 0.5, fin.hub); ctx.beginPath(); ctx.arc(x, y, r * 0.42, 0, Math.PI * 2); ctx.fill(); ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = fin.edge; ctx.stroke();
       ctx.fillStyle = "#0a0e12"; ctx.beginPath(); ctx.arc(x, y, r * 0.16, 0, Math.PI * 2); ctx.fill();
     }
+    function drawSparkle(x, y, s) { ctx.fillStyle = "#eaf2ff"; ctx.beginPath(); ctx.moveTo(x, y - s); ctx.quadraticCurveTo(x + s * 0.16, y - s * 0.16, x + s, y); ctx.quadraticCurveTo(x + s * 0.16, y + s * 0.16, x, y + s); ctx.quadraticCurveTo(x - s * 0.16, y + s * 0.16, x - s, y); ctx.quadraticCurveTo(x - s * 0.16, y - s * 0.16, x, y - s); ctx.closePath(); ctx.fill(); }
+    // moon head — silver/lavender lunar ring, blue-glowing slots, starry crescent center (matches owner art)
     function drawMoonHead(x, y, r) {
-      ctx.fillStyle = brass(ctx, x, y, r, ["#7fc4ff", "#2a6cc4"]); ctx.beginPath(); ctx.arc(x, y, r * 0.9, 0, Math.PI * 2); ctx.fill();
-      ctx.lineWidth = Math.max(1, r * 0.06); ctx.strokeStyle = "#14407a"; ctx.stroke();
-      ctx.fillStyle = "#dff0ff"; ctx.beginPath(); ctx.arc(x, y, r * 0.5, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#ffe9a0"; ctx.beginPath(); ctx.arc(x, y, r * 0.34, 0, Math.PI * 2); ctx.fill();        // moon
-      ctx.fillStyle = "#dff0ff"; ctx.beginPath(); ctx.arc(x + r * 0.16, y - r * 0.08, r * 0.3, 0, Math.PI * 2); ctx.fill();  // crescent cutout
+      var k, si, t;
+      // outer silver rim band
+      ctx.fillStyle = brass(ctx, x, y, r, ["#c9ccd6", "#7e8290"]); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = Math.max(1.5, r * 0.08); ctx.strokeStyle = "#2a2d3a"; ctx.stroke();
+      // 4 lavender star segments (N/E/S/W) with 4-point sparkles
+      for (k = 0; k < 4; k++) {
+        var c0 = k * Math.PI / 2 - Math.PI / 2 - 0.42, c1 = k * Math.PI / 2 - Math.PI / 2 + 0.42;
+        ctx.fillStyle = "#9a98c4"; ctx.beginPath(); ctx.arc(x, y, r * 0.99, c0, c1); ctx.arc(x, y, r * 0.74, c1, c0, true); ctx.closePath(); ctx.fill();
+        var sa = k * Math.PI / 2 - Math.PI / 2; drawSparkle(x + Math.cos(sa) * r * 0.87, y + Math.sin(sa) * r * 0.87, r * 0.1);
+      }
+      // bolt cylinders at the 4 diagonal joints
+      for (k = 0; k < 4; k++) { var ba = Math.PI / 4 + k * Math.PI / 2, bx = x + Math.cos(ba) * r * 0.92, by = y + Math.sin(ba) * r * 0.92; ctx.fillStyle = brass(ctx, bx, by, r * 0.12, ["#d6d9e0", "#7a7e8a"]); ctx.beginPath(); ctx.arc(bx, by, r * 0.1, 0, Math.PI * 2); ctx.fill(); ctx.lineWidth = Math.max(1, r * 0.02); ctx.strokeStyle = "#3a3d48"; ctx.stroke(); }
+      // inner silver disc
+      ctx.fillStyle = brass(ctx, x, y, r * 0.72, ["#d2d5dd", "#8a8e9a"]); ctx.beginPath(); ctx.arc(x, y, r * 0.7, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = Math.max(1, r * 0.04); ctx.strokeStyle = "rgba(245,247,250,0.5)"; ctx.stroke();
+      // 8 blue-glowing radial slots
+      ctx.lineCap = "round";
+      for (si = 0; si < 8; si++) { var a = si * Math.PI / 4 - Math.PI / 2, x1 = x + Math.cos(a) * r * 0.42, y1 = y + Math.sin(a) * r * 0.42, x2 = x + Math.cos(a) * r * 0.62, y2 = y + Math.sin(a) * r * 0.62; ctx.lineWidth = r * 0.07; ctx.strokeStyle = "#0a1430"; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.lineWidth = r * 0.035; ctx.strokeStyle = "#5aa0ff"; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
+      ctx.lineCap = "butt";
+      // 4 small diagonal bolts on the inner disc
+      for (k = 0; k < 4; k++) { var ca = Math.PI / 4 + k * Math.PI / 2, ix = x + Math.cos(ca) * r * 0.5, iy = y + Math.sin(ca) * r * 0.5; ctx.fillStyle = "#b8bcc8"; ctx.beginPath(); ctx.arc(ix, iy, r * 0.06, 0, Math.PI * 2); ctx.fill(); ctx.lineWidth = Math.max(1, r * 0.015); ctx.strokeStyle = "#4a4d58"; ctx.stroke(); }
+      // center night-sky window
+      ctx.fillStyle = "#14182e"; ctx.beginPath(); ctx.arc(x, y, r * 0.32, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = Math.max(1, r * 0.03); ctx.strokeStyle = "#3a3f5a"; ctx.stroke();
+      // crescent moon (cream, craters), opening to the right
+      ctx.save(); ctx.beginPath(); ctx.arc(x, y, r * 0.31, 0, Math.PI * 2); ctx.clip();
+      ctx.fillStyle = "#ece8da"; ctx.beginPath(); ctx.arc(x - r * 0.05, y, r * 0.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#d8d2c0"; var cr = [[-0.13, -0.04, 0.03], [-0.1, 0.07, 0.025], [-0.05, -0.1, 0.022]]; for (t = 0; t < cr.length; t++) { ctx.beginPath(); ctx.arc(x + cr[t][0] * r, y + cr[t][1] * r, cr[t][2] * r, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = "#14182e"; ctx.beginPath(); ctx.arc(x + r * 0.07, y - r * 0.02, r * 0.18, 0, Math.PI * 2); ctx.fill();
+      // stars in the sky portion
+      ctx.fillStyle = "#fff"; var st = [[0.12, -0.1, 0.018], [0.16, 0.05, 0.014], [0.07, 0.13, 0.013]]; for (t = 0; t < st.length; t++) { ctx.beginPath(); ctx.arc(x + st[t][0] * r, y + st[t][1] * r, st[t][2] * r, 0, Math.PI * 2); ctx.fill(); }
+      drawSparkle(x + r * 0.13, y - r * 0.01, r * 0.045);
+      ctx.restore();
     }
     function drawHeadField(s, x, y, r, ty) {
       var firing = s.q > 0;
