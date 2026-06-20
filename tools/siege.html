@@ -227,6 +227,8 @@
     // --- hydraulics: each head flows Q = K·√P; supply pressure sags as total flow rises ---
     var KLADDER = [5.6, 8.0, 11.2, 14.0, 16.8, 22.4, 25.2];   // K-factor per upgrade tier
     var P_STATIC = 7;                          // psi at no flow, no pump (weak supply)
+    var BASE_COV = 0.95;                        // FIXED spray radius (× gap) — K-factor & pressure raise OUTPUT, not radius
+    var EC_MIN = 1.15, EC_MAX = 1.9;            // Extended Coverage radius multiplier; scales with supply pressure (pump) min→max
     var PUMP_MAX = 3;                          // fire-pump tiers; maxed pump ≈ 175 psi @ 1000 gpm (for K25.2)
     var TANK_PCT = 0.30;                        // tank upgrades scale by % of CURRENT capacity → compounds to massive end-game tanks
     var PUMP_OFFER_CHANCE = 0.45, PUMP_FINAL_CHANCE = 0.10;  // pump rarer than other cards; final tier (lvl2→3) very rare
@@ -274,8 +276,14 @@
     function activeSlots() { return slots.filter(function (s) { return s.state === "active"; }); }
     function lockedCount() { return slots.filter(function (s) { return s.state === "locked"; }).length; }
     function upgradeableCount() { return slots.filter(function (s) { return s.state === "active" && s.kTier < KLADDER.length - 1; }).length; }
-    function sprayRadius(s) { var f = s.q || 0; return gap * Math.max(0.55, Math.min(1.6, 0.5 + 0.12 * Math.sqrt(f))) * (s.ec ? 1.5 : 1); }
-    function coverageRadius(s) { var qn = KLADDER[s.kTier] * Math.sqrt(supplyP(0)); return gap * Math.max(0.55, Math.min(1.6, 0.5 + 0.12 * Math.sqrt(qn))) * (s.ec ? 1.5 : 1); }
+    // Radius is FIXED for base heads (K-factor & pressure only raise output within it). EC unlocks a larger radius that grows with supply pressure to a cap.
+    function coverageRadius(s) {
+      var base = gap * BASE_COV;
+      if (!s.ec) return base;
+      var norm = Math.max(0, Math.min(1, (supplyP(0) - P_STATIC) / (PUMP_MAX * PUMP_HEAD)));   // 0 at no pump → 1 at max pump
+      return base * (EC_MIN + (EC_MAX - EC_MIN) * norm);
+    }
+    function sprayRadius(s) { return coverageRadius(s); }
     function sprayDps(s) { return (s.q || 0) * DMG_PER_GPM; }
     // pick the largest preset zoom at which no active head's coverage bubble is clipped by the screen
     function chooseZoom() {
