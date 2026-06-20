@@ -238,7 +238,7 @@
     var enemies = [], particles = [], foamPiles = [], laserShots = [];
     var state = "start";  // start | playing | upgrade | over | win
     var wave = 1, score = 0, integrity = 100, water = 330, maxWater = 330, holding = false;
-    var spawnQueue = 0, spawnT = 0, bossPending = false, bossAlive = false;
+    var spawnQueue = 0, spawnT = 0, bossPending = false, bossAlive = false, waveSpawnTotal = 1;
     var pumpLevel = 0, tankLevel = 0, nextSupplyPump = false, pendingSupplyPump = false, dryFlash = false, nowT = 0;
     var easyMode = false, autoPick = false;   // Easy Mode (locked at game start): +50% dmg, -50% dmg taken, +50% water, upgrade hints; autoPick auto-selects
     // special upgrades: refill rate ×, spray reach ×, integrity shield pool, Hollywood charges/timer
@@ -439,6 +439,7 @@
       waveDmg = 0; waveCombatT = 0;             // reset the running Avg. DPS each wave
       if (bossPending) { bossPending = false; bossAlive = true; spawnBoss(); spawnQueue = 0; }
       else { bossAlive = false; spawnQueue = 4 + n * 2; }
+      waveSpawnTotal = spawnQueue || 1;
       // Act 2 hazards — one per (non-boss) wave
       hazard = null; hzPump = false; hzTankMult = 1; hzSpeed = 1; hzReach = 1;
       if (currentAct >= 2 && !bossAlive) {
@@ -462,13 +463,18 @@
     }
     // enemy mix: "elo" needs K11.2+ heads (kTier>=2); "splitter" breaks into 2 on death
     function pickType() {
-      if (currentAct >= 2) {                                  // Act 2: multi-class fires
-        var r = Math.random();
-        if (r < 0.27) return "grease";                        // Class B — only Foam
-        if (r < 0.50) return "ember";                         // swarm — rewards AoE
-        if (r < 0.65) return "backdraft";                     // big HP, flashes over
-        if (r < 0.80 && wave >= 10) return "elo";
-        return Math.random() < 0.4 ? "splitter" : "normal";
+      if (currentAct >= 2) {                                  // Act 2: ease in the multi-class fires
+        var a2w = wave - BOSS_WAVE - 1;                       // 1 = first Act-2 wave
+        var prog = 1 - spawnQueue / waveSpawnTotal;           // 0 at wave start → 1 at wave end
+        var newChance = Math.min(0.7, (a2w - 1) * 0.22);      // ramps up wave by wave
+        if (a2w <= 1) newChance = Math.max(0, prog - 0.65) / 0.35 * 0.3;   // first wave: only a few, near the end
+        if (Math.random() < newChance) {
+          var nr = Math.random();
+          if (a2w <= 2) return nr < 0.55 ? "grease" : "ember";              // early: grease + ember only
+          if (nr < 0.4) return "grease"; if (nr < 0.72) return "ember"; return "backdraft";   // backdraft joins later
+        }
+        if (wave >= 10 && Math.random() < 0.3) return "elo";
+        return Math.random() < 0.35 ? "splitter" : "normal";
       }
       if (wave >= 10 && Math.random() < Math.min(0.42, 0.15 + (wave - 10) * 0.05)) return "elo";
       if (wave >= 5 && Math.random() < 0.22) return "splitter";
@@ -886,15 +892,13 @@
       else drawDeflector(x, y, r, s);
       if (s.flash > 0) { ctx.globalAlpha = s.flash; ctx.fillStyle = "#bff0ff"; ctx.beginPath(); ctx.arc(x, y, r + 6, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; }
       if (s.hurt > 0) { ctx.globalAlpha = Math.min(1, s.hurt / 0.45); ctx.fillStyle = "#ff3b30"; ctx.beginPath(); ctx.arc(x, y, r + 5, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; }
-      // label only while inspecting (tap & hold this head ~1s) — keeps the playfield clean
-      if (s === inspectSlot) {
-        var grade = ty === "standard" ? (s.kTier >= 3 ? "ESFR" : s.kTier >= 2 ? "ELO" : "") : TYPE_INFO[ty].n;
-        var label = (s.fr ? "Fast Response " : "") + (grade ? grade + " " : "") + "K" + KLADDER[s.kTier].toFixed(1) + (s.ec ? " EC" : "") + (s.hp ? " 300psi" : "") + (ty === "standard" && s.kTier >= 2 ? " AutoShot" : "");
-        var fs = Math.max(9, Math.round(r * 0.44 / viewScale)); ctx.font = "700 " + fs + "px Inter, Arial, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";
-        var ly = y + r + 4 / viewScale, tw = ctx.measureText(label).width;
-        ctx.fillStyle = "rgba(8,12,16,0.82)"; ctx.fillRect(x - tw / 2 - 5, ly - 2, tw + 10, fs + 6);   // backing pill for readability
-        ctx.fillStyle = s.ec || s.hp || s.fr ? "#ffb03a" : "#eaf2f6"; ctx.fillText(label, x, ly);
-      }
+      // head label (always shown): grade/type + K-factor + perks
+      var grade = ty === "standard" ? (s.kTier >= 3 ? "ESFR" : s.kTier >= 2 ? "ELO" : "") : TYPE_INFO[ty].n;
+      var label = (s.fr ? "Fast Response " : "") + (grade ? grade + " " : "") + "K" + KLADDER[s.kTier].toFixed(1) + (s.ec ? " EC" : "") + (s.hp ? " 300psi" : "") + (ty === "standard" && s.kTier >= 2 ? " AutoShot" : "");
+      var fs = Math.max(8, Math.round(r * 0.42 / viewScale)); ctx.font = "700 " + fs + "px Inter, Arial, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+      var ly = y + r + 3 / viewScale;
+      ctx.lineWidth = Math.max(2, fs * 0.32); ctx.strokeStyle = "rgba(6,9,12,0.9)"; ctx.lineJoin = "round"; ctx.strokeText(label, x, ly);   // dark outline so it reads over any background
+      ctx.fillStyle = s.ec || s.hp || s.fr ? "#ffb03a" : "#eaf2f6"; ctx.fillText(label, x, ly);
     }
     // empty pipe outlet — bolted plug art (falls back to drawn plug until the image loads)
     function drawPlug(x, y, r) {
