@@ -279,7 +279,7 @@
     // ---- rendering ----
     function brass(ctx, x, y, r, grad) { var g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r); g.addColorStop(0, grad[0]); g.addColorStop(1, grad[1]); return g; }
     function drawSprinkler(s) {
-      var x = s.x, y = s.y, r = gap * 0.28 * (s.up ? 1.12 : 1);
+      var x = s.x, y = s.y, r = gap * 0.32 * (s.up ? 1.12 : 1);
       var active = s.state === "active";
       // spray field while holding
       if (active && holding && water > 0 && state === "playing") {
@@ -288,32 +288,55 @@
         ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
       }
       if (active && s.up) { ctx.strokeStyle = "rgba(108,214,242,0.7)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2); ctx.stroke(); }
-      // body
-      ctx.globalAlpha = active ? 1 : 0.78;
+      // --- gear-toothed deflector disk ---
+      ctx.globalAlpha = active ? 1 : 0.82;
+      var teeth = 16, step = Math.PI * 2 / teeth, rRoot = r * 0.84;
+      ctx.beginPath();
+      for (var ti = 0; ti < teeth; ti++) {
+        var b = ti * step - Math.PI / 2;
+        var pa = [[b, rRoot], [b + step * 0.18, r], [b + step * 0.5, r], [b + step * 0.68, rRoot]];
+        for (var pi = 0; pi < 4; pi++) { var px = x + Math.cos(pa[pi][0]) * pa[pi][1], py = y + Math.sin(pa[pi][0]) * pa[pi][1]; if (ti === 0 && pi === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }
+      }
+      ctx.closePath();
       ctx.fillStyle = active ? brass(ctx, x, y, r, ["#f6d68a", "#b6792a"]) : brass(ctx, x, y, r, ["#9aa0a4", "#5c6266"]);
-      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-      ctx.lineWidth = 2; ctx.strokeStyle = active ? "#7a4e18" : "#41464a"; ctx.stroke();
-      // frame arms (cross) + deflector
-      ctx.strokeStyle = active ? "#5e3c12" : "#3a3f43"; ctx.lineWidth = r * 0.22;
-      ctx.beginPath(); ctx.moveTo(x - r * 0.78, y); ctx.lineTo(x + r * 0.78, y); ctx.moveTo(x, y - r * 0.78); ctx.lineTo(x, y + r * 0.78); ctx.stroke();
-      ctx.fillStyle = active ? "#fff2cf" : "#cdd2d6"; ctx.beginPath(); ctx.arc(x, y, r * 0.3, 0, Math.PI * 2); ctx.fill();
-      if (!active) { ctx.fillStyle = "rgba(210,215,220,0.5)"; for (var d = 0; d < 5; d++) { ctx.beginPath(); ctx.arc(x + (Math.random() - 0.5) * r, y + (Math.random() - 0.5) * r, 1.2, 0, Math.PI * 2); ctx.fill(); } }
+      ctx.fill();
+      ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = active ? "#6a4514" : "#3a3f43"; ctx.stroke();
+      ctx.lineWidth = Math.max(1, r * 0.04); ctx.strokeStyle = active ? "rgba(255,240,200,0.55)" : "rgba(220,225,230,0.35)";
+      ctx.beginPath(); ctx.arc(x, y, rRoot * 0.92, 0, Math.PI * 2); ctx.stroke();
+      // --- teardrop slots (bulb out, point toward center) ---
+      var nslot = 12, rO = r * 0.66, rI = r * 0.40, wO = r * 0.085;
+      ctx.fillStyle = active ? "#3a2c12" : "#23262b";
+      for (var si = 0; si < nslot; si++) {
+        var a = si * (Math.PI * 2 / nslot) - Math.PI / 2;
+        var ox = x + Math.cos(a) * rO, oy = y + Math.sin(a) * rO, ix = x + Math.cos(a) * rI, iy = y + Math.sin(a) * rI;
+        ctx.beginPath(); ctx.arc(ox, oy, wO, a + Math.PI / 2, a - Math.PI / 2, true); ctx.lineTo(ix, iy); ctx.closePath(); ctx.fill();
+      }
+      // --- central raised hub + orifice ---
+      ctx.fillStyle = active ? brass(ctx, x, y, r * 0.4, ["#f0cc7e", "#a86f23"]) : brass(ctx, x, y, r * 0.4, ["#aab0b4", "#666c70"]);
+      ctx.beginPath(); ctx.arc(x, y, r * 0.36, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = active ? "#6a4514" : "#3a3f43"; ctx.stroke();
+      ctx.lineWidth = Math.max(1, r * 0.03); ctx.strokeStyle = active ? "rgba(255,244,210,0.7)" : "rgba(225,230,234,0.5)";
+      ctx.beginPath(); ctx.arc(x, y, r * 0.27, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = "#0a0e12"; ctx.beginPath(); ctx.arc(x, y, r * 0.16, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = Math.max(1, r * 0.03); ctx.strokeStyle = active ? "rgba(120,80,25,0.85)" : "rgba(60,65,70,0.85)"; ctx.stroke();
+      // dusty specks on locked (deterministic so they don't flicker)
+      if (!active) { ctx.fillStyle = "rgba(205,210,215,0.4)"; for (var dd = 0; dd < 6; dd++) { var da = dd * 1.7, dr = r * (0.45 + (dd % 3) * 0.16); ctx.beginPath(); ctx.arc(x + Math.cos(da) * dr, y + Math.sin(da) * dr, r * 0.045, 0, Math.PI * 2); ctx.fill(); } }
       if (s.flash > 0) { ctx.globalAlpha = s.flash; ctx.fillStyle = "#bff0ff"; ctx.beginPath(); ctx.arc(x, y, r + 6, 0, Math.PI * 2); ctx.fill(); }
       ctx.globalAlpha = 1;
     }
+    function pipeSeg(x1, y1, x2, y2) {
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+      ctx.lineWidth = gap * 0.22; ctx.strokeStyle = "#040506"; ctx.stroke();
+      ctx.lineWidth = gap * 0.16; ctx.strokeStyle = "#191c20"; ctx.stroke();
+      ctx.lineWidth = gap * 0.05; ctx.strokeStyle = "#33373d"; ctx.stroke();
+    }
     function drawPipes() {
-      ctx.lineCap = "round";
-      for (var row = 0; row < 3; row++) {
-        var y = H / 2 + (row - 1) * gap;
-        ctx.lineWidth = gap * 0.16; ctx.strokeStyle = "#7a5a22";
-        ctx.beginPath(); ctx.moveTo(W / 2 - gap, y); ctx.lineTo(W / 2 + gap, y); ctx.stroke();
-        ctx.lineWidth = gap * 0.09; ctx.strokeStyle = "#c79a3e";
-        ctx.beginPath(); ctx.moveTo(W / 2 - gap, y); ctx.lineTo(W / 2 + gap, y); ctx.stroke();
-      }
-      // left manifold riser
-      var lx = W / 2 - gap;
-      ctx.lineWidth = gap * 0.16; ctx.strokeStyle = "#7a5a22"; ctx.beginPath(); ctx.moveTo(lx, H / 2 - gap); ctx.lineTo(lx, H / 2 + gap); ctx.stroke();
-      ctx.lineWidth = gap * 0.09; ctx.strokeStyle = "#c79a3e"; ctx.beginPath(); ctx.moveTo(lx, H / 2 - gap); ctx.lineTo(lx, H / 2 + gap); ctx.stroke();
+      ctx.lineCap = "butt";
+      var pad = S * 0.2, lx = W / 2 - gap;
+      // vertical cross-main on the left column, off the top & bottom edges
+      pipeSeg(lx, -pad, lx, H + pad);
+      // 3 branch lines through each row, off the left & right edges
+      for (var row = 0; row < 3; row++) { var y = H / 2 + (row - 1) * gap; pipeSeg(-pad, y, W + pad, y); }
     }
     function render(t) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
