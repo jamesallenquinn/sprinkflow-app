@@ -85,11 +85,13 @@
     .sg-hollybtn[hidden] { display:none; }
     .sg-prompt { position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:6; background:var(--accent); color:#1a0d06; font:700 .82rem 'Space Grotesk'; padding:8px 14px; border-radius:999px; box-shadow:0 4px 14px rgba(0,0,0,.4); animation:hbpulse 1s ease-in-out infinite; white-space:nowrap; }
     .sg-prompt[hidden] { display:none; }
+    .sg-lowwater { position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:6; background:var(--bad,#ff5a4f); color:#1a0606; font:800 .8rem 'Space Grotesk'; letter-spacing:.03em; padding:7px 14px; border-radius:999px; box-shadow:0 4px 14px rgba(0,0,0,.4); animation:hbpulse .8s ease-in-out infinite; white-space:nowrap; }
+    .sg-lowwater[hidden] { display:none; }
     .sg-pump { align-items:center; }
     .sg-pump-icons { display:flex; align-items:center; gap:5px; flex:1; }
     .sg-pump-icons svg { width:18px; height:18px; display:block; }
     .sg-pump-icons .star { color:var(--accent); font:700 .82rem 'Space Grotesk'; }
-    .sg-dps { position:absolute; right:10px; bottom:10px; z-index:6; background:rgba(13,17,22,.72); backdrop-filter:blur(2px); border:1px solid var(--line); border-radius:10px; padding:5px 9px; font:700 .62rem Inter; letter-spacing:.06em; color:var(--muted); display:flex; align-items:baseline; gap:4px; }
+    .sg-dps { position:absolute; left:10px; bottom:10px; z-index:6; background:rgba(13,17,22,.72); backdrop-filter:blur(2px); border:1px solid var(--line); border-radius:10px; padding:5px 9px; font:700 .62rem Inter; letter-spacing:.06em; color:var(--muted); display:flex; align-items:baseline; gap:4px; }
     .sg-dps b { font:800 .95rem 'Space Grotesk'; color:var(--water); }
     .sg-dps[hidden] { display:none; }
     .sg-dps.hot { border-color:var(--accent); }
@@ -128,6 +130,7 @@
       <button id="hollywoodBtn" class="sg-hollybtn" aria-label="Hollywood Scene" hidden>🎬 0</button>
       <div id="selectPrompt" class="sg-prompt" hidden>👆 Tap a dusty sprinkler to fix</div>
       <div id="dpsMeter" class="sg-dps" hidden><b id="dpsNum">0</b> DPS</div>
+      <div id="lowWater" class="sg-lowwater" hidden>💧 LOW WATER!</div>
 
       <div class="sg-ov" id="pauseOv">
         <div class="ic">❚❚</div>
@@ -314,7 +317,7 @@
       $("waveVal").textContent = bossAlive ? "BOSS" : n;
       hud();
       $("upgradeOv").classList.remove("show"); $("startOv").classList.remove("show"); $("pauseOv").classList.remove("show");
-      $("selectPrompt").hidden = true;
+      $("selectPrompt").hidden = true; $("lowWater").hidden = true;
       $("pauseBtn").hidden = false;
       updateHollywoodBtn();
     }
@@ -441,6 +444,8 @@
       $("integVal").textContent = Math.round(integrity) + " HP" + (shield > 0 ? " · 🛡 " + Math.round(shield) : "");
       var wF = $("waterFill"), wB = $("waterBar"); wF.style.width = (maxWater ? (water / maxWater * 100) : 0) + "%"; wB.classList.toggle("low", water <= maxWater * 0.18);
       $("waterVal").textContent = Math.round(water) + " / " + Math.round(maxWater) + " gal";
+      $("lowWater").hidden = !(water <= maxWater * 0.2);
+      $("lowWater").textContent = water <= 0 ? "💧 TANK DRY!" : "💧 LOW WATER!";
     }
 
     // ---- upgrade categories: each wave offers 3 random of {unlock, kfactor, supply, special} ----
@@ -525,9 +530,9 @@
       hollywoodCharges--; hollywoodT = 5; updateHollywoodBtn();
     }
 
-    function gameOver() { state = "over"; $("pauseBtn").hidden = true; $("hollywoodBtn").hidden = true; $("dpsMeter").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); pendingScore = score; $("overOv").classList.add("show"); mountLb("overOv", "againBtn"); }
-    function win() { state = "win"; $("pauseBtn").hidden = true; $("hollywoodBtn").hidden = true; $("dpsMeter").hidden = true; $("winScore").textContent = score.toLocaleString(); pendingScore = score; $("winOv").classList.add("show"); mountLb("winOv", "winAgainBtn"); }
-    function pauseGame() { if (state !== "playing") return; state = "paused"; holding = false; $("pauseOv").classList.add("show"); $("hollywoodBtn").hidden = true; $("dpsMeter").hidden = true; }
+    function gameOver() { state = "over"; $("pauseBtn").hidden = true; $("hollywoodBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); pendingScore = score; $("overOv").classList.add("show"); mountLb("overOv", "againBtn"); }
+    function win() { state = "win"; $("pauseBtn").hidden = true; $("hollywoodBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("winScore").textContent = score.toLocaleString(); pendingScore = score; $("winOv").classList.add("show"); mountLb("winOv", "winAgainBtn"); }
+    function pauseGame() { if (state !== "playing") return; state = "paused"; holding = false; $("pauseOv").classList.add("show"); $("hollywoodBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; }
     function resumeGame() { if (state !== "paused") return; state = "playing"; last = 0; $("pauseOv").classList.remove("show"); updateHollywoodBtn(); }
 
     // ---- rendering ----
