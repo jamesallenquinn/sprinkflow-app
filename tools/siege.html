@@ -71,11 +71,18 @@
     .sg-card .e { font-size:30px; } .sg-card .t { font:700 1rem 'Space Grotesk'; margin:6px 0 3px; }
     .sg-card .d { font:500 .76rem/1.3 Inter; color:var(--muted); }
     .sg-card[hidden] { display:none; }
+    .sg-card.special { border-color:var(--accent); background:linear-gradient(180deg, rgba(255,176,58,.10), var(--surface)); position:relative; }
+    .sg-card .sg-badge { position:absolute; top:6px; right:6px; font:700 .54rem Inter; letter-spacing:.08em; color:#1a0d06; background:var(--accent); border-radius:6px; padding:2px 5px; }
     .sg-psi { font:700 .72rem/1 'Space Grotesk'; letter-spacing:.03em; color:var(--water); text-align:center; padding:3px 0 1px; min-height:14px; }
     .sg-hint { text-align:center; color:var(--muted); font:500 .76rem Inter; padding:8px 0 2px; }
     .sg-pausebtn { position:absolute; top:10px; right:10px; z-index:6; width:42px; height:42px; border-radius:12px; border:1px solid var(--line); background:rgba(13,17,22,.72); backdrop-filter:blur(2px); color:var(--ink); font-size:16px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; }
     .sg-pausebtn:active { transform:scale(.94); }
     .sg-pausebtn[hidden] { display:none; }
+    .sg-hollybtn { position:absolute; top:10px; left:10px; z-index:6; height:42px; padding:0 12px; border-radius:12px; border:1px solid var(--accent); background:rgba(255,176,58,.16); backdrop-filter:blur(2px); color:var(--accent); font:700 .8rem 'Space Grotesk'; line-height:1; cursor:pointer; display:flex; align-items:center; gap:4px; }
+    .sg-hollybtn:active { transform:scale(.95); }
+    .sg-hollybtn.armed { animation:hbpulse .9s ease-in-out infinite; }
+    @keyframes hbpulse { 50% { box-shadow:0 0 0 4px rgba(255,176,58,.18); } }
+    .sg-hollybtn[hidden] { display:none; }
   </style>
 </head>
 <body>
@@ -91,7 +98,7 @@
       <div class="pill"><div class="k">Sprinklers</div><div class="v" id="sprkVal">1/9</div></div>
     </div>
     <div class="sg-bars">
-      <div class="sg-bar-wrap"><span class="lbl">Integrity</span><div class="sg-bar" id="integBar"><i id="integFill"></i></div></div>
+      <div class="sg-bar-wrap"><span class="lbl">Integrity</span><div class="sg-bar" id="integBar"><i id="integFill"></i><span class="sg-bar-val" id="shieldVal"></span></div></div>
       <div class="sg-bar-wrap"><span class="lbl">Water Tank</span><div class="sg-bar" id="waterBar"><i id="waterFill"></i><span class="sg-bar-val" id="waterVal">165 / 165 gal</span></div></div>
       <div class="sg-psi" id="psiRead">Static Pressure: 7 PSI</div>
     </div>
@@ -99,6 +106,7 @@
     <div class="sg-stage">
       <canvas id="game" width="360" height="430"></canvas>
       <button id="pauseBtn" class="sg-pausebtn" aria-label="Pause" hidden>❚❚</button>
+      <button id="hollywoodBtn" class="sg-hollybtn" aria-label="Hollywood Scene" hidden>🎬 0</button>
 
       <div class="sg-ov" id="pauseOv">
         <div class="ic">❚❚</div>
@@ -117,11 +125,7 @@
       <div class="sg-ov" id="upgradeOv">
         <h1 id="upTitle">Wave cleared!</h1>
         <p>Choose your reward:</p>
-        <div class="sg-choices">
-          <div class="sg-card" id="cardUnlock"><div class="e">🔓</div><div class="t">Unlock head</div><div class="d">Wake a dusty K5.6 sprinkler</div></div>
-          <div class="sg-card" id="cardWater"><div class="e">📈</div><div class="t">Bigger K-factor</div><div class="d">Step a head up the K ladder: more GPM</div></div>
-          <div class="sg-card" id="cardSupply"><div class="e">⚙️</div><div class="t">Fire pump</div><div class="d" id="supplyDesc">Add a fire pump: +30 psi @ 100 gpm</div></div>
-        </div>
+        <div class="sg-choices" id="sgChoices"></div>
       </div>
 
       <div class="sg-ov" id="overOv">
@@ -164,6 +168,8 @@
     var wave = 1, score = 0, integrity = 100, water = 165, maxWater = 165, holding = false;
     var spawnQueue = 0, spawnT = 0, bossPending = false, bossAlive = false;
     var pumpLevel = 0, tankLevel = 0, nextSupplyPump = false, pendingSupplyPump = false, dryFlash = false, nowT = 0;
+    // special upgrades: refill rate ×, spray reach ×, integrity shield pool, Hollywood charges/timer
+    var tankFillMult = 1, reachMult = 1, shield = 0, hollywoodCharges = 0, hollywoodT = 0;
     var W = 360, H = 430, S = 360, dpr = 1, gap = 70, coreR = 30, colXs = [], rowYs = [];
 
     // --- hydraulics: each head flows Q = K·√P; supply pressure sags as total flow rises ---
@@ -197,10 +203,12 @@
     }
     window.addEventListener("resize", resize);
 
+    // shield (special) soaks core damage before integrity
+    function takeDamage(d) { if (shield > 0) { var a = Math.min(shield, d); shield -= a; d -= a; } integrity -= d; if (integrity < 0) integrity = 0; }
     function activeSlots() { return slots.filter(function (s) { return s.state === "active"; }); }
     function lockedCount() { return slots.filter(function (s) { return s.state === "locked"; }).length; }
     function upgradeableCount() { return slots.filter(function (s) { return s.state === "active" && s.kTier < KLADDER.length - 1; }).length; }
-    function sprayRadius(s) { var f = s.q || 0; return gap * Math.max(0.55, Math.min(1.6, 0.5 + 0.12 * Math.sqrt(f))); }
+    function sprayRadius(s) { var f = s.q || 0; return gap * Math.max(0.55, Math.min(1.6, 0.5 + 0.12 * Math.sqrt(f))) * reachMult; }
     function coverageRadius(s) { var qn = KLADDER[s.kTier] * Math.sqrt(supplyP(0)); return gap * Math.max(0.55, Math.min(1.6, 0.5 + 0.12 * Math.sqrt(qn))); }
     function sprayDps(s) { return (s.q || 0) * DMG_PER_GPM; }
 
@@ -234,6 +242,7 @@
       hud();
       $("upgradeOv").classList.remove("show"); $("startOv").classList.remove("show"); $("pauseOv").classList.remove("show");
       $("pauseBtn").hidden = false;
+      updateHollywoodBtn();
     }
     function hud() {
       $("scoreVal").textContent = score.toLocaleString();
@@ -271,14 +280,16 @@
       if (spawnQueue > 0) { spawnT += dt; if (spawnT >= Math.max(0.35, 1.1 - wave * 0.03)) { spawnT = 0; spawnQueue--; spawnEdge(); } }
       // --- hydraulics: solve operating point, set per-head flow, drain/refill tank ---
       var act = activeSlots();
-      var wantSpray = holding && state === "playing";
+      var hw = hollywoodT > 0;                  // Hollywood Scene: all heads blast, no water drain
+      var wantSpray = (holding || hw) && state === "playing";
       var op = (wantSpray && act.length) ? solveOp(act) : { P: supplyP(0), Q: 0 };
-      var eff = water > 0 ? 1 : 0.10;          // empty tank → 10% trickle
+      var eff = (water > 0 || hw) ? 1 : 0.10;   // empty tank → 10% trickle (full during Hollywood)
       var i2, totalQ = 0;
       for (i2 = 0; i2 < act.length; i2++) { act[i2].q = wantSpray ? headFlow(act[i2], op.P) * eff : 0; totalQ += act[i2].q; }
-      if (wantSpray) { water -= totalQ * TANK_DRAIN * dt; if (water < 0) water = 0; }
-      else { water += TANK_REGEN * dt; if (water > maxWater) water = maxWater; }
-      dryFlash = wantSpray && water <= 0;
+      if (wantSpray && !hw) { water -= totalQ * TANK_DRAIN * dt; if (water < 0) water = 0; }
+      else if (!wantSpray) { water += TANK_REGEN * tankFillMult * dt; if (water > maxWater) water = maxWater; }
+      if (hollywoodT > 0) { hollywoodT -= dt; if (hollywoodT <= 0) updateHollywoodBtn(); }
+      dryFlash = wantSpray && !hw && water <= 0;
       var spraying = wantSpray && totalQ > 0;
       var dispP = Math.round(spraying ? supplyP(totalQ) : supplyP(0)), pumpTxt = pumpLevel > 0 ? " · Pump " + pumpLevel : "";
       $("psiRead").textContent = spraying
@@ -294,12 +305,12 @@
         // reached core
         if (dist < coreR + e.sz * 0.4) {
           if (e.boss) {
-            integrity -= 28;
+            takeDamage(28);
             var ba = Math.random() * Math.PI * 2; e.x = W / 2 + Math.cos(ba) * S * 0.56; e.y = H / 2 + Math.sin(ba) * S * 0.56;
-            if (integrity <= 0) { integrity = 0; gameOver(); return; }
+            if (integrity <= 0) { gameOver(); return; }
           } else {
-            integrity -= e.coreDmg; enemies.splice(i, 1);
-            if (integrity <= 0) { integrity = 0; gameOver(); return; }
+            takeDamage(e.coreDmg); enemies.splice(i, 1);
+            if (integrity <= 0) { gameOver(); return; }
           }
           continue;
         }
@@ -339,34 +350,68 @@
       if (spawnQueue === 0 && enemies.length === 0 && !bossAlive) { waveComplete(); }
       // bars
       var iF = $("integFill"), iB = $("integBar"); iF.style.width = integrity + "%"; iF.style.background = integrity > 50 ? "var(--ok)" : integrity > 25 ? "var(--accent)" : "var(--bad)"; iB.classList.toggle("low", integrity <= 25);
+      $("shieldVal").textContent = shield > 0 ? "🛡 " + Math.round(shield) : "";
       var wF = $("waterFill"), wB = $("waterBar"); wF.style.width = (maxWater ? (water / maxWater * 100) : 0) + "%"; wB.classList.toggle("low", water <= maxWater * 0.18);
       $("waterVal").textContent = Math.round(water) + " / " + Math.round(maxWater) + " gal";
     }
 
+    // ---- upgrade categories: each wave offers 3 random of {unlock, kfactor, supply, special} ----
+    var SPECIALS = [
+      { e: "⏩", t: "Faster refill", d: "Water tank fills 10% faster", apply: function () { tankFillMult *= 1.1; } },
+      { e: "🎯", t: "Longer throw", d: "Heads throw 10% further", apply: function () { reachMult *= 1.1; } },
+      { e: "🛡️", t: "Integrity shield", d: "+20% shield: soaks incoming damage", apply: function () { shield += 20; } },
+      { e: "🎬", t: "Hollywood Scene", d: "Stored: all heads blast 5s, no water used", apply: function () { hollywoodCharges++; updateHollywoodBtn(); } }
+    ];
+    function categoryOffer(cat) {
+      if (cat === "unlock") return { e: "🔓", t: "Unlock head", d: "Wake a dusty K5.6 sprinkler", apply: applyUnlock };
+      if (cat === "kfactor") return { e: "📈", t: "Bigger K-factor", d: "Step a head up the K ladder: more GPM", apply: applyUpgrade };
+      if (cat === "supply") {
+        var pump = nextSupplyPump && pumpLevel < PUMP_MAX;
+        return pump
+          ? { e: "⚙️", t: "Fire pump", d: pumpLevel === 0 ? "Add a fire pump: +30 psi @ 100 gpm" : "Boost pump to tier " + (pumpLevel + 1), apply: function () { applyPump(); nextSupplyPump = !nextSupplyPump; } }
+          : { e: "🛢️", t: "Bigger tank", d: "+90 gal capacity: spray longer", apply: function () { applyCapacity(); nextSupplyPump = !nextSupplyPump; } };
+      }
+      var sp = SPECIALS[Math.floor(Math.random() * SPECIALS.length)];
+      return { e: sp.e, t: sp.t, d: sp.d, apply: sp.apply, special: true };
+    }
     function waveComplete() {
       if (wave >= BOSS_WAVE && !bossAlive) { bossPending = true; startWave(wave + 1); return; }
-      var canUnlock = lockedCount() > 0, canUp = upgradeableCount() > 0;
       state = "upgrade";
-      $("pauseBtn").hidden = true;
-      $("cardUnlock").hidden = !canUnlock; $("cardWater").hidden = !canUp;
-      // supply card alternates: pressure (fire pump) ↔ capacity (bigger tank)
-      pendingSupplyPump = nextSupplyPump && pumpLevel < PUMP_MAX;
-      var sc = $("cardSupply");
-      if (pendingSupplyPump) { sc.querySelector(".e").textContent = "⚙️"; sc.querySelector(".t").textContent = "Fire pump"; $("supplyDesc").textContent = pumpLevel === 0 ? "Add a fire pump: +30 psi @ 100 gpm" : "Boost pump to tier " + (pumpLevel + 1) + ": more pressure"; }
-      else { sc.querySelector(".e").textContent = "🛢️"; sc.querySelector(".t").textContent = "Bigger tank"; $("supplyDesc").textContent = "+90 gal capacity: spray longer between refills"; }
-      sc.hidden = false;
+      $("pauseBtn").hidden = true; $("hollywoodBtn").hidden = true;
+      var cats = [];
+      if (lockedCount() > 0) cats.push("unlock");
+      if (upgradeableCount() > 0) cats.push("kfactor");
+      cats.push("supply"); cats.push("special");
+      for (var i = cats.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), tmp = cats[i]; cats[i] = cats[j]; cats[j] = tmp; }
+      var chosen = cats.slice(0, 3);
+      var box = $("sgChoices"); box.innerHTML = "";
+      chosen.forEach(function (cat) {
+        var o = categoryOffer(cat);
+        var card = document.createElement("div");
+        card.className = "sg-card" + (o.special ? " special" : "");
+        card.innerHTML = '<div class="e">' + o.e + '</div><div class="t">' + o.t + '</div><div class="d">' + o.d + '</div>' + (o.special ? '<div class="sg-badge">SPECIAL</div>' : '');
+        card.onclick = function () { if (state !== "upgrade") return; o.apply(); afterChoice(); };
+        box.appendChild(card);
+      });
       $("upTitle").textContent = "Wave " + wave + " cleared!";
       $("upgradeOv").classList.add("show");
     }
-    function chooseUnlock() { applyUnlock(); afterChoice(); }
-    function chooseWater() { applyUpgrade(); afterChoice(); }
-    function chooseSupply() { if (pendingSupplyPump) applyPump(); else applyCapacity(); nextSupplyPump = !nextSupplyPump; afterChoice(); }
     function afterChoice() { startWave(wave + 1); }
+    function updateHollywoodBtn() {
+      var b = $("hollywoodBtn");
+      var show = hollywoodCharges > 0 && state === "playing";
+      b.hidden = !show; b.textContent = "🎬 " + hollywoodCharges;
+      b.classList.toggle("armed", show && hollywoodT <= 0);
+    }
+    function activateHollywood() {
+      if (state !== "playing" || hollywoodCharges <= 0 || hollywoodT > 0) return;
+      hollywoodCharges--; hollywoodT = 5; updateHollywoodBtn();
+    }
 
-    function gameOver() { state = "over"; $("pauseBtn").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); pendingScore = score; $("overOv").classList.add("show"); mountLb("overOv", "againBtn"); }
-    function win() { state = "win"; $("pauseBtn").hidden = true; $("winScore").textContent = score.toLocaleString(); pendingScore = score; $("winOv").classList.add("show"); mountLb("winOv", "winAgainBtn"); }
-    function pauseGame() { if (state !== "playing") return; state = "paused"; holding = false; $("pauseOv").classList.add("show"); }
-    function resumeGame() { if (state !== "paused") return; state = "playing"; last = 0; $("pauseOv").classList.remove("show"); }
+    function gameOver() { state = "over"; $("pauseBtn").hidden = true; $("hollywoodBtn").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); pendingScore = score; $("overOv").classList.add("show"); mountLb("overOv", "againBtn"); }
+    function win() { state = "win"; $("pauseBtn").hidden = true; $("hollywoodBtn").hidden = true; $("winScore").textContent = score.toLocaleString(); pendingScore = score; $("winOv").classList.add("show"); mountLb("winOv", "winAgainBtn"); }
+    function pauseGame() { if (state !== "playing") return; state = "paused"; holding = false; $("pauseOv").classList.add("show"); $("hollywoodBtn").hidden = true; }
+    function resumeGame() { if (state !== "paused") return; state = "playing"; last = 0; $("pauseOv").classList.remove("show"); updateHollywoodBtn(); }
 
     // ---- rendering ----
     function brass(ctx, x, y, r, grad) { var g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r); g.addColorStop(0, grad[0]); g.addColorStop(1, grad[1]); return g; }
@@ -489,15 +534,14 @@
     function reset() {
       for (var i = 0; i < slots.length; i++) { slots[i].state = (slots[i].c === 1 && slots[i].r === 1) ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; }
       enemies = []; particles = []; score = 0; integrity = 100; maxWater = 165; water = 165; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
+      tankFillMult = 1; reachMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0;
     }
     function newGame() { resize(); reset(); hud(); startWave(1); ["overOv","winOv","startOv","upgradeOv","pauseOv"].forEach(function (id) { $(id).classList.remove("show"); }); }
 
     $("playBtn").onclick = newGame;
     $("againBtn").onclick = newGame;
     $("winAgainBtn").onclick = newGame;
-    $("cardUnlock").onclick = function () { if (state === "upgrade") chooseUnlock(); };
-    $("cardWater").onclick = function () { if (state === "upgrade") chooseWater(); };
-    $("cardSupply").onclick = function () { if (state === "upgrade") chooseSupply(); };
+    $("hollywoodBtn").onclick = activateHollywood;
     $("pauseBtn").onclick = function () { if (state === "playing") pauseGame(); else if (state === "paused") resumeGame(); };
     $("resumeBtn").onclick = resumeGame;
     $("pauseRestartBtn").onclick = newGame;
