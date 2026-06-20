@@ -181,7 +181,7 @@
       $("acctSince").textContent = "…";
       $("acctMsg").textContent = ""; $("acctMsg").className = "acct-msg"; $("acctPw").value = "";
       $("acctModal").hidden = false;
-      fetch(SF.SB_URL + "/auth/v1/user", { headers: { apikey: SF.SB_ANON, Authorization: "Bearer " + s.token } })
+      SF.freshToken().then(function (tok) { return fetch(SF.SB_URL + "/auth/v1/user", { headers: { apikey: SF.SB_ANON, Authorization: "Bearer " + (tok || s.token) } }); })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (u) {
           $("acctSince").textContent = (u && u.created_at)
@@ -208,7 +208,7 @@
       if (pw.length < 6) { msg.className = "acct-msg err"; msg.textContent = "Password must be at least 6 characters."; return; }
       var s = SF && SF.session(); if (!s) return;
       btn.disabled = true; msg.className = "acct-msg"; msg.textContent = "Updating…";
-      fetch(SF.SB_URL + "/auth/v1/user", { method: "PUT", headers: { apikey: SF.SB_ANON, Authorization: "Bearer " + s.token, "Content-Type": "application/json" }, body: JSON.stringify({ password: pw }) })
+      SF.freshToken().then(function (tok) { return fetch(SF.SB_URL + "/auth/v1/user", { method: "PUT", headers: { apikey: SF.SB_ANON, Authorization: "Bearer " + (tok || s.token), "Content-Type": "application/json" }, body: JSON.stringify({ password: pw }) }); })
         .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
         .then(function (res) {
           if (res.ok) { msg.className = "acct-msg ok"; msg.textContent = "✓ Password updated."; $("acctPw").value = ""; }

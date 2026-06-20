@@ -120,7 +120,7 @@
           throw new Error(msg);
         }
         setHandle(handle || email.split("@")[0]);
-        setSession({ token: res.d.access_token, userId: res.d.user && res.d.user.id, email: (res.d.user && res.d.user.email) || email });
+        setSession(sessionFrom(res.d, email));
         close();
         if (onSuccessCb) { var cb = onSuccessCb; onSuccessCb = null; cb(); }
       })
@@ -141,7 +141,7 @@
         if (handle) setHandle(handle);
         var d = res.d;
         if (d.access_token) {                                  // email confirmation disabled -> signed in now
-          setSession({ token: d.access_token, userId: (d.user && d.user.id), email: (d.user && d.user.email) || email });
+          setSession(sessionFrom(d, email));
           close();
           if (onSuccessCb) { var cb = onSuccessCb; onSuccessCb = null; cb(); }
           return;
@@ -155,13 +155,64 @@
       .then(function () { btn.disabled = false; btn.textContent = (mode === "signup") ? "Create account" : "Sign in"; });
   }
 
+  // ---- session persistence: keep the access token fresh via the refresh token ----
+  function sessionFrom(d, email) {
+    return {
+      token: d.access_token,
+      refresh: d.refresh_token || null,
+      expiresAt: Math.floor(Date.now() / 1000) + (d.expires_in || 3600),
+      userId: (d.user && d.user.id) || null,
+      email: (d.user && d.user.email) || email || null
+    };
+  }
+  function tokenFresh() { var s = getSession(); return !!(s && s.token && (!s.expiresAt || s.expiresAt - 60 > Date.now() / 1000)); }
+  var refreshing = null;
+  function refreshSession() {
+    var s = getSession();
+    if (!s || !s.refresh) return Promise.resolve(false);
+    if (refreshing) return refreshing;
+    refreshing = fetch(SB_URL + "/auth/v1/token?grant_type=refresh_token", { method: "POST", headers: { apikey: SB_ANON, "Content-Type": "application/json" }, body: JSON.stringify({ refresh_token: s.refresh }) })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (res.ok && res.d.access_token) { setSession(sessionFrom(res.d, s.email)); return true; }
+        clearSession(); return false;                        // server rejected the refresh token -> truly signed out
+      })
+      .catch(function () { return false; })                  // network error: keep the session, retry later (stay signed in offline)
+      .then(function (v) { refreshing = null; return v; });
+    return refreshing;
+  }
+  function ensureFresh() {
+    if (tokenFresh()) return Promise.resolve(true);
+    var s = getSession();
+    if (!s || !s.refresh) return Promise.resolve(isSignedIn());
+    return refreshSession();
+  }
+  function freshToken() { return ensureFresh().then(function () { var s = getSession(); return s ? s.token : null; }); }
+
   // ---- Supabase REST helpers ----
+  function doRpc(fn, args, token) {
+    return fetch(SB_URL + "/rest/v1/rpc/" + fn, { method: "POST", headers: { apikey: SB_ANON, Authorization: "Bearer " + token, "Content-Type": "application/json" }, body: JSON.stringify(args || {}) })
+      .then(function (r) { return { ok: r.ok, status: r.status }; })
+      .catch(function () { return { ok: false, status: 0, reason: "offline" }; });
+  }
   function rpc(fn, args) {
     var s = getSession();
     if (!s || !s.token) return Promise.resolve({ ok: false, status: 401, reason: "not-signed-in" });
-    return fetch(SB_URL + "/rest/v1/rpc/" + fn, { method: "POST", headers: { apikey: SB_ANON, Authorization: "Bearer " + s.token, "Content-Type": "application/json" }, body: JSON.stringify(args || {}) })
-      .then(function (r) { if (r.status === 401 || r.status === 403) { clearSession(); return { ok: false, status: r.status, reason: "expired" }; } return { ok: r.ok, status: r.status }; })
-      .catch(function () { return { ok: false, status: 0, reason: "offline" }; });
+    return ensureFresh().then(function () {
+      var s2 = getSession();
+      if (!s2 || !s2.token) return { ok: false, status: 401, reason: "not-signed-in" };
+      return doRpc(fn, args, s2.token).then(function (r) {
+        if (r.status !== 401 && r.status !== 403) return r;
+        return refreshSession().then(function (ok) {                 // expired mid-flight -> refresh once and retry
+          if (!ok) return { ok: false, status: r.status, reason: "expired" };
+          var s3 = getSession();
+          return doRpc(fn, args, s3.token).then(function (r2) {
+            if (r2.status === 401 || r2.status === 403) { clearSession(); return { ok: false, status: r2.status, reason: "expired" }; }
+            return r2;
+          });
+        });
+      });
+    });
   }
   function read(path) {
     return fetch(SB_URL + "/rest/v1/" + path, { headers: { apikey: SB_ANON, Authorization: "Bearer " + SB_ANON } })
@@ -172,6 +223,11 @@
     SB_URL: SB_URL, SB_ANON: SB_ANON,
     session: getSession, handle: getHandle, setHandle: setHandle, displayName: displayName,
     isSignedIn: isSignedIn, onChange: onChange, openSignIn: openSignIn, signOut: clearSession,
-    rpc: rpc, read: read
+    rpc: rpc, read: read, ensureFresh: ensureFresh, freshToken: freshToken, refresh: refreshSession
   };
+
+  // keep the device signed in: refresh on load, on a timer, and when the app regains focus
+  if (isSignedIn()) ensureFresh();
+  setInterval(function () { if (isSignedIn() && !tokenFresh()) refreshSession(); }, 4 * 60 * 1000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && isSignedIn() && !tokenFresh()) refreshSession(); });
 })();
