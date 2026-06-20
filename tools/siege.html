@@ -944,8 +944,19 @@
     var IMG = { plug: loadImg("../assets/pipe-plug.png"), bg1: loadImg("../assets/bg-act1.png"), bg2: loadImg("../assets/bg-act2.png"), bg3: loadImg("../assets/bg-act3.png"),
       laser: loadImg("../assets/head-laser.png"), laserOn: loadImg("../assets/head-laser-on.png"), foam: loadImg("../assets/head-foam.png"), foamOpen: loadImg("../assets/head-foam-open.png"),
       lawn: loadImg("../assets/head-lawn.png"), corridor: loadImg("../assets/head-corridor.png"), moon: loadImg("../assets/head-moon.png"), moonOn: loadImg("../assets/head-moon-on.png"),
-      std: [0, 1, 2, 3, 4, 5].map(function (i) { return loadImg("../assets/head-std-" + i + ".png"); }) };   // standard head art by K-tier (brass→chrome→white→black→ENT→royal gold)
+      std: [0, 1, 2, 3, 4, 5].map(function (i) { return loadImg("../assets/head-std-" + i + ".png"); }),   // standard head art by K-tier (brass→chrome→white→black→ENT→royal gold)
+      eNormal: loadImg("../assets/enemy-normal.png"), eSplitter: loadImg("../assets/enemy-splitter.png"), eElo: loadImg("../assets/enemy-elo.png"), eGrease: loadImg("../assets/enemy-grease.png"), eEmber: loadImg("../assets/enemy-ember.png"), eBackdraft: loadImg("../assets/enemy-backdraft.png"),
+      bossInferno: loadImg("../assets/boss-inferno.png"), bossA: loadImg("../assets/boss-conflag-a.png"), bossB: loadImg("../assets/boss-conflag-b.png"), bossC: loadImg("../assets/boss-conflag-c.png") };
     function imgReady(im) { return im && im.complete && im.naturalWidth > 0; }
+    function enemySprite(e) {
+      if (e.boss) return e.conflag ? (e.hp / e.max > 0.66 ? IMG.bossA : e.hp / e.max > 0.33 ? IMG.bossB : IMG.bossC) : IMG.bossInferno;
+      if (e.type === "grease") return IMG.eGrease;
+      if (e.type === "splitter") return IMG.eSplitter;
+      if (e.type === "elo") return IMG.eElo;
+      if (e.type === "ember") return IMG.eEmber;
+      if (e.type === "backdraft") return IMG.eBackdraft;
+      return IMG.eNormal;
+    }
     var HEAD_IMG = 2.9;   // image draw box = HEAD_IMG × head radius (tune for fit)
     function drawHeadImg(im, x, y, r, rot) { var d = r * HEAD_IMG; ctx.save(); ctx.translate(x, y); if (rot) ctx.rotate(rot); ctx.drawImage(im, -d / 2, -d / 2, d, d); ctx.restore(); }
     function brass(ctx, x, y, r, grad) { var g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r); g.addColorStop(0, grad[0]); g.addColorStop(1, grad[1]); return g; }
@@ -1278,9 +1289,10 @@
         // ELO shield ring (small heads won't work) / Class-B "use Foam" ring
         if (en.type === "elo") { ctx.save(); ctx.setLineDash([3, 3]); ctx.lineWidth = 1.6; ctx.strokeStyle = "rgba(150,210,255,0.85)"; ctx.beginPath(); ctx.arc(en.x, en.y, sz * 0.7, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
         else if (en.cls === "B") { ctx.save(); ctx.setLineDash([2, 3]); ctx.lineWidth = 1.6; ctx.strokeStyle = "rgba(255,220,90,0.9)"; ctx.beginPath(); ctx.arc(en.x, en.y, sz * 0.72, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
-        ctx.font = sz + "px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
         if (en.hit > 0) { ctx.globalAlpha = 0.6; en.hit -= 0.016; }
-        ctx.fillText(en.cls === "B" ? "🛢️" : "🔥", en.x, en.y);
+        var spr = enemySprite(en);
+        if (imgReady(spr)) { var bs = sz * (en.boss ? 1.7 : 1.95); ctx.drawImage(spr, en.x - bs / 2, en.y - bs / 2, bs, bs); }
+        else { ctx.font = sz + "px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(en.cls === "B" ? "🛢️" : "🔥", en.x, en.y); }
         ctx.globalAlpha = 1;
         if (en.boss) { var bw = en.sz * 2.4, bx = en.x - bw / 2, by = en.y - en.sz * 1.5; ctx.fillStyle = "#3a2027"; ctx.fillRect(bx, by, bw, 5); ctx.fillStyle = "#ff5a4f"; ctx.fillRect(bx, by, bw * (en.hp / en.max), 5); }
         else if (en.hp < en.max) { var w2 = en.sz * 1.6, x2 = en.x - w2 / 2, y2 = en.y - en.sz * 1.1; ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.fillRect(x2, y2, w2, 3); ctx.fillStyle = en.type === "elo" ? "#7fb4ff" : en.type === "splitter" ? "#7ef29a" : "#ffb03a"; ctx.fillRect(x2, y2, w2 * (en.hp / en.max), 3); }
