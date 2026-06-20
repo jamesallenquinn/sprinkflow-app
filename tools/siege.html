@@ -689,14 +689,25 @@
       ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * r * 0.95, y + Math.sin(a) * r * 0.95); ctx.stroke();
       ctx.fillStyle = "#cdd2d6"; ctx.beginPath(); ctx.arc(x + Math.cos(a) * r * 0.95, y + Math.sin(a) * r * 0.95, r * 0.13, 0, Math.PI * 2); ctx.fill();
     }
+    // corridor head — elongated notched white deflector + center orifice, stretched along the firing axis (matches owner art)
     function drawCorridorHead(x, y, r, s) {
-      var fin = finish(s.kTier), ax = corridorAxis(s), L = r * 1.7, Wd = r * 0.5, i;
-      ctx.fillStyle = brass(ctx, x, y, r, fin.body); ctx.strokeStyle = fin.edge; ctx.lineWidth = Math.max(1, r * 0.05);
-      ctx.beginPath(); if (ax === "x") ctx.rect(x - L, y - Wd / 2, 2 * L, Wd); else ctx.rect(x - Wd / 2, y - L, Wd, 2 * L); ctx.fill(); ctx.stroke();
-      ctx.strokeStyle = fin.slot; ctx.lineWidth = Math.max(1, r * 0.08);
-      for (i = -3; i <= 3; i++) { ctx.beginPath(); if (ax === "x") { ctx.moveTo(x + i * L * 0.28, y - Wd / 2); ctx.lineTo(x + i * L * 0.28, y + Wd / 2); } else { ctx.moveTo(x - Wd / 2, y + i * L * 0.28); ctx.lineTo(x + Wd / 2, y + i * L * 0.28); } ctx.stroke(); }
-      ctx.fillStyle = brass(ctx, x, y, r * 0.5, fin.hub); ctx.beginPath(); ctx.arc(x, y, r * 0.42, 0, Math.PI * 2); ctx.fill(); ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = fin.edge; ctx.stroke();
-      ctx.fillStyle = "#0a0e12"; ctx.beginPath(); ctx.arc(x, y, r * 0.16, 0, Math.PI * 2); ctx.fill();
+      var ax = corridorAxis(s), L = r * 1.78, H = r * 0.92, sh = L - H, un = sh * 0.6, nw = L * 0.075, nd = H * 0.5;
+      ctx.save(); ctx.translate(x, y); if (ax === "y") ctx.rotate(Math.PI / 2);
+      function edge(dir) { // dir=1: top edge L→R at y=-H ; dir=-1: bottom edge R→L at y=+H (notch cuts inward)
+        var yy = dir === 1 ? -H : H, nyy = dir === 1 ? -H + nd : H - nd, pts = dir === 1 ? [-un, un] : [un, -un], i, nx;
+        for (i = 0; i < pts.length; i++) { nx = pts[i]; ctx.lineTo(nx - dir * nw, yy); ctx.lineTo(nx - dir * nw, nyy); ctx.lineTo(nx + dir * nw, nyy); ctx.lineTo(nx + dir * nw, yy); }
+        ctx.lineTo(dir === 1 ? sh : -sh, yy);
+      }
+      ctx.beginPath(); ctx.moveTo(-sh, -H); edge(1); ctx.arc(sh, 0, H, -Math.PI / 2, Math.PI / 2); edge(-1); ctx.arc(-sh, 0, H, Math.PI / 2, Math.PI * 1.5); ctx.closePath();
+      ctx.fillStyle = "#f4f6f8"; ctx.fill();
+      ctx.lineWidth = Math.max(2, r * 0.13); ctx.strokeStyle = "rgba(176,182,190,0.95)"; ctx.lineJoin = "round"; ctx.stroke();  // grey bevel
+      ctx.lineWidth = Math.max(1.5, r * 0.07); ctx.strokeStyle = "#1a1d22"; ctx.stroke();                                        // black outline
+      // center orifice (donut with bevel)
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.27, 0, Math.PI * 2); ctx.fillStyle = "#f4f6f8"; ctx.fill();
+      ctx.lineWidth = Math.max(2, r * 0.1); ctx.strokeStyle = "rgba(176,182,190,0.95)"; ctx.stroke();
+      ctx.lineWidth = Math.max(1.5, r * 0.06); ctx.strokeStyle = "#1a1d22"; ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.17, 0, Math.PI * 2); ctx.fillStyle = "#e7eaee"; ctx.fill();
+      ctx.restore();
     }
     function drawSparkle(x, y, s) { ctx.fillStyle = "#eaf2ff"; ctx.beginPath(); ctx.moveTo(x, y - s); ctx.quadraticCurveTo(x + s * 0.16, y - s * 0.16, x + s, y); ctx.quadraticCurveTo(x + s * 0.16, y + s * 0.16, x, y + s); ctx.quadraticCurveTo(x - s * 0.16, y + s * 0.16, x - s, y); ctx.quadraticCurveTo(x - s * 0.16, y - s * 0.16, x, y - s); ctx.closePath(); ctx.fill(); }
     // moon head — silver/lavender lunar ring, blue-glowing slots, starry crescent center (matches owner art)
