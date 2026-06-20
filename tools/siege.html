@@ -595,7 +595,7 @@
       if (dryFlash) { var dp = 0.35 + 0.35 * Math.sin(nowT * 0.02); ctx.globalAlpha = dp; ctx.strokeStyle = "#ff5a4f"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, r + 6, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1; }
       if (s.kTier > 0) { ctx.strokeStyle = "rgba(108,214,242,0.7)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2); ctx.stroke(); }
       // body per type
-      if (ty === "foam") drawFoamHead(x, y, r);
+      if (ty === "foam") drawFoamHead(x, y, r, s);
       else if (ty === "lawn") drawLawnHead(x, y, r, s);
       else if (ty === "moon") drawMoonHead(x, y, r);
       else if (ty === "corridor") drawCorridorHead(x, y, r, s);
@@ -662,12 +662,24 @@
       ctx.lineWidth = Math.max(1.5, r * 0.075); ctx.strokeStyle = "rgba(255,72,58," + glow + ")"; ctx.beginPath(); ctx.arc(x, y, r * 0.22, 0, Math.PI * 2); ctx.stroke();
       ctx.fillStyle = on ? "#fff" : "rgba(255,245,243," + (0.6 + 0.4 * glow) + ")"; ctx.beginPath(); ctx.arc(x, y, r * 0.14, 0, Math.PI * 2); ctx.fill();
     }
-    function drawFoamHead(x, y, r) {
-      ctx.fillStyle = brass(ctx, x, y, r, ["#ff7a5f", "#c22a14"]); ctx.beginPath(); ctx.arc(x, y, r * 0.9, 0, Math.PI * 2); ctx.fill();
-      ctx.lineWidth = Math.max(1, r * 0.06); ctx.strokeStyle = "#7a1408"; ctx.stroke();
-      ctx.fillStyle = "#ffd9cb"; ctx.beginPath(); ctx.arc(x, y, r * 0.3, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,0.92)"; var bub = [[-0.42, -0.5, 0.28], [0.05, -0.64, 0.34], [0.46, -0.44, 0.26], [-0.08, -0.34, 0.22]];
-      for (var i = 0; i < bub.length; i++) { ctx.beginPath(); ctx.arc(x + bub[i][0] * r, y + bub[i][1] * r, bub[i][2] * r, 0, Math.PI * 2); ctx.fill(); }
+    // foam head — glossy red bolted body with a billowing white foam cluster (matches owner art)
+    function drawFoamHead(x, y, r, s) {
+      var bi, i;
+      // glossy red body
+      ctx.fillStyle = brass(ctx, x, y, r, ["#ff5a4f", "#c8160c"]); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = Math.max(1.5, r * 0.09); ctx.strokeStyle = "#1a0604"; ctx.stroke();
+      ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = "rgba(255,214,209,0.6)"; ctx.beginPath(); ctx.arc(x, y, r * 0.88, Math.PI * 1.05, Math.PI * 1.75); ctx.stroke();
+      // bolts around the rim
+      for (bi = 0; bi < 8; bi++) { var ba = bi * Math.PI / 4 - Math.PI / 2, bx = x + Math.cos(ba) * r * 0.84, by = y + Math.sin(ba) * r * 0.84; ctx.fillStyle = brass(ctx, bx, by, r * 0.12, ["#ff8077", "#9c0e07"]); ctx.beginPath(); ctx.arc(bx, by, r * 0.11, 0, Math.PI * 2); ctx.fill(); ctx.lineWidth = Math.max(1, r * 0.02); ctx.strokeStyle = "#4e0803"; ctx.stroke(); ctx.fillStyle = "rgba(255,228,225,0.85)"; ctx.beginPath(); ctx.arc(bx - r * 0.03, by - r * 0.03, r * 0.035, 0, Math.PI * 2); ctx.fill(); }
+      // recessed inner disc
+      ctx.fillStyle = brass(ctx, x, y, r * 0.66, ["#e0241a", "#960e07"]); ctx.beginPath(); ctx.arc(x, y, r * 0.62, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = Math.max(1, r * 0.04); ctx.strokeStyle = "rgba(78,8,3,0.7)"; ctx.stroke();
+      // billowing foam cluster (deterministic so it doesn't flicker)
+      var bub = [[-0.18, -0.30, 0.30], [0.12, -0.34, 0.26], [0.34, -0.16, 0.22], [-0.34, -0.08, 0.20], [-0.04, -0.06, 0.30], [0.22, 0.04, 0.24], [-0.22, 0.16, 0.18], [0.04, 0.20, 0.22], [0.30, 0.24, 0.16], [-0.40, -0.28, 0.12]];
+      for (i = 0; i < bub.length; i++) { var px = x + bub[i][0] * r, py = y + bub[i][1] * r, br = bub[i][2] * r; ctx.fillStyle = "#eef6ff"; ctx.beginPath(); ctx.arc(px, py, br, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,0.95)"; ctx.beginPath(); ctx.arc(px - br * 0.25, py - br * 0.28, br * 0.5, 0, Math.PI * 2); ctx.fill(); }
+      // stray bubbles
+      ctx.fillStyle = "#fff"; var stray = [[-0.30, 0.40, 0.07], [-0.36, 0.50, 0.05], [0.40, 0.38, 0.06]];
+      for (i = 0; i < stray.length; i++) { ctx.beginPath(); ctx.arc(x + stray[i][0] * r, y + stray[i][1] * r, stray[i][2] * r, 0, Math.PI * 2); ctx.fill(); }
     }
     function drawLawnHead(x, y, r, s) {
       ctx.fillStyle = brass(ctx, x, y, r, ["#3a4046", "#15181c"]); ctx.beginPath(); ctx.arc(x, y, r * 0.85, 0, Math.PI * 2); ctx.fill();
