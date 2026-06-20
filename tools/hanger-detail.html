@@ -21,7 +21,7 @@
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0; height:100%; overflow:hidden; background:var(--bg);
     color:var(--ink); font-family:"Inter", system-ui, -apple-system, sans-serif;
-    -webkit-user-select:none; user-select:none; touch-action:none;}
+    -webkit-user-select:none; user-select:none; touch-action:none; -webkit-touch-callout:none;}
   #app{display:flex; flex-direction:column; height:100%;}
 
   /* Top bar */
@@ -41,7 +41,8 @@
     background:
       radial-gradient(circle at 1px 1px, rgba(255,255,255,.045) 1px, transparent 0) 0 0/22px 22px,
       var(--bg);}
-  canvas{position:absolute; inset:0; width:100%; height:100%; display:block;}
+  canvas{position:absolute; inset:0; width:100%; height:100%; display:block;
+    touch-action:none; -webkit-user-select:none; -webkit-touch-callout:none;}
 
   /* Hint pill */
   #hint{position:absolute; top:10px; left:50%; transform:translateX(-50%);
@@ -640,6 +641,27 @@ function drawKeynotes(g){
 // guard against undefined geom for anchors
 function keynoteSafe(at){ try{ return keynoteAnchor(at);}catch(e){ return {x:AXIS,y:400}; } }
 
+// Re-anchor: point each keynote's arrow at its element and park the bubble just
+// outside that element (fanned away from the drawing center) — keeps notes tied
+// to what they label instead of dumping them in the gutter.
+function reanchorKeynotes(){
+  const keys=activeKeynotes(); const cx=W/2, cy=H*0.45;
+  keys.forEach(k=>{
+    const a=keynoteSafe(k.at);
+    state.keynoteArrow[k.at]={x:a.x, y:a.y};
+    let vx=a.x-cx, vy=a.y-cy, vl=Math.hypot(vx,vy)||1;
+    state.keynotePos[k.at]={ x:clamp(a.x+vx/vl*58, 40, W-40), y:clamp(a.y+vy/vl*58, 40, TITLE_TOP-12) };
+  });
+  draw(); flash("Keynotes re-anchored to their elements.");
+}
+// Auto-align: stack the bubbles in a single vertical column (aligned on Y),
+// evenly spaced; arrows keep pointing at their elements.
+function alignKeynotes(){
+  const keys=activeKeynotes(); const colX=W-150, y0=240, dy=46;
+  keys.forEach((k,i)=>{ state.keynotePos[k.at]={x:colX, y:y0+i*dy}; });
+  draw(); flash("Keynotes aligned in a column.");
+}
+
 function arrow(g, x1,y1,x2,y2){
   const ang=Math.atan2(y2-y1,x2-x1), s=7;
   ink(g,1.0); g.fillStyle="#111418";
@@ -727,6 +749,31 @@ function draw(){
   ctx.restore();
   render(ctx, {paper:false});
   ctx.restore();
+  if(loupe) drawLoupe(loupe.x, loupe.y);
+}
+
+// Magnifier loupe (double-tap to summon): a circular 2.3x zoom of the area under
+// the finger, drawn offset so the finger doesn't cover it — makes tiny targets
+// like keynote arrow tips easy to grab. Auto-dismisses after a drag.
+let loupe = null;          // {x,y} in canvas CSS px (the focus point = finger)
+function drawLoupe(fx, fy){
+  const dpr=view.dpr, r=Math.min(62, cv.width/dpr*0.22), zoom=2.3;
+  const cssW=cv.width/dpr, cssH=cv.height/dpr;
+  let lx=fx, ly=fy-r-52;                 // float above the finger
+  if(ly-r<6) ly=fy+r+52;                 // flip below if no room
+  lx=clamp(lx, r+6, cssW-r-6); ly=clamp(ly, r+6, cssH-r-6);
+  ctx.save();
+  ctx.setTransform(dpr,0,0,dpr,0,0);     // work in CSS px
+  ctx.beginPath(); ctx.arc(lx,ly,r,0,7);
+  ctx.fillStyle="#ffffff"; ctx.fill();
+  ctx.save(); ctx.clip();
+  const srcR=r/zoom;                      // source half-size in CSS px
+  ctx.drawImage(cv, (fx-srcR)*dpr, (fy-srcR)*dpr, 2*srcR*dpr, 2*srcR*dpr, lx-r, ly-r, 2*r, 2*r);
+  ctx.restore();
+  ctx.lineWidth=2.5; ctx.strokeStyle="#ffb03a"; ctx.beginPath(); ctx.arc(lx,ly,r,0,7); ctx.stroke();
+  ctx.strokeStyle="rgba(255,176,58,.75)"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(lx-9,ly); ctx.lineTo(lx+9,ly); ctx.moveTo(lx,ly-9); ctx.lineTo(lx,ly+9); ctx.stroke();
+  ctx.restore();
 }
 
 /* ============================================================
@@ -757,6 +804,13 @@ function onDown(e){
   if(pointers.size===2){ startPinch(); return; }   // two fingers => pinch zoom/pan
   if(pointers.size>2) return;
 
+  // double-tap toggles the magnifier loupe; a normal press while it's on follows + grabs
+  const cp=canvasPt(e), now=e.timeStamp||performance.now();
+  const dbl = lastTap && (now-lastTap.t)<320 && Math.hypot(cp.x-lastTap.x, cp.y-lastTap.y)<30;
+  lastTap = dbl ? null : {t:now, x:cp.x, y:cp.y};
+  if(dbl){ loupe = loupe ? null : {x:cp.x, y:cp.y}; draw(); return; }
+  if(loupe){ loupe.x=cp.x; loupe.y=cp.y; }
+
   const d = toDetail(e.clientX, e.clientY);
   // place pipe
   if(activeTool==='pipe'){
@@ -786,6 +840,7 @@ function onDown(e){
 }
 function onMove(e){
   if(pointers.has(e.pointerId)) pointers.set(e.pointerId, canvasPt(e));
+  if(loupe && pointers.size===1){ const cp=canvasPt(e); loupe.x=cp.x; loupe.y=cp.y; if(!drag) draw(); }
   // pinch => scale the detail drawing (two pointers)
   if(pointers.size>=2 && pinch){
     const p=[...pointers.values()];
@@ -808,10 +863,14 @@ function onMove(e){
   state.pipe.y=clamp(d.y-drag.dy, yMin, yMax);
   draw();
 }
+let lastTap=null;
 function onUp(e){
   pointers.delete(e.pointerId);
   if(pointers.size<2) pinch=null;
-  if(pointers.size===0) drag=null;
+  if(pointers.size===0){
+    const wasDrag=!!drag; drag=null;
+    if(loupe && wasDrag){ loupe=null; draw(); }   // loupe auto-dismisses after a grab/drag
+  }
 }
 
 function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
@@ -975,7 +1034,9 @@ document.getElementById('btnEdit').onclick=()=>{
     <div class="field"><label>Title</label><input id="tIn" value="${escapeAttr(state.title)}"></div>
     <div class="field"><label>Detail number</label><input id="nIn" value="${escapeAttr(state.detailNo)}"></div>
     <div class="field"><label>Keynote style</label><div class="chips" id="shapeChips">${chips}</div></div>
-    <button class="opt" style="justify-content:center;margin:0 0 8px;" data-act="resetkeys">↺ Reset keynote positions</button>
+    <button class="opt" style="justify-content:center;margin:0 0 8px;" data-act="reanchor">↺ Re-anchor keynotes to elements</button>
+    <button class="opt" style="justify-content:center;margin:0 0 8px;" data-act="align">▤ Auto-align keynotes (column)</button>
+    <div style="color:var(--muted);font-size:12px;margin:0 0 10px;">Tip: double-tap the drawing for a magnifier to grab arrow tips, then drag.</div>
     <div class="row"><button class="ghost" data-act="close">Cancel</button>
     <button class="opt" style="justify-content:center;margin:0;" data-act="save">Save</button></div>`);
   sheet.querySelectorAll('#shapeChips .chip').forEach(c=> c.onclick=()=>{
@@ -983,10 +1044,8 @@ document.getElementById('btnEdit').onclick=()=>{
     sheet.querySelectorAll('#shapeChips .chip').forEach(x=>x.classList.toggle('sel', x===c));
     draw();
   });
-  sheet.querySelector('[data-act="resetkeys"]').onclick=()=>{
-    state.keynotePos={}; state.keynoteArrow={};
-    draw(); flash("Keynotes reset to default positions.");
-  };
+  sheet.querySelector('[data-act="reanchor"]').onclick=()=>{ hideSheet(); reanchorKeynotes(); };
+  sheet.querySelector('[data-act="align"]').onclick=()=>{ hideSheet(); alignKeynotes(); };
   sheet.querySelector('[data-act="save"]').onclick=()=>{
     state.title=(document.getElementById('tIn').value||state.title).toUpperCase();
     state.detailNo=document.getElementById('nIn').value||state.detailNo;
