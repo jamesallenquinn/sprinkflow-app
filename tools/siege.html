@@ -484,7 +484,7 @@
       dryFlash = anyFire && !hw && water <= 0;
       var spraying = anyFire;
       if (sprayGain) { var sg2 = (soundOn && spraying) ? Math.min(0.2, 0.05 + totalQ * 0.0006) : 0; sprayGain.gain.value += (sg2 - sprayGain.gain.value) * Math.min(1, dt * 8); }   // spray hiss tracks GPM
-      for (i2 = 0; i2 < act.length; i2++) { var hh = act[i2], tt = typeOf(hh); if (tt === "lawn") hh.aim = (hh.aim || 0) + dt * 1.1; else if (tt === "foam") hh.foamOpen = (hh.foamOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.foamOpen || 0)) * Math.min(1, dt * 8); else if (tt === "moon") hh.moonOpen = (hh.moonOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.moonOpen || 0)) * Math.min(1, dt * 8); }  // lawn sweeps; foam & moon open/close
+      for (i2 = 0; i2 < act.length; i2++) { var hh = act[i2], tt = typeOf(hh); if (tt === "lawn") hh.aim = (hh.aim || 0) + dt * 1.1 * (hh.fr ? 1.5 : 1); else if (tt === "foam") hh.foamOpen = (hh.foamOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.foamOpen || 0)) * Math.min(1, dt * 8); else if (tt === "moon") hh.moonOpen = (hh.moonOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.moonOpen || 0)) * Math.min(1, dt * 8); }  // lawn sweeps; foam & moon open/close
       var dispP = Math.round(spraying ? Math.max(FLOW_FLOOR, supplyP(totalQ)) : supplyP(0)), pumpTxt = pumpLevel > 0 ? " · Pump " + pumpLevel : "";
       $("psiRead").textContent = spraying
         ? "Residual: " + dispP + " PSI @ " + Math.round(totalQ) + " GPM" + (dryFlash ? " · TANK DRY" : "") + pumpTxt
@@ -494,14 +494,14 @@
       // --- weapons pass: each firing head applies its type's damage / effect ---
       for (var ei = 0; ei < enemies.length; ei++) enemies[ei].dmgFrame = 0;
       for (var fh = 0; fh < firing.length; fh++) {
-        var s = firing[fh], ty = typeOf(s), per = s.q * DMG_PER_GPM * TYPE_INFO[ty].dmg * moonBuff(s) * (easyMode ? 1.5 : 1) * (overloadT > 0 ? 1.5 : 1) * (s.fr ? 1.5 : 1), em, j;
-        if (ty === "moon") { for (j = 0; j < enemies.length; j++) if (inRange(s, enemies[j])) { integrity = Math.min(100, integrity + s.q * 0.05 * dt); break; } continue; }
+        var s = firing[fh], ty = typeOf(s), per = s.q * DMG_PER_GPM * TYPE_INFO[ty].dmg * moonBuff(s) * (easyMode ? 1.5 : 1) * (overloadT > 0 ? 1.5 : 1) * ((s.fr && (ty === "standard" || ty === "laser")) ? 1.5 : 1), em, j;   // Fast Response = +50% dmg for standard/laser; other types get type-specific FR effects
+        if (ty === "moon") { for (j = 0; j < enemies.length; j++) if (inRange(s, enemies[j])) { integrity = Math.min(100, integrity + s.q * 0.05 * dt * (s.fr ? 1.5 : 1)); break; } continue; }   // FR: heals 50% more
         if (ty === "laser") {                                  // single-target: nearest in range
           var tgt = null, bd = 1e9; for (j = 0; j < enemies.length; j++) { em = enemies[j]; if (!canHit(s, em)) continue; var dd = Math.hypot(em.x - s.x, em.y - s.y); if (dd < bd) { bd = dd; tgt = em; } }
           s.laserTgt = tgt; if (tgt) tgt.dmgFrame += per; continue;
         }
         if (ty === "lawn") { var hits = 0; for (j = 0; j < enemies.length && hits < 3; j++) { em = enemies[j]; if (canHit(s, em)) { em.dmgFrame += per; hits++; } } continue; }
-        if (ty === "foam") { s.foamDropT = (s.foamDropT || 0) + dt; if (s.foamDropT >= 0.16 && foamPiles.length < 110) { s.foamDropT = 0; var pa = Math.random() * Math.PI * 2, pr = headReach(s) * Math.sqrt(Math.random()); foamPiles.push({ x: s.x + Math.cos(pa) * pr, y: s.y + Math.sin(pa) * pr, r: gap * (0.16 + Math.random() * 0.14), life: FOAM_PILE_LIFE, max: FOAM_PILE_LIFE, dps: per, kTier: s.kTier, seed: Math.random() * 6.28 }); } continue; }   // foam lays piles on the ground; damage happens in the piles, not the spray
+        if (ty === "foam") { s.foamDropT = (s.foamDropT || 0) + dt; if (s.foamDropT >= (s.fr ? 0.107 : 0.16) && foamPiles.length < 110) { s.foamDropT = 0; var pa = Math.random() * Math.PI * 2, pr = headReach(s) * Math.sqrt(Math.random()); foamPiles.push({ x: s.x + Math.cos(pa) * pr, y: s.y + Math.sin(pa) * pr, r: gap * (0.16 + Math.random() * 0.14), life: FOAM_PILE_LIFE, max: FOAM_PILE_LIFE, dps: per, kTier: s.kTier, seed: Math.random() * 6.28 }); } continue; }   // foam lays piles on the ground; damage happens in the piles, not the spray
         for (j = 0; j < enemies.length; j++) { em = enemies[j]; if (canHit(s, em)) em.dmgFrame += per; }  // standard + corridor
       }
       // enemies move + apply damage
@@ -602,18 +602,18 @@
       if (cat === "tank") { var nw = Math.round(maxWater * (1 + TANK_PCT)); return { e: "🛢️", t: "Bigger tank", d: "+" + Math.round(TANK_PCT * 100) + "% capacity → " + nw.toLocaleString() + " gal", kid: "Water", apply: applyCapacity }; }
       var elig = slots.filter(function (s) { return s.state === "active" && !s.ec && typeOf(s) !== "laser"; });   // lasers have infinite range
       var eligHP = slots.filter(function (s) { return s.state === "active" && !s.hp; });
-      var eligFR = slots.filter(function (s) { return s.state === "active" && !s.fr && typeOf(s) !== "moon"; });
+      var eligFR = slots.filter(function (s) { return s.state === "active" && !s.fr && typeOf(s) !== "corridor"; });
       var pool = SPECIALS.slice();
       if (elig.length) pool.push("ec");                         // Extended Coverage only if a non-laser head can still take it
       if (eligHP.length) pool.push("hp");                       // High Pressure only if a head can still take it
-      if (eligFR.length) pool.push("fr");                       // Fast Response only if a non-moon head can still take it
+      if (eligFR.length) pool.push("fr");                       // Fast Response — any non-corridor head
       var pick = pool[Math.floor(Math.random() * pool.length)];
       if (pick === "ec") {
         var lbl = elig.length === 1 ? ("K" + KLADDER[elig[0].kTier].toFixed(1) + " EC") : "Extended Coverage";
         return { e: "🎯", t: lbl, d: elig.length === 1 ? "+50% throw — Extended Coverage" : "+50% throw — pick a head", kid: "Bigger", special: true, pick: "ec" };
       }
       if (pick === "hp") return { e: "🔺", t: "High Pressure", d: "Pick a head — it can exceed 175 psi, up to 300", kid: "300 PSI", special: true, pick: "hp" };
-      if (pick === "fr") return { e: "💨", t: "Fast Response", d: "Pick a head — +50% attack speed (permanent)", kid: "Fast", special: true, pick: "fr" };
+      if (pick === "fr") return { e: "💨", t: "Fast Response", d: "Pick a head — +50% (dmg / laser & lawn speed / moon heal / foam)", kid: "Fast", special: true, pick: "fr" };
       return { e: pick.e, t: pick.t, d: pick.d, kid: pick.kid, apply: pick.apply, special: true };
     }
     function waveComplete() {
@@ -665,7 +665,7 @@
       if (selectKind === "ec") return !s.ec && typeOf(s) !== "laser";   // lasers have infinite range — no EC
       if (selectKind === "hp") return !s.hp;
       if (selectKind === "kf") return s.kTier < KLADDER.length - 1;
-      if (selectKind === "fr") return !s.fr && typeOf(s) !== "moon";     // moon deals no damage — no Fast Response
+      if (selectKind === "fr") return !s.fr && typeOf(s) !== "corridor";   // corridor not eligible for Fast Response
       return false;
     }
     function applyPickTo(s, kind) {
