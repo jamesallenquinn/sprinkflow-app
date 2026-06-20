@@ -345,9 +345,9 @@
     var TANK_PCT = 0.30;                        // tank upgrades scale by % of CURRENT capacity → compounds to massive end-game tanks
     var FOAM_PILE_LIFE = 5.5;                  // foam piles persist (sec); flames wading through take damage + slow (no damage from the spray itself)
     var DROOP_N = 0.95;                        // supply droop exponent: P = static − C·Q^DROOP_N (C derived per level to hit residual@ratedQ)
-    var DMG_PER_GPM = 2.0, TANK_DRAIN = 1.2, TANK_REGEN = 26, BOSS_WAVE = 15, ACT2_BOSS_WAVE = 25, MAX_ACT = 2;
+    var DMG_PER_GPM = 2.2, TANK_DRAIN = 1.2, TANK_REGEN = 26, BOSS_WAVE = 15, ACT2_BOSS_WAVE = 25, MAX_ACT = 2;
     function bossWaveFor(a) { return a >= 2 ? ACT2_BOSS_WAVE : BOSS_WAVE; }
-    var ENEMY_HP = 0.85;   // global enemy-HP multiplier (−15%)
+    var ENEMY_HP = 0.78;   // global enemy-HP multiplier (−22%)
     // Act 2 per-wave hazards
     var HAZARDS = [
       { id: "outage", name: "⚡ Power Outage", desc: "Fire pump offline" },
@@ -399,6 +399,7 @@
 
     // shield (special) soaks core damage before integrity
     function takeDamage(d) {
+      d *= 0.8;                                          // global ease: softer core hits
       if (easyMode) d *= 0.5;                            // Easy Mode: half damage taken
       if (shield > 0) { var a = Math.min(shield, d); shield -= a; d -= a; }
       if (d > 0) {
@@ -480,7 +481,7 @@
 
     function startWave(n) {
       wave = n; state = "playing";
-      integrity = Math.min(100, integrity + 8);
+      integrity = Math.min(100, integrity + 12);
       waveDmg = 0; waveCombatT = 0;             // reset the running Avg. DPS each wave
       if (bossPending) { bossPending = false; bossAlive = true; spawnBoss(); spawnQueue = 0; }
       else { bossAlive = false; spawnQueue = 4 + n * 2; }
