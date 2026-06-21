@@ -1247,21 +1247,21 @@
       for (var m = chosen.length - 1; m > 0; m--) { var n2 = Math.floor(Math.random() * (m + 1)), tt = chosen[m]; chosen[m] = chosen[n2]; chosen[n2] = tt; }  // de-bias card position
       var offers = chosen.map(function (cat) { var o = categoryOffer(cat); o.cat = cat; return o; });
       // Easy Mode: recommend the offer that boosts output most (glowing highlight; optional auto-pick)
-      var bestIdx = 0; if (easyMode) { var bs = -1e9; for (var ci = 0; ci < offers.length; ci++) { var sc = recommendScore(offers[ci].cat); if (sc > bs) { bs = sc; bestIdx = ci; } } }
+      var bestIdx = 0; if (easyMode || autoPick) { var bs = -1e9; for (var ci = 0; ci < offers.length; ci++) { var sc = recommendScore(offers[ci].cat); if (sc > bs) { bs = sc; bestIdx = ci; } } }   // compute the best offer whenever auto-pick is on (Easy or Normal)
       var box = $("sgChoices"); box.innerHTML = "";
       offers.forEach(function (o, idx) {
-        var rec = easyMode && idx === bestIdx;
+        var rec = (easyMode || autoPick) && idx === bestIdx;
         var card = document.createElement("div");
         card.className = "sg-card" + (o.special ? " special" : "") + (easyMode ? " kid" : "") + (rec ? " sg-rec" : "");
         if (easyMode) card.innerHTML = '<div class="e">' + cardIco(o) + '</div><div class="t">' + (o.kid || o.t) + '</div>' + (rec ? '<div class="sg-rec-tag">★</div>' : '');
-        else card.innerHTML = '<div class="e">' + cardIco(o) + '</div><div class="t">' + o.t + '</div><div class="d">' + o.d + '</div>' + (o.special ? '<div class="sg-badge">SPECIAL</div>' : '');
+        else card.innerHTML = '<div class="e">' + cardIco(o) + '</div><div class="t">' + o.t + '</div><div class="d">' + o.d + '</div>' + (o.special ? '<div class="sg-badge">SPECIAL</div>' : '') + (rec ? '<div class="sg-rec-tag">★</div>' : '');
         card.onclick = function () { if (state !== "upgrade") return; doOffer(o, false); };
         box.appendChild(card);
       });
       $("upTitle").textContent = "Wave " + wave + " cleared!";
       $("upgradeOv").classList.add("show");
       box.classList.add("locked"); setTimeout(function () { box.classList.remove("locked"); }, 700);   // brief buffer so stray taps from the wave don't pick an upgrade
-      if (easyMode && autoPick) { var pick = offers[bestIdx]; setTimeout(function () { if (state === "upgrade") doOffer(pick, true); }, 1100); }
+      if (autoPick) { var pick = offers[bestIdx]; setTimeout(function () { if (state === "upgrade") doOffer(pick, true); }, 1100); }   // auto-pick fires on Easy or Normal whenever the toggle is on
     }
     // score an offered category by how much it raises output (Easy-Mode recommendation)
     function recommendScore(cat) {
