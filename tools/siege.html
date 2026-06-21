@@ -2031,7 +2031,8 @@
       difficulty = btn ? btn.getAttribute("data-diff") : "normal";
       easyMode = difficulty === "easy"; hardMode = difficulty === "hard";
       autoPick = difficulty !== "hard" && !!($("autoToggle") && $("autoToggle").checked);   // Hard mode never auto-picks
-      resize(); reset(); applyHeadStarts(); grantConsumables(); hud(); startWave(1);   // store: owned head-starts pre-unlock types; owned consumables load into the action bar ["overOv","winOv","startOv","upgradeOv","pauseOv"].forEach(function (id) { $(id).classList.remove("show"); });
+      resize(); reset(); applyHeadStarts(); grantConsumables(); hud(); startWave(1);   // store: owned head-starts pre-unlock types; owned consumables load into the action bar
+      ["overOv", "winOv", "startOv", "upgradeOv", "pauseOv", "storeOv"].forEach(function (id) { $(id).classList.remove("show"); });
     }
 
     // Difficulty selector + auto-pick toggle (remembered between sessions). Auto-pick offered on Easy/Normal, hidden on Hard.
