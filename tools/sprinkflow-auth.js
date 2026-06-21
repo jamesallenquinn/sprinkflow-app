@@ -166,19 +166,29 @@
     };
   }
   function tokenFresh() { var s = getSession(); return !!(s && s.token && (!s.expiresAt || s.expiresAt - 60 > Date.now() / 1000)); }
-  var refreshing = null;
+  var refreshing = null, RLOCK = "sf.refreshing";
   function refreshSession() {
     var s = getSession();
     if (!s || !s.refresh) return Promise.resolve(false);
     if (refreshing) return refreshing;
+    // cross-page/tab coordination: refresh tokens rotate and Supabase revokes on reuse, so only ONE
+    // page may spend the token at a time. If another page refreshed within the last few seconds, skip.
+    var now = Date.now(), lock = 0;
+    try { lock = parseInt(localStorage.getItem(RLOCK) || "0", 10) || 0; } catch (e) {}
+    if (now - lock < 6000) return Promise.resolve(tokenFresh());
+    try { localStorage.setItem(RLOCK, String(now)); } catch (e) {}
     refreshing = fetch(SB_URL + "/auth/v1/token?grant_type=refresh_token", { method: "POST", headers: { apikey: SB_ANON, "Content-Type": "application/json" }, body: JSON.stringify({ refresh_token: s.refresh }) })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         if (res.ok && res.d.access_token) { setSession(sessionFrom(res.d, s.email)); return true; }
-        clearSession(); return false;                        // server rejected the refresh token -> truly signed out
+        // refresh was rejected — but ONLY sign out if the current access token is also already expired.
+        // While the access token is still valid, a rejection is almost always a harmless rotation race; keep the session.
+        var cur = getSession();
+        if (cur && cur.expiresAt && cur.expiresAt > Date.now() / 1000 + 30) return false;
+        clearSession(); return false;                        // token truly dead -> signed out
       })
       .catch(function () { return false; })                  // network error: keep the session, retry later (stay signed in offline)
-      .then(function (v) { refreshing = null; return v; });
+      .then(function (v) { try { localStorage.removeItem(RLOCK); } catch (e) {} refreshing = null; return v; });
     return refreshing;
   }
   function ensureFresh() {
@@ -207,7 +217,7 @@
           if (!ok) return { ok: false, status: r.status, reason: "expired" };
           var s3 = getSession();
           return doRpc(fn, args, s3.token).then(function (r2) {
-            if (r2.status === 401 || r2.status === 403) { clearSession(); return { ok: false, status: r2.status, reason: "expired" }; }
+            if (r2.status === 401 || r2.status === 403) { var c2 = getSession(); if (!c2 || !c2.expiresAt || c2.expiresAt < Date.now() / 1000) clearSession(); return { ok: false, status: r2.status, reason: "expired" }; }
             return r2;
           });
         });
