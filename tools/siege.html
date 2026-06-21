@@ -381,6 +381,7 @@
     // special upgrades: refill rate ×, spray reach ×, integrity shield pool, Hollywood charges/timer
     var tankFillMult = 1, shield = 0, hollywoodCharges = 0, hollywoodT = 0;
     var overloadT = 0, overloadCd = 0;   // Overload Fire Pump: 15s ×1.5 damage, 60s cooldown
+    var FREEZE_DUR = 4.5, freezeWave = false, freezeT = 0, nextFreezeAt = 0, freezeFlash = 0;   // Endless "Freeze Over": freezes non-dry heads; sub-K11.2 shatter
     var gameSpeed = 1;                    // fast-forward (1×/2×/3×)
     var currentAct = 1;                   // music track follows the act (1 = track 1); persists across waves/pause/upgrade
     var loopN = 0;                        // Endless: completed campaign loops (0 = first playthrough). Each loop ramps difficulty.
@@ -404,15 +405,22 @@
       foam:     { n: "Foam",     e: "🫧", rng: 1.25, dmg: 0.6 },
       lawn:     { n: "Lawn",     e: "🌀", rng: 1.6, dmg: 1.1 },
       corridor: { n: "Corridor", e: "📏", rng: 1.0, dmg: 1.0 },
-      moon:     { n: "Moon",     e: "🌙", rng: 1.15, dmg: 0 }
+      moon:     { n: "Moon",     e: "🌙", rng: 1.15, dmg: 0 },
+      dry:      { n: "Dry",      e: "🧊", rng: 1.0, dmg: 1.0 }   // like Manual, but survives Freeze Overs (Endless)
     };
+    // display label: Standard reads "Manual" (K5.6) → "Automatic" (K11.2+); Dry mirrors it
+    function headLabel(ty, kTier) {
+      if (ty === "standard") return kTier >= 2 ? "Automatic" : "Manual";
+      if (ty === "dry") return kTier >= 2 ? "Auto Dry" : "Dry";
+      return TYPE_INFO[ty].n;
+    }
     var UNLOCK_TYPES = ["standard", "laser", "foam", "lawn", "corridor", "moon"];
     // ---- progression + economy ----
     var UNLOCK_ORDER = ["foam", "moon", "lawn", "corridor", "laser"];   // standard free at start; specials unlock by leveling, laser last
     var UNLOCK_XP = [50, 130, 230, 340, 440];          // cumulative XP per unlock (foam≈w2, moon≈w4, lawn≈w6, corridor≈w8, laser≈w10)
     var XP_KILL = 1, XP_WAVE = 28, XP_BOSS = 120, XP_PER_LEVEL = 40;   // ~level 60 by end of campaign, climbs in Endless
     var COIN_KILL = 1, COIN_WAVE = 15, COIN_BOSS = 60;                 // halved — was draining too slowly
-    var PLACE_COST = { standard: 25, foam: 50, moon: 45, lawn: 55, corridor: 65, laser: 100 };
+    var PLACE_COST = { standard: 25, foam: 50, moon: 45, lawn: 55, corridor: 65, laser: 100, dry: 70 };
     var coins = 0, xp = 0, playerLevel = 1, unlocked = { standard: true }, pendingCost = 0;
     var seenTypes = {}, kills = 0, bannerT = 0;
     function showBanner(text, dur, color) { var b = $("tipBanner"); if (!b) return; b.textContent = text; b.style.borderColor = color || "var(--line-strong)"; b.hidden = false; bannerT = dur || 4; }
@@ -503,6 +511,18 @@
     var hazard = null, hzPump = false, hzTankMult = 1, hzSpeed = 1, hzReach = 1;
     function capW() { return Math.round(maxWater * hzTankMult); }    // effective tank cap (Main Break shrinks it)
     // class-typed resistance: Class B (grease) fires only take real damage from Foam
+    // Endless "Freeze Over": dry heads are immune; non-dry K11.2+ heads freeze briefly; sub-K11.2 shatter
+    function doFreeze() {
+      showBanner("❄️ FREEZE OVER!", 2.6, "#8fd6ff"); freezeFlash = 0.7;
+      for (var i = 0; i < slots.length; i++) {
+        var s = slots[i]; if (s.state !== "active" || typeOf(s) === "dry") continue;
+        if (s.kTier < 2) {   // below K11.2 → the head shatters and is removed
+          spawnFloat(s.x, s.y - gap * 0.4, "❄ SHATTERED", "#bff0ff", 1.7);
+          s.state = "locked"; s.kTier = 0; s.q = 0; s.type = null; s.ec = s.hp = s.fr = false; s.dmgWave = 0; s.healWave = 0; s.frozenT = 0; s.flash = 0.6;
+        } else { s.frozenT = FREEZE_DUR; s.flash = 0.4; }
+      }
+      if (sfxOn && typeof crackSfx === "function") crackSfx();
+    }
     // pushback: add a brief outward (away-from-core) impulse when a flame is hit; heavier enemies barely budge
     function knockback(e, mult) {
       var mass = e.boss ? 0.12 : e.type === "smolder" ? 0.45 : e.type === "backdraft" ? 0.6 : e.type === "elo" ? 0.8 : 1;
@@ -613,7 +633,7 @@
     }
     function applyUpgrade() {
       var s = nearestToCenter(function (sl) { return sl.state === "active" && sl.kTier < KLADDER.length - 1; });
-      if (s) { s.kTier++; s.flash = 0.6; maxWater += 60 * (easyMode ? 1.5 : 1) * WATER_BUFF; if (typeOf(s) === "standard" && s.kTier === 1) tipOnce("autoshot", "🎯 Upgrade a Standard head's K-factor once more (to K11.2) and it auto-fires at flames in range — no holding needed!"); }
+      if (s) { s.kTier++; s.flash = 0.6; maxWater += 60 * (easyMode ? 1.5 : 1) * WATER_BUFF; if ((typeOf(s) === "standard" || typeOf(s) === "dry") && s.kTier === 1) tipOnce("autoshot", "🎯 Upgrade a Manual head once more (to K11.2) to make it Automatic — it fires on its own at flames in range, no holding needed!"); }
     }
     function applyPump() { if (pumpLevel < PUMP_MAX) { pumpLevel++; for (var i = 0; i < slots.length; i++) if (slots[i].state === "active") slots[i].flash = 0.6; spawnFloat(W / 2, H / 2 - coreR * 1.2, "⚙️ PUMP LV " + pumpLevel, "#ff5a2f", 2.0); } updatePumpIcons(); }
     // fire-pump level: one red pump icon per tier (lit = installed), star once maxed
@@ -658,7 +678,7 @@
         var row = headRowEls[d.idx];
         if (!row) { row = document.createElement("div"); row.className = "sg-head-row"; row.innerHTML = '<span class="he"></span><span class="hn"><span class="hnm"></span><small class="hsub"></small></span><span class="hd"></span>'; headRowEls[d.idx] = row; }
         row.children[0].textContent = TYPE_INFO[d.ty].e;
-        row.children[1].children[0].textContent = TYPE_INFO[d.ty].n + " K" + KLADDER[d.s.kTier].toFixed(1);
+        row.children[1].children[0].textContent = headLabel(d.ty, d.s.kTier) + " K" + KLADDER[d.s.kTier].toFixed(1);
         var psi = Math.round(Math.min(lastSupplyP, headCap(d.s))), gpm = Math.round(d.s.q || 0);
         row.children[1].children[1].textContent = psi + " PSI · " + gpm + " GPM";
         var hd = row.children[2];
@@ -729,6 +749,7 @@
       if (currentAct >= MAX_ACT) {                 // loop back to Act 1, harder (Endless)
         currentAct = 1; loopN++; wave = 0;
         spawnFloat(W / 2, H / 2 - coreR * 1.4, "♾️ ENDLESS · LOOP " + loopN, "#ff5a2f", 2.8);
+        if (loopN === 1) tipOnce("dryhead", "🧊 New: Dry sprinklers (in Build) survive Freeze Overs. ❄️ Freeze fronts shatter non-dry heads under K11.2!");
       } else {
         currentAct++;
         spawnFloat(W / 2, H / 2 - coreR * 1.4, "ACT " + currentAct, "#ff5a2f", 2.4);
@@ -751,6 +772,9 @@
         if (hazard.id === "outage") hzPump = true; else if (hazard.id === "main") hzTankMult = 0.7; else if (hazard.id === "highrise") hzSpeed = 1.2; else if (hazard.id === "night") hzReach = 0.85;
       }
       $("hazardInd").hidden = !hazard; if (hazard) $("hazardInd").textContent = hazard.name + " · " + hazard.desc;
+      // Endless "Freeze Over" front — a chance each non-boss wave
+      freezeWave = false; freezeT = 0; nextFreezeAt = 6; freezeFlash = 0;
+      if (loopN >= 1 && !bossAlive && Math.random() < 0.4) { freezeWave = true; showBanner("❄️ FREEZE FRONT — non-dry heads under K11.2 will shatter! Build Dry heads.", 4.5, "#8fd6ff"); }
       water = capW();
       spawnT = 0;
       $("waveVal").textContent = bossAlive ? "BOSS" : n;
@@ -847,8 +871,9 @@
       var i2, firing = [];
       for (i2 = 0; i2 < act.length; i2++) {
         var sh = act[i2], fire;
+        if (sh.frozenT > 0) { sh.firing = false; sh.q = 0; continue; }   // frozen heads can't fire
         if (hw) fire = true;
-        else if (typeOf(sh) === "standard") fire = holding || ((easyMode || sh.kTier >= 2) && hasTarget(sh));   // AutoShot: K11.2+ standard heads auto-discharge (Easy Mode: from the start, even K5.6)
+        else if (typeOf(sh) === "standard" || typeOf(sh) === "dry") fire = holding || ((easyMode || sh.kTier >= 2) && hasTarget(sh));   // Automatic: K11.2+ Manual/Dry heads auto-discharge (Easy Mode: from the start, even K5.6)
         else fire = hasTarget(sh);              // specials run automatically when they can hit something
         sh.firing = fire; if (fire) firing.push(sh);
       }
@@ -865,6 +890,9 @@
       if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) $("tipBanner").hidden = true; }
       if (overloadT > 0) overloadT = Math.max(0, overloadT - dt);
       if (overloadCd > 0) overloadCd = Math.max(0, overloadCd - dt);
+      if (freezeFlash > 0) freezeFlash = Math.max(0, freezeFlash - dt * 1.6);
+      for (var fz = 0; fz < slots.length; fz++) if (slots[fz].frozenT > 0) slots[fz].frozenT = Math.max(0, slots[fz].frozenT - dt);
+      if (freezeWave && !bossAlive) { freezeT += dt; if (freezeT >= nextFreezeAt) { doFreeze(); nextFreezeAt = freezeT + 13; } }   // pulses ~every 13s during a freeze front
       if (holding && pressSlot && inspectSlot !== pressSlot && nowT - pressT0 >= 1000) inspectSlot = pressSlot;   // hold ~1s on a head → show its label
       updateAbar();
       dryFlash = anyFire && !hw && water <= 0;
@@ -905,7 +933,7 @@
       // --- weapons pass: each firing head applies its type's damage / effect ---
       for (var ei = 0; ei < enemies.length; ei++) { enemies[ei].dmgFrame = 0; enemies[ei].weakHit = false; }
       for (var fh = 0; fh < firing.length; fh++) {
-        var s = firing[fh], ty = typeOf(s), per = s.q * DMG_PER_GPM * TYPE_INFO[ty].dmg * moonBuff(s) * (easyMode ? 1.5 : 1) * (overloadT > 0 ? 1.5 : 1) * (buffSurge > 0 ? 2 : 1) * ((s.fr && ty === "standard") ? 1.5 : 1), em, j;   // Fast Response = +50% dmg for standard; Power Surge buff = ×2; other types get type-specific FR effects (laser: faster shots, below)
+        var s = firing[fh], ty = typeOf(s), per = s.q * DMG_PER_GPM * TYPE_INFO[ty].dmg * moonBuff(s) * (easyMode ? 1.5 : 1) * (overloadT > 0 ? 1.5 : 1) * (buffSurge > 0 ? 2 : 1) * ((s.fr && (ty === "standard" || ty === "dry")) ? 1.5 : 1), em, j;   // Fast Response = +50% dmg for Manual/Dry; Power Surge buff = ×2; other types get type-specific FR effects (laser: faster shots, below)
         if (ty === "moon") { for (j = 0; j < enemies.length; j++) if (inRange(s, enemies[j])) { var mh = s.q * 0.05 * dt * (s.fr ? 1.5 : 1); integrity = Math.min(100, integrity + mh); s.healWave = (s.healWave || 0) + mh; break; } continue; }   // FR: heals 50% more
         if (ty === "laser") {                                  // repeating projectile at the nearest flame
           var tgt = null, bd = 1e9; for (j = 0; j < enemies.length; j++) { em = enemies[j]; if (!canHit(s, em)) continue; var dd = Math.hypot(em.x - s.x, em.y - s.y); if (dd < bd) { bd = dd; tgt = em; } }
@@ -1123,7 +1151,7 @@
       if (kind === "ec") s.ec = true;
       else if (kind === "hp") s.hp = true;
       else if (kind === "fr") s.fr = true;
-      else if (kind === "kf") { s.kTier++; maxWater += 60 * (easyMode ? 1.5 : 1) * WATER_BUFF; if (typeOf(s) === "standard" && s.kTier === 1) tipOnce("autoshot", "🎯 Upgrade a Standard head's K-factor once more (to K11.2) and it auto-fires at flames in range — no holding needed!"); if (typeOf(s) === "standard" && s.kTier === 2) spawnFloat(s.x, s.y - gap * 0.45, "AUTOSHOT!", "#8fd14a", 2.0); }
+      else if (kind === "kf") { s.kTier++; maxWater += 60 * (easyMode ? 1.5 : 1) * WATER_BUFF; var dty = typeOf(s); if ((dty === "standard" || dty === "dry") && s.kTier === 1) tipOnce("autoshot", "🎯 Upgrade a Manual head once more (to K11.2) to make it Automatic — it fires on its own at flames in range, no holding needed!"); if ((dty === "standard" || dty === "dry") && s.kTier === 2) spawnFloat(s.x, s.y - gap * 0.45, "AUTOMATIC K11.2", "#8fd14a", 2.0); }
       s.flash = 0.6;
     }
     // perform an offer; auto=true also auto-places/auto-picks (no tap needed)
@@ -1166,11 +1194,12 @@
       $("buildCoins").textContent = "💰 " + coins.toLocaleString() + " coins" + (hasPlug ? "" : " · all slots full");
       box.innerHTML = "";
       var types = ["standard"].concat(UNLOCK_ORDER.filter(function (t) { return unlocked[t]; }));
+      if (loopN >= 1) types.push("dry");   // Dry sprinkler buildable in Endless (survives Freeze Overs)
       types.forEach(function (ty) {
         var cost = placeCost(ty), aff = coins >= cost && hasPlug;
         var card = document.createElement("div");
         card.className = "bcard" + (aff ? "" : " dim") + (ty === rec ? " rec" : "");
-        card.innerHTML = '<div class="e">' + TYPE_INFO[ty].e + '</div><div class="t">' + TYPE_INFO[ty].n + '</div><div class="c">💰 ' + cost + '</div>' + (ty === rec ? '<div class="recbadge">★ vs grease</div>' : '');
+        card.innerHTML = '<div class="e">' + TYPE_INFO[ty].e + '</div><div class="t">' + headLabel(ty, 0) + '</div><div class="c">💰 ' + cost + '</div>' + (ty === rec ? '<div class="recbadge">★ vs grease</div>' : '');
         card.onclick = function () { if (state === "build" && coins >= cost && lockedCount() > 0) buildPlace(ty, cost); };
         box.appendChild(card);
       });
@@ -1186,7 +1215,7 @@
       if (coins < cost || lockedCount() === 0) return;
       pendingType = ty; pendingCost = cost; selectKind = "place"; state = "select";
       $("buildOv").classList.remove("show");
-      $("selectPrompt").textContent = "👆 Tap a slot to place " + TYPE_INFO[ty].n + " (💰" + cost + ")"; $("selectPrompt").hidden = false;
+      $("selectPrompt").textContent = "👆 Tap a slot to place " + headLabel(ty, 0) + " (💰" + cost + ")"; $("selectPrompt").hidden = false;
     }
     function resumeFromBuild() {
       $("buildOv").classList.remove("show"); state = "playing"; last = 0;
@@ -1321,9 +1350,16 @@
       else drawDeflector(x, y, r, s);
       if (s.flash > 0) { ctx.globalAlpha = s.flash; ctx.fillStyle = "#bff0ff"; ctx.beginPath(); ctx.arc(x, y, r + 6, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; }
       if (s.hurt > 0) { ctx.globalAlpha = Math.min(1, s.hurt / 0.45); ctx.fillStyle = "#ff3b30"; ctx.beginPath(); ctx.arc(x, y, r + 5, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; }
+      if (ty === "dry") { ctx.save(); ctx.globalAlpha = 0.85; ctx.lineWidth = Math.max(1.5, r * 0.13); ctx.strokeStyle = "#8fd6ff"; ctx.beginPath(); ctx.arc(x, y, r + 3.5, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }   // dry = frost-blue ring
+      if (s.frozenT > 0) {   // ice encasement on a frozen head
+        ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = "#bfeaff"; ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 0.95; ctx.lineWidth = Math.max(1.5, r * 0.16); ctx.strokeStyle = "#eaf8ff"; ctx.stroke();
+        for (var ic = 0; ic < 6; ic++) { var ia = ic * Math.PI / 3 + nowT * 0.0004; ctx.lineWidth = Math.max(1, r * 0.06); ctx.beginPath(); ctx.moveTo(x + Math.cos(ia) * r * 0.5, y + Math.sin(ia) * r * 0.5); ctx.lineTo(x + Math.cos(ia) * (r + 6), y + Math.sin(ia) * (r + 6)); ctx.stroke(); }
+        ctx.restore();
+      }
       // head label (always shown): grade/type + K-factor + perks
-      var grade = ty === "standard" ? (s.kTier >= 3 ? "ESFR" : s.kTier >= 2 ? "ELO" : "") : TYPE_INFO[ty].n;
-      var label = (s.fr ? "Fast Response " : "") + (grade ? grade + " " : "") + "K" + KLADDER[s.kTier].toFixed(1) + (s.ec ? " EC" : "") + (s.hp ? " 300psi" : "") + (ty === "standard" && s.kTier >= 2 ? " AutoShot" : "");
+      var grade = (ty === "standard" || ty === "dry") ? headLabel(ty, s.kTier) : TYPE_INFO[ty].n;
+      var label = (s.fr ? "Fast Response " : "") + (grade ? grade + " " : "") + "K" + KLADDER[s.kTier].toFixed(1) + (s.ec ? " EC" : "") + (s.hp ? " 300psi" : "");
       var fs = Math.max(8, Math.round(r * 0.42 / viewScale)); ctx.font = "700 " + fs + "px Inter, Arial, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";
       var ly = y + r + 3 / viewScale;
       ctx.lineWidth = Math.max(2, fs * 0.32); ctx.strokeStyle = "rgba(6,9,12,0.9)"; ctx.lineJoin = "round"; ctx.strokeText(label, x, ly);   // dark outline so it reads over any background
@@ -1697,6 +1733,12 @@
         vg.addColorStop(0, "rgba(255,40,30,0)"); vg.addColorStop(1, "rgba(255,40,30," + ha.toFixed(3) + ")");
         ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
       }
+      // cyan frost flash on a Freeze Over
+      if (freezeFlash > 0) {
+        var fa = Math.min(0.55, freezeFlash * 0.6), fg = ctx.createRadialGradient(W / 2, H / 2, S * 0.15, W / 2, H / 2, S * 0.66);
+        fg.addColorStop(0, "rgba(180,235,255,0)"); fg.addColorStop(1, "rgba(150,214,255," + fa.toFixed(3) + ")");
+        ctx.fillStyle = fg; ctx.fillRect(0, 0, W, H);
+      }
     }
 
     var last = 0;
@@ -1741,8 +1783,8 @@
     canvas.addEventListener("pointercancel", endPress);
 
     function reset() {
-      for (var i = 0; i < slots.length; i++) { var ctr = slots[i].c === 1 && slots[i].r === 1; slots[i].state = ctr ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].hurt = 0; slots[i].ec = false; slots[i].hp = false; slots[i].fr = false; slots[i].type = ctr ? "standard" : null; slots[i].aim = 0; slots[i].dmgWave = 0; slots[i].healWave = 0; }
-      enemies = []; particles = []; floats = []; foamPiles = []; laserShots = []; currentAct = 1; loopN = 0; buffSurge = 0; buffFlood = 0; buffFreeze = 0; score = 0; integrity = 100; maxWater = Math.round(330 * (easyMode ? 1.5 : 1) * WATER_BUFF); water = maxWater; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
+      for (var i = 0; i < slots.length; i++) { var ctr = slots[i].c === 1 && slots[i].r === 1; slots[i].state = ctr ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].hurt = 0; slots[i].ec = false; slots[i].hp = false; slots[i].fr = false; slots[i].type = ctr ? "standard" : null; slots[i].aim = 0; slots[i].dmgWave = 0; slots[i].healWave = 0; slots[i].frozenT = 0; }
+      enemies = []; particles = []; floats = []; foamPiles = []; laserShots = []; currentAct = 1; loopN = 0; buffSurge = 0; buffFlood = 0; buffFreeze = 0; freezeWave = false; freezeT = 0; freezeFlash = 0; score = 0; integrity = 100; maxWater = Math.round(330 * (easyMode ? 1.5 : 1) * WATER_BUFF); water = maxWater; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
       tankFillMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0; overloadT = 0; overloadCd = 0; selectKind = null; hurtT = 0; dpsNow = 0; dpsShown = 0;
       gameSpeed = 1; inspectSlot = null; pressSlot = null; lastTapSlot = null; rotSlot = null; rotDragging = false; $("ffBtn").textContent = "▶▶"; $("ffBtn").classList.remove("on"); $("rotOkBtn").hidden = true;
       hazard = null; hzPump = false; hzTankMult = 1; hzSpeed = 1; hzReach = 1; smokeMult = 1; $("hazardInd").hidden = true;
