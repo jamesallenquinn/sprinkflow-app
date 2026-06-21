@@ -15,8 +15,12 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
   <style>
-    .app-bar-actions { margin-left:auto; display:flex; gap:8px; align-items:center; }
-    .app-bar-actions .acct-btn { margin-left:0; }
+    html, body { overflow-x:hidden; max-width:100%; }
+    .app-bar { flex-wrap:nowrap; }
+    .app-bar > div:not(.back) { flex:1 1 0; min-width:0; overflow:hidden; }   /* title block takes the slack and shrinks first */
+    .app-bar-actions { margin-left:auto; display:flex; gap:8px; align-items:center; min-width:0; flex:0 1 auto; }
+    .app-bar-actions .acct-btn { margin-left:0; max-width:40vw; min-width:0; flex:0 1 auto; }   /* cap the name + ellipsis so it can't push wide */
+    .app-bar .title, .app-bar .sub { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .lb-btn { flex:0 0 auto; background:var(--surface-soft); border:1px solid var(--line); color:var(--accent); font-size:1.1rem; line-height:1; padding:8px 12px; border-radius:999px; cursor:pointer; }
     .lb-btn:active { transform:scale(.96); }
     .lb-tabs { display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:4px; margin-bottom:12px; }
