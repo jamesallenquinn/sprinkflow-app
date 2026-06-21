@@ -1403,7 +1403,7 @@
       if (state !== "rotate" || !rotSlot) return;
       rotSlot.rotLocked = true; rotSlot.flash = 0.6; rotSlot = null; rotDragging = false;
       $("rotOkBtn").hidden = true; $("selectPrompt").hidden = true;
-      openBuild();   // back to the build panel to place more
+      resumeFromBuild();   // aimed → straight back to gameplay
     }
     function beginSelectHead() {
       selectKind = "unlock"; state = "select"; $("upgradeOv").classList.remove("show");
@@ -1422,7 +1422,7 @@
       for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (!selectEligible(s)) continue; var d = Math.hypot(tx - s.x, ty - s.y); if (d < bd) { bd = d; best = s; } }
       var hit = best && bd < gap * 0.7;
       if (selectKind === "place") {                         // building: tap a slot to start a one-wave install (tap elsewhere cancels)
-        if (hit) { startBuild(best, pendingType); hud(); selectKind = null; $("selectPrompt").hidden = true; if (best.type === "lawn") beginLawnRotate(best); else openBuild(); }
+        if (hit) { startBuild(best, pendingType); hud(); selectKind = null; $("selectPrompt").hidden = true; if (best.type === "lawn") beginLawnRotate(best); else resumeFromBuild(); }   // placed → straight back to gameplay (only one build at a time)
         else { selectKind = null; $("selectPrompt").hidden = true; openBuild(); }   // cancel → back to build panel
         return;
       }
