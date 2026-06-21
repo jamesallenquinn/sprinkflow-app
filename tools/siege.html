@@ -500,6 +500,9 @@
     var smokeMult = 1;   // Act 3: living Smolders shrink sprinkler reach
     var KB_SPRAY = 1.2, KB_BOLT = 1.3, KB_DECAY = 7;   // pushback: impulse on spray-tick / laser-bolt (× speed), and decay rate
     function bossWaveFor(a) { return a >= 3 ? ACT3_BOSS_WAVE : a >= 2 ? ACT2_BOSS_WAVE : BOSS_WAVE; }
+    // boss phases by remaining HP: 1 (>66%), 2 (33-66%), 3 (<33%) — each gets faster + hits harder
+    function bossPhaseOf(bo) { var f = bo.hp / bo.max; return f > 0.66 ? 1 : f > 0.33 ? 2 : 3; }
+    function bossEnrage(bo) { var p = bossPhaseOf(bo); return p === 1 ? 1 : p === 2 ? 1.45 : 2.0; }
     var ENEMY_HP = 0.78;   // global enemy-HP multiplier (−22%)
     // Act 2 per-wave hazards
     var HAZARDS = [
@@ -856,9 +859,9 @@
     }
     function spawnBoss() {
       var ang = Math.random() * Math.PI * 2, m = S * 0.62 / viewScale, cx = W / 2 + Math.cos(ang) * m, cy = H / 2 + Math.sin(ang) * m;
-      if (currentAct >= 3) { var bh3 = Math.round(9500 * ENEMY_HP * endlessMul()); enemies.push({ x: cx, y: cy, hp: bh3, max: bh3, spd: 13 * (S / 400), sz: S * 0.16, boss: true, meltdown: true, t: 0, mt: 0, type: "boss", minTier: 0, coreDmg: 32, splits: false }); }   // The Meltdown (cycles Class C → B → flashover)
-      else if (currentAct >= 2) { var bh2 = Math.round(6500 * ENEMY_HP * endlessMul()); enemies.push({ x: cx, y: cy, hp: bh2, max: bh2, spd: 14 * (S / 400), sz: S * 0.15, boss: true, conflag: true, t: 0, mt: 0, type: "boss", minTier: 0, coreDmg: 30, splits: false }); }   // The Conflagration (multi-phase)
-      else { var bh1 = Math.round(2600 * ENEMY_HP * endlessMul()); enemies.push({ x: cx, y: cy, hp: bh1, max: bh1, spd: 16 * (S / 400), sz: S * 0.13, boss: true, t: 0, mt: 0, type: "boss", minTier: 0, coreDmg: 28, splits: false }); }
+      if (currentAct >= 3) { var bh3 = Math.round(24000 * ENEMY_HP * endlessMul()); enemies.push({ x: cx, y: cy, hp: bh3, max: bh3, spd: 13 * (S / 400), sz: S * 0.16, boss: true, meltdown: true, t: 0, mt: 0, phase: 1, type: "boss", minTier: 0, coreDmg: 32, splits: false }); }   // The Meltdown (cycles Class C → B → flashover)
+      else if (currentAct >= 2) { var bh2 = Math.round(16000 * ENEMY_HP * endlessMul()); enemies.push({ x: cx, y: cy, hp: bh2, max: bh2, spd: 14 * (S / 400), sz: S * 0.15, boss: true, conflag: true, t: 0, mt: 0, phase: 1, type: "boss", minTier: 0, coreDmg: 30, splits: false }); }   // The Conflagration (multi-phase)
+      else { var bh1 = Math.round(6500 * ENEMY_HP * endlessMul()); enemies.push({ x: cx, y: cy, hp: bh1, max: bh1, spd: 16 * (S / 400), sz: S * 0.13, boss: true, t: 0, mt: 0, phase: 1, type: "boss", minTier: 0, coreDmg: 28, splits: false }); }
     }
 
     function update(dt) {
@@ -918,17 +921,24 @@
       // boss spawns minions (Conflagration: phase by HP — armored → Class-B → flashover)
       for (var b = 0; b < enemies.length; b++) {
         var bo = enemies[b]; if (!bo.boss) continue;
+        var nowPhase = bossPhaseOf(bo);
+        if (nowPhase > (bo.phase || 1)) {   // entered a new phase → faster + stronger; announce it
+          bo.phase = nowPhase;
+          spawnFloat(bo.x, bo.y - bo.sz * 1.1, nowPhase >= 3 ? "⚠ ENRAGED!" : "PHASE " + nowPhase, "#ff5a2f", 2.2);
+          showBanner(nowPhase >= 3 ? "⚠️ Boss ENRAGED — faster & deadlier!" : "Boss Phase " + nowPhase + " — faster & stronger", 2.6, "#ff5a2f");
+        }
+        var ben = bossEnrage(bo);   // later phases spawn minions faster too
         if (bo.meltdown) {                                       // Meltdown: armored → Class-C(laser) → Class-B(foam) → flashover
           var fm = bo.hp / bo.max;
           bo.cls = (fm <= 0.7 && fm > 0.45) ? "C" : (fm <= 0.45 && fm > 0.2) ? "B" : null;
           bo.flashing = fm <= 0.2;
-          bo.mt += dt; if (bo.mt > 2.0) { bo.mt = 0; spawnEdge(fm <= 0.2 ? "ember" : fm <= 0.45 ? "grease" : fm <= 0.7 ? "elec" : "normal"); }
+          bo.mt += dt; if (bo.mt > 2.0 / ben) { bo.mt = 0; spawnEdge(fm <= 0.2 ? "ember" : fm <= 0.45 ? "grease" : fm <= 0.7 ? "elec" : "normal"); }
         } else if (bo.conflag) {
           var fr = bo.hp / bo.max;
           bo.cls = (fr <= 0.66 && fr > 0.33) ? "B" : null;       // phase 2: only Foam hurts it
           bo.flashing = fr <= 0.33;                              // phase 3: flashover (faster)
-          bo.mt += dt; if (bo.mt > 2.2) { bo.mt = 0; spawnEdge(fr <= 0.33 ? "ember" : fr <= 0.66 ? "grease" : "normal"); }
-        } else { bo.mt += dt; if (bo.mt > 2.6) { bo.mt = 0; spawnEdge(); } }
+          bo.mt += dt; if (bo.mt > 2.2 / ben) { bo.mt = 0; spawnEdge(fr <= 0.33 ? "ember" : fr <= 0.66 ? "grease" : "normal"); }
+        } else { bo.mt += dt; if (bo.mt > 2.6 / ben) { bo.mt = 0; spawnEdge(); } }
       }
       // --- weapons pass: each firing head applies its type's damage / effect ---
       for (var ei = 0; ei < enemies.length; ei++) { enemies[ei].dmgFrame = 0; enemies[ei].weakHit = false; }
@@ -956,14 +966,14 @@
         var e = enemies[i];
         var dx = W / 2 - e.x, dy = H / 2 - e.y, dist = Math.hypot(dx, dy) || 1;
         if (e.type === "backdraft") { e.flashT = (e.flashT || 0) + dt; if (!e.flashing && e.flashT >= (e.flashCd || 4)) { e.flashing = true; e.flashLeft = 2.5; e.flashT = 0; } if (e.flashing) { e.flashLeft -= dt; if (e.flashLeft <= 0) e.flashing = false; } }   // backdraft flashover
-        var spd = e.spd * hzSpeed * (1 + loopN * ENDLESS_SPD); if (e.slowT > 0) { spd *= 0.5; e.slowT -= dt; } if (buffFreeze > 0) spd *= 0.65; if (e.flashing) spd *= (e.boss ? 1.8 : 2.2);   // Endless speed; foam/Cold-Snap slow; flashover burst; High-Rise hazard
+        var spd = e.spd * hzSpeed * (1 + loopN * ENDLESS_SPD); if (e.slowT > 0) { spd *= 0.5; e.slowT -= dt; } if (buffFreeze > 0) spd *= 0.65; if (e.flashing && !e.boss) spd *= 2.2; if (e.boss) spd *= bossEnrage(e);   // Endless speed; foam/Cold-Snap slow; flashover burst; bosses speed up each phase
         e.kb = Math.max(0, (e.kb || 0) - (e.spd * hzSpeed || 30) * KB_DECAY * dt);   // pushback decays back to 0
         var net = spd - e.kb;                                    // knockback opposes inward travel (can briefly reverse)
         e.x += (dx / dist) * net * dt; e.y += (dy / dist) * net * dt; e.t += dt;
         // reached core
         if (dist < coreR + e.sz * 0.4) {
           if (e.boss) {
-            takeDamage(28);
+            takeDamage(Math.round((e.coreDmg || 28) * bossEnrage(e)));   // bosses hit harder each phase
             var ba = Math.random() * Math.PI * 2; e.x = W / 2 + Math.cos(ba) * S * 0.56; e.y = H / 2 + Math.sin(ba) * S * 0.56;
             if (integrity <= 0) { gameOver(); return; }
           } else {
