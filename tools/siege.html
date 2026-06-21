@@ -618,25 +618,48 @@
       el.classList.toggle("hot", v >= 250 && v < 700);
       el.classList.toggle("blaze", v >= 700);
     }
-    var headStatsLast = 0;
+    var headStatsLast = 0, headRowEls = {};   // persistent rows keyed by slot index (for FLIP reorder animation)
     function updateHeadStats() {
       var el = $("headStats"); if (!el) return;
-      if (nowT - headStatsLast < 180) return; headStatsLast = nowT;   // throttle DOM rebuilds
-      var act = slots.filter(function (s) { return s.state === "active"; });
-      if (!act.length) { el.hidden = true; return; }
+      if (nowT - headStatsLast < 180) return; headStatsLast = nowT;   // throttle
+      var actIdx = [];
+      for (var i = 0; i < slots.length; i++) if (slots[i].state === "active") actIdx.push(i);
+      if (!actIdx.length) { el.hidden = true; return; }
       el.hidden = false;
-      var ct = waveCombatT > 0.4 ? waveCombatT : 0, rows = "", total = 0;
-      for (var i = 0; i < act.length; i++) {
-        var s = act[i], ty = typeOf(s), nm = TYPE_INFO[ty].n + " K" + KLADDER[s.kTier].toFixed(1);
-        if (ty === "moon") {
-          var h = ct ? Math.round((s.healWave || 0) / ct) : 0;
-          rows += '<div class="sg-head-row"><span class="he">' + TYPE_INFO[ty].e + '</span><span class="hn">' + nm + '</span><span class="hd heal">+' + h.toLocaleString() + ' HP/s</span></div>';
-        } else {
-          var d = ct ? Math.round((s.dmgWave || 0) / ct) : 0; total += d;
-          rows += '<div class="sg-head-row"><span class="he">' + TYPE_INFO[ty].e + '</span><span class="hn">' + nm + '</span><span class="hd' + (d ? '' : ' dim') + '">' + d.toLocaleString() + '</span></div>';
-        }
-      }
-      $("headRows").innerHTML = rows;
+      var box = $("headRows"), ct = waveCombatT > 0.4 ? waveCombatT : 0, total = 0;
+      var data = actIdx.map(function (idx) {
+        var s = slots[idx], ty = typeOf(s), isMoon = ty === "moon";
+        var val = ct ? Math.round(((isMoon ? s.healWave : s.dmgWave) || 0) / ct) : 0;
+        if (!isMoon) total += val;
+        return { idx: idx, s: s, ty: ty, isMoon: isMoon, val: val };
+      });
+      data.sort(function (a, b) { return b.val - a.val; });   // most damage at top (stable on ties)
+      // FLIP step 1 — record current on-screen positions
+      var olds = {}, key;
+      for (key in headRowEls) { if (headRowEls[key].parentNode) olds[key] = headRowEls[key].getBoundingClientRect().top; }
+      // build / refresh rows, append in sorted order
+      var alive = {};
+      data.forEach(function (d) {
+        alive[d.idx] = 1;
+        var row = headRowEls[d.idx];
+        if (!row) { row = document.createElement("div"); row.className = "sg-head-row"; row.innerHTML = '<span class="he"></span><span class="hn"></span><span class="hd"></span>'; headRowEls[d.idx] = row; }
+        row.children[0].textContent = TYPE_INFO[d.ty].e;
+        row.children[1].textContent = TYPE_INFO[d.ty].n + " K" + KLADDER[d.s.kTier].toFixed(1);
+        var hd = row.children[2];
+        hd.className = d.isMoon ? "hd heal" : ("hd" + (d.val ? "" : " dim"));
+        hd.textContent = d.isMoon ? ("+" + d.val.toLocaleString() + " HP/s") : d.val.toLocaleString();
+        box.appendChild(row);   // re-appending sets the new order
+      });
+      for (key in headRowEls) { if (!alive[key]) { if (headRowEls[key].parentNode) headRowEls[key].parentNode.removeChild(headRowEls[key]); delete headRowEls[key]; } }
+      // FLIP step 2 — animate each row from its old position to its new one
+      Object.keys(headRowEls).forEach(function (k) {
+        var row = headRowEls[k]; if (!row.parentNode || olds[k] == null) return;
+        var dy = olds[k] - row.getBoundingClientRect().top;
+        if (Math.abs(dy) < 0.5) return;
+        row.style.transition = "none"; row.style.transform = "translateY(" + dy + "px)";
+        row.getBoundingClientRect();   // force reflow so the offset applies before we animate it away
+        requestAnimationFrame(function () { row.style.transition = "transform .34s cubic-bezier(.2,.85,.25,1)"; row.style.transform = ""; });
+      });
       $("headTotal").textContent = total.toLocaleString() + " DPS";
     }
     function applyCapacity() { tankLevel++; maxWater = Math.round(maxWater * (1 + TANK_PCT)); water = maxWater; for (var i = 0; i < slots.length; i++) if (slots[i].state === "active") slots[i].flash = 0.6; }
@@ -1676,7 +1699,7 @@
       hazard = null; hzPump = false; hzTankMult = 1; hzSpeed = 1; hzReach = 1; smokeMult = 1; $("hazardInd").hidden = true;
       coins = 0; xp = 0; playerLevel = 1; unlocked = { standard: true }; pendingCost = 0; seenTypes = {}; kills = 0; bannerT = 0; pendingReward = null; chestOpened = false; $("buildOv").classList.remove("show"); $("tipBanner").hidden = true; $("rewardOv").classList.remove("show");
       viewScale = 1; zoomTarget = 1;
-      updatePumpIcons(); $("dpsMeter").hidden = true; $("abar").hidden = true; $("headStats").hidden = true; $("unlockCard").hidden = true; clearTimeout(unlockTimer); $("soundNudge").hidden = true; clearTimeout(soundNudgeTimer);
+      updatePumpIcons(); $("dpsMeter").hidden = true; $("abar").hidden = true; $("headStats").hidden = true; headRowEls = {}; if ($("headRows")) $("headRows").innerHTML = ""; $("unlockCard").hidden = true; clearTimeout(unlockTimer); $("soundNudge").hidden = true; clearTimeout(soundNudgeTimer);
     }
     function newGame() {
       easyMode = !!($("easyToggle") && $("easyToggle").checked);          // locked for the whole run
