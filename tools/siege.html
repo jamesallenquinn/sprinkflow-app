@@ -104,7 +104,7 @@
     .sg-toggle { display:inline-flex; align-items:center; gap:9px; cursor:pointer; font:600 .92rem Inter, sans-serif; color:var(--ink); background:var(--surface); border:1px solid var(--line-strong); border-radius:999px; padding:9px 16px; user-select:none; }
     .sg-toggle input { width:18px; height:18px; accent-color:var(--ok); }
     .sg-toggle[hidden] { display:none; }
-    .sg-easy-ind { position:absolute; right:10px; bottom:10px; z-index:6; background:rgba(13,17,22,.7); border:1px solid var(--line); border-radius:999px; padding:4px 10px; font:700 .66rem Inter; letter-spacing:.04em; color:var(--ok); display:flex; align-items:center; gap:4px; }
+    .sg-easy-ind { position:absolute; right:10px; top:116px; z-index:6; background:rgba(13,17,22,.7); border:1px solid var(--line); border-radius:999px; padding:4px 10px; font:700 .66rem Inter; letter-spacing:.04em; color:var(--ok); display:flex; align-items:center; gap:4px; }
     .sg-easy-ind[hidden] { display:none; }
     .sg-diff { display:inline-flex; gap:6px; background:var(--surface); border:1px solid var(--line-strong); border-radius:999px; padding:4px; }
     .sg-diff-btn { border:0; background:transparent; color:var(--ink); font:700 .9rem Inter, sans-serif; padding:8px 16px; border-radius:999px; cursor:pointer; opacity:.62; }
@@ -169,16 +169,20 @@
     .sg-head-row .hd { font:700 .9rem 'Space Grotesk'; color:var(--ink); }
     .sg-head-row .hd.heal { color:var(--ok); }
     .sg-head-row .hd.dim { color:var(--line-strong); }
-    .sg-pausebtn { position:absolute; top:10px; right:10px; z-index:6; width:42px; height:42px; border-radius:12px; border:1px solid var(--line); background:rgba(13,17,22,.72); backdrop-filter:blur(2px); color:var(--ink); font-size:16px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+    .sg-pausebtn { position:absolute; right:10px; z-index:6; width:42px; height:42px; border-radius:12px; border:1px solid var(--line); background:rgba(13,17,22,.72); backdrop-filter:blur(2px); color:var(--ink); font-size:16px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; }
     .sg-pausebtn:active { transform:scale(.94); }
     .sg-pausebtn[hidden] { display:none; }
+    #pauseBtn { bottom:112px; }   /* bottom-right control stack: pause / fast-forward / zoom */
+    #ffBtn { bottom:62px; }
+    #zoomBtn { bottom:12px; font:800 .82rem 'Space Grotesk',sans-serif; }
     .sg-hollybtn { position:absolute; top:10px; left:10px; z-index:6; height:42px; padding:0 12px; border-radius:12px; border:1px solid var(--accent); background:rgba(255,176,58,.16); backdrop-filter:blur(2px); color:var(--accent); font:700 .8rem 'Space Grotesk'; line-height:1; cursor:pointer; display:flex; align-items:center; gap:4px; }
     .sg-hollybtn:active { transform:scale(.95); }
     .sg-hollybtn.armed { animation:hbpulse .9s ease-in-out infinite; }
     @keyframes hbpulse { 50% { box-shadow:0 0 0 4px rgba(255,176,58,.18); } }
     .sg-hollybtn[hidden] { display:none; }
-    .sg-ffbtn { right:60px; width:auto; min-width:42px; padding:0 10px; font:800 .82rem 'Space Grotesk',sans-serif; gap:0; }
+    .sg-ffbtn { width:auto; min-width:42px; padding:0 10px; font:800 .82rem 'Space Grotesk',sans-serif; gap:0; }
     .sg-ffbtn.on { border-color:var(--accent); color:var(--accent); }
+    #zoomBtn.on { border-color:var(--water); color:var(--water); }
     .sg-setbtn { left:10px; right:auto; font-size:19px; }
     .sg-setbtn.on { border-color:var(--ok); color:var(--ok); }
     .sg-setbtn:not(.on) { color:var(--muted); }
@@ -269,6 +273,7 @@
       <canvas id="game" width="360" height="430"></canvas>
       <button id="pauseBtn" class="sg-pausebtn" aria-label="Pause" hidden>❚❚</button>
       <button id="ffBtn" class="sg-pausebtn sg-ffbtn" aria-label="Fast forward" hidden>▶▶</button>
+      <button id="zoomBtn" class="sg-pausebtn" aria-label="Zoom out" hidden>1×</button>
       <button id="settingsBtn" class="sg-pausebtn sg-setbtn" aria-label="Sound &amp; music options">🔊</button>
       <div id="settingsPop" class="sg-setpop" hidden>
         <div class="sg-setpop-h">🔊 Audio</div>
@@ -457,7 +462,7 @@
     var W = 360, H = 430, S = 360, dpr = 1, gap = 70, coreR = 30, colXs = [], rowYs = [];
     // battlefield zoom: stays at 1 until a head's coverage reaches the screen edge, then
     // steps out to a preset so the 9 heads stay centered but you see (and fight) further out
-    var viewScale = 1, zoomTarget = 1, ZPRESETS = [1, 0.68, 0.5];
+    var viewScale = 1, zoomTarget = 1, ZPRESETS = [1, 0.68, 0.5], manualZoomIdx = 0;   // manual zoom-out level (tap zoomBtn to cycle 1×/2×/3×); 0.5 ≈ EC heads on the perimeter
     // ---- sprinkler types ----  (rng/dmg = range & damage multipliers vs a standard head)
     var TYPE_INFO = {
       standard: { n: "Standard", e: "💧", rng: 1.0, dmg: 1.0 },
@@ -671,9 +676,9 @@
       // only Extended-Coverage heads grow the required view; corridor's long axis & normal heads don't push the zoom out
       for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (s.state !== "active") continue; var R = s.ec ? coverageRadius(s) : gap * 0.6; maxX = Math.max(maxX, Math.abs(s.x - cx) + R); maxY = Math.max(maxY, Math.abs(s.y - cy) + R); }
       var zfit = Math.min((W / 2) / maxX, (H / 2) / maxY) * 0.98;
-      var chosen = ZPRESETS[ZPRESETS.length - 1];
-      for (var p = 0; p < ZPRESETS.length; p++) { if (ZPRESETS[p] <= zfit) { chosen = ZPRESETS[p]; break; } }
-      if (chosen < zoomTarget) zoomTarget = chosen;        // only ever zoom out (bubbles only grow)
+      var coverageZoom = ZPRESETS[ZPRESETS.length - 1];
+      for (var p = 0; p < ZPRESETS.length; p++) { if (ZPRESETS[p] <= zfit) { coverageZoom = ZPRESETS[p]; break; } }
+      zoomTarget = Math.min(coverageZoom, ZPRESETS[manualZoomIdx]);   // auto-fit coverage AND honor the manual zoom-out (whichever is further out)
     }
     // sprinkler finish by K-factor tier: brass → chrome → white poly → black poly → ENT → shiny gold
     function finish(kTier) {
@@ -1855,6 +1860,7 @@
     }
     function render(t) {
       if (typeof updateMusic === "function") updateMusic();
+      var _zb = $("zoomBtn"), _fb = $("ffBtn"); if (_zb && _fb && _zb.hidden !== _fb.hidden) _zb.hidden = _fb.hidden;   // zoom button shows/hides with fast-forward
       if (sprayGain && state !== "playing") sprayGain.gain.value = 0;   // SFX silent during pauses/menus/overlays
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
@@ -2023,7 +2029,7 @@
       gameSpeed = 1; inspectSlot = null; pressSlot = null; lastTapSlot = null; rotSlot = null; rotDragging = false; $("ffBtn").textContent = "▶▶"; $("ffBtn").classList.remove("on"); $("rotOkBtn").hidden = true;
       hazard = null; hzPump = false; hzTankMult = 1; hzSpeed = 1; hzReach = 1; smokeMult = 1; $("hazardInd").hidden = true;
       coins = 0; xp = 0; playerLevel = 1; unlocked = { standard: true }; pendingCost = 0; seenTypes = {}; kills = 0; bannerT = 0; pendingReward = null; chestOpened = false; $("buildOv").classList.remove("show"); $("tipBanner").hidden = true; $("rewardOv").classList.remove("show");
-      viewScale = 1; zoomTarget = 1;
+      viewScale = 1; zoomTarget = 1; manualZoomIdx = 0; if ($("zoomBtn")) $("zoomBtn").textContent = "1×";
       updatePumpIcons(); $("dpsMeter").hidden = true; $("abar").hidden = true; $("headStats").hidden = true; headRowEls = {}; if ($("headRows")) $("headRows").innerHTML = ""; $("unlockCard").hidden = true; clearTimeout(unlockTimer); $("soundNudge").hidden = true; clearTimeout(soundNudgeTimer);
     }
     function newGame() {
@@ -2209,6 +2215,7 @@
     $("hollywoodBtn").onclick = activateHollywood;
     $("overloadBtn").onclick = activateOverload;
     $("ffBtn").onclick = function () { gameSpeed = gameSpeed >= 3 ? 1 : gameSpeed + 1; this.textContent = gameSpeed > 1 ? ("▶▶" + gameSpeed) : "▶▶"; this.classList.toggle("on", gameSpeed > 1); };
+    $("zoomBtn").onclick = function () { manualZoomIdx = (manualZoomIdx + 1) % ZPRESETS.length; this.textContent = (manualZoomIdx + 1) + "×"; this.classList.toggle("on", manualZoomIdx > 0); chooseZoom(); };   // cycle 1×/2×/3× zoom-out
     $("pauseAutoToggle").onchange = function () { autoPick = this.checked; try { localStorage.setItem("sg_auto", autoPick ? "1" : "0"); } catch (e) {} var at = $("autoToggle"); if (at) at.checked = autoPick; };
     $("rotOkBtn").onclick = confirmRotate;
     $("buildBtn").onclick = function () { if (state === "playing") openBuild(); };
