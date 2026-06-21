@@ -689,7 +689,8 @@
         var row = headRowEls[d.idx];
         if (!row) { row = document.createElement("div"); row.className = "sg-head-row"; row.innerHTML = '<span class="he"></span><span class="hn"><span class="hnm"></span><small class="hsub"></small></span><span class="hd"></span>'; headRowEls[d.idx] = row; }
         row.children[0].textContent = TYPE_INFO[d.ty].e;
-        row.children[1].children[0].textContent = headLabel(d.ty, d.s.kTier) + " K" + KLADDER[d.s.kTier].toFixed(1);
+        var mods = []; if (d.s.fr) mods.push("FR"); if (d.s.ec) mods.push("EC"); if (d.s.hp) mods.push("HP");
+        row.children[1].children[0].textContent = headLabel(d.ty, d.s.kTier) + " K" + KLADDER[d.s.kTier].toFixed(1) + (mods.length ? " (" + mods.join(", ") + ")" : "");
         var psi = Math.round(Math.min(lastSupplyP, headCap(d.s))), gpm = Math.round(d.s.q || 0);
         row.children[1].children[1].textContent = psi + " PSI · " + gpm + " GPM";
         var hd = row.children[2];
@@ -786,7 +787,7 @@
       waveDmg = 0; waveCombatT = 0;             // reset the running Avg. DPS each wave
       for (var hi = 0; hi < slots.length; hi++) { slots[hi].dmgWave = 0; slots[hi].healWave = 0; }   // reset per-head DPS readout
       if (bossPending) { bossPending = false; bossAlive = true; spawnBoss(); spawnQueue = 0; }
-      else { bossAlive = false; var cnt = currentAct >= 2 ? 4 + Math.round(n * 1.6) : 4 + n * 2; spawnQueue = Math.round(cnt * (1 + loopN * ENDLESS_CNT)); }   // Act 2: fewer enemies per wave; Endless: more each loop
+      else { bossAlive = false; var cnt = (currentAct >= 2 ? 4 + Math.round(n * 1.6) : 4 + n * 2) * 1.15; spawnQueue = Math.round(cnt * (1 + loopN * ENDLESS_CNT)); }   // Act 2: fewer enemies per wave; +15% longer rounds; Endless: more each loop
       waveSpawnTotal = spawnQueue || 1;
       // Act 2 hazards — one per (non-boss) wave
       hazard = null; hzPump = false; hzTankMult = 1; hzSpeed = 1; hzReach = 1;
