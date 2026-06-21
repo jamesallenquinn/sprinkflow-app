@@ -118,18 +118,18 @@
     .sg-psi { font:700 .72rem/1 'Space Grotesk'; letter-spacing:.03em; color:var(--water); text-align:center; padding:3px 0 1px; min-height:14px; }
     .sg-hint { text-align:center; color:var(--muted); font:500 .76rem Inter; padding:8px 0 2px; }
     /* new-sprinkler unlock card */
-    .sg-unlock { position:absolute; top:18%; left:50%; transform:translateX(-50%); z-index:9; width:min(86%,300px); text-align:center;
-      background:linear-gradient(150deg, rgba(34,42,30,.97), rgba(20,26,18,.97)); border:1.5px solid #8fd14a; border-radius:18px;
-      padding:16px 18px; box-shadow:0 10px 30px rgba(0,0,0,.5), 0 0 22px rgba(143,209,74,.3); }
+    .sg-unlock { position:absolute; top:8px; left:50%; transform:translateX(-50%); z-index:9; width:min(82%,270px); text-align:center;
+      background:linear-gradient(150deg, rgba(34,42,30,.97), rgba(20,26,18,.97)); border:1.5px solid #8fd14a; border-radius:14px;
+      padding:9px 14px; box-shadow:0 8px 22px rgba(0,0,0,.5), 0 0 18px rgba(143,209,74,.28); }
     .sg-unlock[hidden]{ display:none; }
     .sg-unlock.show { animation:unlockIn .4s cubic-bezier(.2,1.4,.5,1) both; }
     .sg-unlock.out { animation:unlockOut .35s ease both; }
     @keyframes unlockIn { from{opacity:0; transform:translateX(-50%) translateY(-14px) scale(.9)} to{opacity:1; transform:translateX(-50%) translateY(0) scale(1)} }
     @keyframes unlockOut { to{opacity:0; transform:translateX(-50%) translateY(-10px) scale(.95)} }
-    .sg-unlock .u-e { font-size:46px; line-height:1; }
-    .sg-unlock .u-k { font:700 .6rem Inter; letter-spacing:.12em; text-transform:uppercase; color:#8fd14a; margin-top:4px; }
-    .sg-unlock .u-n { font:700 1.3rem 'Space Grotesk'; color:var(--ink); margin-top:2px; }
-    .sg-unlock .u-d { font:500 .82rem/1.3 Inter; color:var(--muted); margin-top:5px; }
+    .sg-unlock .u-e { font-size:30px; line-height:1; }
+    .sg-unlock .u-k { font:700 .55rem Inter; letter-spacing:.1em; text-transform:uppercase; color:#8fd14a; margin-top:2px; }
+    .sg-unlock .u-n { font:700 1.02rem 'Space Grotesk'; color:var(--ink); margin-top:1px; }
+    .sg-unlock .u-d { font:500 .72rem/1.25 Inter; color:var(--muted); margin-top:3px; }
     /* per-head live damage readout (below the stage) */
     .sg-heads { margin-top:8px; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:8px 10px 9px; }
     .sg-heads[hidden]{ display:none; }
