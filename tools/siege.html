@@ -106,6 +106,14 @@
     .sg-toggle[hidden] { display:none; }
     .sg-easy-ind { position:absolute; right:10px; bottom:10px; z-index:6; background:rgba(13,17,22,.7); border:1px solid var(--line); border-radius:999px; padding:4px 10px; font:700 .66rem Inter; letter-spacing:.04em; color:var(--ok); display:flex; align-items:center; gap:4px; }
     .sg-easy-ind[hidden] { display:none; }
+    .sg-diff { display:inline-flex; gap:6px; background:var(--surface); border:1px solid var(--line-strong); border-radius:999px; padding:4px; }
+    .sg-diff-btn { border:0; background:transparent; color:var(--ink); font:700 .9rem Inter, sans-serif; padding:8px 16px; border-radius:999px; cursor:pointer; opacity:.62; }
+    .sg-diff-btn.is-on { background:var(--grad-fire); color:#1a0d06; opacity:1; }
+    .sg-diff-btn[data-diff="easy"].is-on { background:linear-gradient(135deg,#8fd14a,#5ba62f); color:#0c1406; }
+    .sg-diff-btn[data-diff="hard"].is-on { background:linear-gradient(135deg,#b03a3a,#7a1f1f); color:#fff; }
+    .sg-diff-desc { font:600 .78rem Inter, sans-serif; color:var(--ink-dim,#9fb0bd); min-height:1em; text-align:center; max-width:280px; }
+    .sg-wallet { font:700 .9rem Inter, sans-serif; color:#ffd24a; background:rgba(255,210,74,.08); border:1px solid rgba(255,210,74,.3); border-radius:999px; padding:7px 16px; }
+    .sg-wallet[hidden] { display:none; }
     .sg-loop-ind { position:absolute; right:10px; top:60px; z-index:6; background:rgba(34,18,12,.82); border:1px solid var(--brand); border-radius:999px; padding:4px 11px; font:700 .66rem Inter; letter-spacing:.04em; color:var(--accent); }
     .sg-loop-ind[hidden] { display:none; }
     .sg-buff-ind { position:absolute; right:10px; top:88px; z-index:6; background:rgba(13,17,22,.82); border:1px solid var(--line-strong); border-radius:999px; padding:4px 11px; font:700 .8rem Inter; letter-spacing:.02em; color:var(--ink); }
@@ -231,7 +239,7 @@
     <div class="sg-hud">
       <div class="pill wave"><div class="k">Wave</div><div class="v" id="waveVal">1</div></div>
       <div class="pill"><div class="k">Level</div><div class="v" id="lvlVal" style="color:#8fd14a">1</div><div class="sg-xp"><i id="xpFill"></i></div></div>
-      <div class="pill"><div class="k">Coins</div><div class="v" id="coinVal" style="color:#ffd24a">0</div></div>
+      <div class="pill"><div class="k">🪙 Gold</div><div class="v" id="coinVal" style="color:#ffd24a">0</div></div>
       <div class="pill score"><div class="k">Score</div><div class="v" id="scoreVal">0</div></div>
     </div>
     <div class="sg-bars">
@@ -280,7 +288,7 @@
         <button class="sg-btn" id="resumeBtn">▶ Resume</button>
         <label class="sg-toggle" id="pauseAutoWrap" hidden style="margin-top:12px"><input type="checkbox" id="pauseAutoToggle"><span>👆 Auto‑pick upgrades</span></label>
         <button class="sg-btn ghost" id="pauseRestartBtn" style="margin-top:10px">↻ Restart</button>
-        <button class="sg-btn ghost" id="pauseEndBtn" style="margin-top:10px">🏳️ End run (score it)</button>
+        <button class="sg-btn ghost" id="pauseEndBtn" style="margin-top:10px">🏳️ End run · bank Gold 🪙</button>
       </div>
 
       <div class="sg-ov show" id="startOv">
@@ -288,8 +296,14 @@
         <h1>Sprinkler <span class="grad">Siege</span></h1>
         <p>Defend the core. Hold the line.</p>
         <div class="sg-opts">
-          <label class="sg-toggle"><input type="checkbox" id="easyToggle"><span>🍃 Easy Mode</span></label>
-          <label class="sg-toggle" id="autoWrap" hidden><input type="checkbox" id="autoToggle"><span>👆 Auto‑pick upgrades</span></label>
+          <div class="sg-diff" id="diffSel" role="group" aria-label="Difficulty">
+            <button type="button" class="sg-diff-btn" data-diff="easy">🍃 Easy</button>
+            <button type="button" class="sg-diff-btn is-on" data-diff="normal">🔥 Normal</button>
+            <button type="button" class="sg-diff-btn" data-diff="hard">💀 Hard</button>
+          </div>
+          <div id="diffDesc" class="sg-diff-desc">Standard challenge.</div>
+          <label class="sg-toggle" id="autoWrap"><input type="checkbox" id="autoToggle"><span>👆 Auto‑pick upgrades</span></label>
+          <div id="goldWallet" class="sg-wallet" hidden>🪙 <b>0</b> Gold banked</div>
         </div>
         <button class="sg-btn" id="playBtn">▶ Start the siege</button>
         <button class="sg-btn ghost" id="howBtn" style="margin-top:10px">📖 How to play</button>
@@ -299,7 +313,7 @@
         <h1>How to <span class="grad">play</span></h1>
         <div class="sg-how">
           <p>You're the brass upright in the center. <b>Tap and hold</b> to spray — but the supply is weak (~7 psi static), so residual pressure drops as more heads open.</p>
-          <p>Put out fires to earn <b>coins</b> and <b>level up</b>. Leveling unlocks stronger sprinkler types (laser last, ~level 5). Tap <b>🔧 Build</b> to spend coins placing them in a slot, and grab the end-of-wave <b>upgrade cards</b> (K-factor, supply, specials).</p>
+          <p>Put out fires to earn <b>🪙 Gold</b> and <b>level up</b>. Leveling unlocks stronger sprinkler types (laser last, ~level 5). Tap <b>🔧 Build</b> to add them to a slot — free, but each takes <b>~one wave to install</b> (demolishing takes a wave too). Grab the end-of-wave <b>upgrade cards</b> (K-factor, supply, specials). <b>Gold banks only when you END a run manually</b> — get overrun and you lose that run's Gold.</p>
           <p><b>Green splitters</b> break into two when doused; from wave 10, <b>blue ELO flames</b> shrug off small heads — only K11.2+ can put them out. Hold to wave 15 for the boss — then <b>Act 2</b> brings grease fires (only foam works), ember swarms, backdraft, and hazards.</p>
         </div>
         <button class="sg-btn" id="howClose" style="margin-top:14px">Got it</button>
@@ -385,7 +399,13 @@
     var wave = 1, score = 0, integrity = 100, water = 330, maxWater = 330, holding = false;
     var spawnQueue = 0, spawnT = 0, bossPending = false, bossAlive = false, waveSpawnTotal = 1;
     var pumpLevel = 0, tankLevel = 0, nextSupplyPump = false, pendingSupplyPump = false, dryFlash = false, nowT = 0;
-    var easyMode = false, autoPick = false;   // Easy Mode (locked at game start): +50% dmg, -50% dmg taken, +50% water, upgrade hints; autoPick auto-selects
+    var easyMode = false, hardMode = false, difficulty = "normal", autoPick = false;   // difficulty locked at game start. Easy: +50% dmg, −50% dmg taken, +50% water. Hard: tankier + harder-hitting enemies, +50% Gold, no auto-pick. autoPick (Easy/Normal only) auto-selects upgrades.
+    function diffHpMul() { return hardMode ? 1.6 : 1; }      // Hard: enemies +60% HP
+    function goldMul() { return hardMode ? 1.5 : 1; }        // Hard: +50% Gold earned
+    var gold = 0;                              // persistent wallet (sg_gold) — earned each run as "coins", banked only when you END A RUN MANUALLY (lost if overrun)
+    try { gold = parseInt(localStorage.getItem("sg_gold"), 10) || 0; } catch (e) {}
+    function saveGold() { try { localStorage.setItem("sg_gold", String(gold)); } catch (e) {} }
+    var lastWaveDur = 16, waveClock = 0;       // build/demolish take ~one wave's length; tracked from the previous wave's playing time
     // special upgrades: refill rate ×, spray reach ×, integrity shield pool, Hollywood charges/timer
     var tankFillMult = 1, shield = 0, hollywoodCharges = 0, hollywoodT = 0;
     var overloadT = 0, overloadCd = 0;   // Overload Fire Pump: 15s ×1.5 damage, 60s cooldown
@@ -598,6 +618,7 @@
     function takeDamage(d) {
       d *= 0.8;                                          // global ease: softer core hits
       if (easyMode) d *= 0.5;                            // Easy Mode: half damage taken
+      if (hardMode) d *= 1.5;                            // Hard Mode: enemies hit 50% harder
       if (shield > 0) { var a = Math.min(shield, d); shield -= a; d -= a; }
       if (d > 0) {
         integrity -= d; if (integrity < 0) integrity = 0;
@@ -731,7 +752,7 @@
         use: function () { integrity = 100; sparkleHeal(W / 2, H / 2, "#3ddc97"); spawnFloat(W / 2, H / 2 - coreR * 1.2, "🛡️ CORE REPAIRED", "#7ef2b0", 1.7); } },
       pump: { e: "⚙️", icon: "icon-reward-pump", n: "Pump Boost", d: "+1 Fire Pump level",
         use: function () { if (pumpLevel < PUMP_MAX) applyPump(); else { coins += 200; spawnFloat(W / 2, H / 2 - coreR * 1.2, "💰 +200", "#ffd24a", 1.4); } } },
-      coins: { e: "💰", icon: "icon-reward-coins", n: "Salvage", d: "+250 coins to build with",
+      coins: { e: "💰", icon: "icon-reward-coins", n: "Salvage", d: "+250 Gold",
         use: function () { coins += 250; sparkleHeal(W / 2, H / 2, "#ffd24a"); spawnFloat(W / 2, H / 2 - coreR * 1.2, "💰 +250", "#ffd24a", 1.6); } },
       kboost: { e: "⭐", icon: "icon-reward-veteran", n: "Crew Boost", d: "Every head +1 K-factor tier",
         use: function () { var any = false; for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (s.state === "active" && s.kTier < KLADDER.length - 1) { s.kTier++; s.flash = 0.6; any = true; } } if (!any) coins += 200; sparkleHeal(W / 2, H / 2, "#8fd14a"); spawnFloat(W / 2, H / 2 - coreR * 1.2, "⭐ CREW BOOST", "#8fd14a", 1.6); } }
@@ -795,7 +816,7 @@
     function startWave(n) {
       wave = n; state = "playing";
       integrity = Math.min(100, integrity + 12);
-      waveDmg = 0; waveCombatT = 0;             // reset the running Avg. DPS each wave
+      waveDmg = 0; waveCombatT = 0; waveClock = 0;   // reset the running Avg. DPS + wave-length clock each wave
       for (var hi = 0; hi < slots.length; hi++) { slots[hi].dmgWave = 0; slots[hi].healWave = 0; }   // reset per-head DPS readout
       if (bossPending) { bossPending = false; bossAlive = true; spawnBoss(); spawnQueue = 0; }
       else { bossAlive = false; var cnt = (currentAct >= 2 ? 4 + Math.round(n * 1.6) : 4 + n * 2) * 1.15; spawnQueue = Math.round(cnt * (1 + loopN * ENDLESS_CNT)); }   // Act 2: fewer enemies per wave; +15% longer rounds; Endless: more each loop
@@ -822,7 +843,7 @@
       $("pauseBtn").hidden = false; $("ffBtn").hidden = false;
       updateHollywoodBtn();
       if (wave === 1) { tipOnce("spray", "💧 Hold anywhere to spray your sprinklers."); showSoundNudge(); }
-      else if (wave === 2) tipOnce("build", "🔧 Tap Build (bottom bar) to spend coins on new sprinklers.");
+      else if (wave === 2) tipOnce("build", "🔧 Tap Build (bottom bar) to add sprinklers — free, but each takes ~one wave to install. New types unlock as you level up.");
       else if (hazard) showBanner(hazard.name + " — " + hazard.desc, 3.5, "var(--accent)");
     }
     function xpProgress() { return (xp % XP_PER_LEVEL) / XP_PER_LEVEL; }   // progress (0..1) toward the next level
@@ -875,7 +896,7 @@
       noteSeen(type);   // first-encounter telegraph banner
       var ang = Math.random() * Math.PI * 2, m = S * 0.62 / viewScale;
       var x = W / 2 + Math.cos(ang) * m, y = H / 2 + Math.sin(ang) * m;
-      var base = (26 + effWave() * 13) * ENEMY_HP;   // Endless: effWave keeps HP ramping across loops
+      var base = (26 + effWave() * 13) * ENEMY_HP * diffHpMul();   // Endless: effWave keeps HP ramping across loops; Hard: +60% HP
       if (type === "ember") {                                 // a cluster of small fast sparks
         var n = 4 + Math.floor(Math.random() * 3);
         for (var k = 0; k < n; k++) { var a2 = ang + (Math.random() - 0.5) * 0.7, mm = m * (0.88 + Math.random() * 0.24); enemies.push({ x: W / 2 + Math.cos(a2) * mm, y: H / 2 + Math.sin(a2) * mm, hp: base * 0.32, max: base * 0.32, spd: (34 + wave * 2.6) * (S / 400), sz: S * 0.034, boss: false, t: Math.random() * 9, hit: 0, type: "ember", minTier: 0, coreDmg: 5, splits: false }); }
@@ -900,14 +921,16 @@
     }
     function spawnBoss() {
       var ang = Math.random() * Math.PI * 2, m = S * 0.62 / viewScale, cx = W / 2 + Math.cos(ang) * m, cy = H / 2 + Math.sin(ang) * m;
-      if (currentAct >= 4) { var bh4 = Math.round(30000 * ENEMY_HP * endlessMul()); enemies.push({ x: cx, y: cy, hp: bh4, max: bh4, spd: 12 * (S / 400), sz: S * 0.17, boss: true, glacier: true, frost: true, t: 0, mt: 0, fz: 0, phase: 1, type: "boss", minTier: 0, coreDmg: 34, splits: false }); }   // The Glacier (frost minions + freeze attacks)
-      else if (currentAct >= 3) { var bh3 = Math.round(24000 * ENEMY_HP * endlessMul()); enemies.push({ x: cx, y: cy, hp: bh3, max: bh3, spd: 13 * (S / 400), sz: S * 0.16, boss: true, meltdown: true, t: 0, mt: 0, phase: 1, type: "boss", minTier: 0, coreDmg: 32, splits: false }); }   // The Meltdown (cycles Class C → B → flashover)
-      else if (currentAct >= 2) { var bh2 = Math.round(16000 * ENEMY_HP * endlessMul()); enemies.push({ x: cx, y: cy, hp: bh2, max: bh2, spd: 14 * (S / 400), sz: S * 0.15, boss: true, conflag: true, t: 0, mt: 0, phase: 1, type: "boss", minTier: 0, coreDmg: 30, splits: false }); }   // The Conflagration (multi-phase)
-      else { var bh1 = Math.round(6500 * ENEMY_HP * endlessMul()); enemies.push({ x: cx, y: cy, hp: bh1, max: bh1, spd: 16 * (S / 400), sz: S * 0.13, boss: true, t: 0, mt: 0, phase: 1, type: "boss", minTier: 0, coreDmg: 28, splits: false }); }
+      if (currentAct >= 4) { var bh4 = Math.round(30000 * ENEMY_HP * endlessMul() * diffHpMul()); enemies.push({ x: cx, y: cy, hp: bh4, max: bh4, spd: 12 * (S / 400), sz: S * 0.17, boss: true, glacier: true, frost: true, t: 0, mt: 0, fz: 0, phase: 1, type: "boss", minTier: 0, coreDmg: 34, splits: false }); }   // The Glacier (frost minions + freeze attacks)
+      else if (currentAct >= 3) { var bh3 = Math.round(24000 * ENEMY_HP * endlessMul() * diffHpMul()); enemies.push({ x: cx, y: cy, hp: bh3, max: bh3, spd: 13 * (S / 400), sz: S * 0.16, boss: true, meltdown: true, t: 0, mt: 0, phase: 1, type: "boss", minTier: 0, coreDmg: 32, splits: false }); }   // The Meltdown (cycles Class C → B → flashover)
+      else if (currentAct >= 2) { var bh2 = Math.round(16000 * ENEMY_HP * endlessMul() * diffHpMul()); enemies.push({ x: cx, y: cy, hp: bh2, max: bh2, spd: 14 * (S / 400), sz: S * 0.15, boss: true, conflag: true, t: 0, mt: 0, phase: 1, type: "boss", minTier: 0, coreDmg: 30, splits: false }); }   // The Conflagration (multi-phase)
+      else { var bh1 = Math.round(6500 * ENEMY_HP * endlessMul() * diffHpMul()); enemies.push({ x: cx, y: cy, hp: bh1, max: bh1, spd: 16 * (S / 400), sz: S * 0.13, boss: true, t: 0, mt: 0, phase: 1, type: "boss", minTier: 0, coreDmg: 28, splits: false }); }
     }
 
     function update(dt) {
       if (state !== "playing") return;
+      waveClock += dt;                          // measure this wave's playing length (for build/demolish timing)
+      tickBuilds(dt);                           // advance any heads under construction / teardown
       // spawn
       if (spawnQueue > 0) { spawnT += dt; if (spawnT >= Math.max(0.35, 1.1 - wave * 0.03)) { spawnT = 0; spawnQueue--; spawnEdge(); } }
       // --- hydraulics: standard heads fire on hold; specials auto-fire when a flame is in range ---
@@ -1068,7 +1091,7 @@
         if (e.hp <= 0) {
           extinguishSfx();
           score += e.boss ? 600 : e.type === "elo" ? 30 + wave : e.type === "splitter" ? 8 + wave : 10 + wave;
-          coins += e.boss ? COIN_BOSS : COIN_KILL; xp += e.boss ? XP_BOSS : XP_KILL; kills++; checkUnlocks();   // putting out fires earns coins + XP
+          coins += Math.round((e.boss ? COIN_BOSS : COIN_KILL) * goldMul()); xp += e.boss ? XP_BOSS : XP_KILL; kills++; checkUnlocks();   // putting out fires earns Gold + XP (Hard: +50% Gold)
           var burstC = e.type === "elo" ? "#bfe0ff" : e.type === "splitter" ? "#bdf7c4" : "#cdf2ff";
           for (var p = 0; p < (e.boss ? 46 : 12); p++) { var an = Math.random() * Math.PI * 2, sp = 50 + Math.random() * 150, lf = 0.4 + Math.random() * 0.35; particles.push({ x: e.x, y: e.y, vx: Math.cos(an) * sp, vy: Math.sin(an) * sp, life: lf, max: lf, r: 2 + Math.random() * 2.6, c: burstC, spray: true }); }
           if (e.splits) { spawnChild(e.x, e.y, e.max * 0.42); spawnChild(e.x, e.y, e.max * 0.42); }
@@ -1181,7 +1204,8 @@
     }
     function waveComplete() {
       if (buffSurge > 0) buffSurge--; if (buffFlood > 0) buffFlood--; if (buffFreeze > 0) buffFreeze--; updateBuffInd();   // tick down temporary buffs
-      coins += COIN_WAVE; xp += XP_WAVE; checkUnlocks(); hud();   // finishing a wave earns coins + XP
+      lastWaveDur = Math.max(8, waveClock);   // remember this wave's length so build/demolish take ~one wave
+      coins += Math.round(COIN_WAVE * goldMul()); xp += XP_WAVE; checkUnlocks(); hud();   // finishing a wave earns Gold + XP (Hard: +50% Gold)
       if (wave >= bossWaveFor(currentAct) && !bossAlive) { bossPending = true; startWave(wave + 1); return; }
       state = "upgrade";
       $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true;
@@ -1261,6 +1285,31 @@
       if (pendingType !== "standard") { var wb = SPECIAL_WATER_BONUS * (easyMode ? 1.5 : 1) * WATER_BUFF; maxWater += wb; water = Math.min(maxWater, water + wb); }
       best.flash = 0.6;
     }
+    // ---- timed construction: placing or demolishing a head takes ~one wave's length (counts only while playing) ----
+    function buildDur() { return Math.max(8, lastWaveDur); }
+    function startBuild(slot, ty) {
+      slot.state = "building"; slot.type = ty; slot.kTier = 0; slot.q = 0; slot.ec = false; slot.hp = false; slot.fr = false; slot.aim = 0; slot.foamOpen = 0; slot.moonOpen = 0; slot.dmgWave = 0; slot.healWave = 0; slot.flash = 0.6;
+      slot.build = { mode: "build", type: ty, t: buildDur(), dur: buildDur() };
+      if (ty === "corridor") slot.axis = Math.random() < 0.5 ? "x" : "y";
+      if (ty === "lawn") { slot.aim0 = Math.atan2(H / 2 - slot.y, W / 2 - slot.x); slot.sweep = 0; slot.swPhase = "fwd"; slot.rotLocked = false; }   // aim chosen now; head materializes when built
+      spawnFloat(slot.x, slot.y - gap * 0.4, "🔧 BUILDING…", "#6cd6f2", 1.3);
+    }
+    function startDemolish(slot) {
+      slot.build = { mode: "demolish", t: buildDur(), dur: buildDur() }; slot.state = "demolishing"; slot.firing = false; slot.q = 0; slot.flash = 0.6;
+      spawnFloat(slot.x, slot.y - gap * 0.4, "🧨 REMOVING…", "#ff5a4f", 1.3);
+    }
+    function finalizeBuild(slot) {
+      var b = slot.build; slot.build = null;
+      if (b.mode === "demolish") { slot.state = "locked"; slot.type = null; slot.kTier = 0; slot.q = 0; slot.ec = slot.hp = slot.fr = false; slot.dmgWave = 0; slot.healWave = 0; slot.flash = 0.6; spawnFloat(slot.x, slot.y - gap * 0.4, "🧨 CLEARED", "#ff5a4f", 1.4); return; }
+      slot.state = "active";
+      if (b.type !== "standard") { var wb = SPECIAL_WATER_BONUS * (easyMode ? 1.5 : 1) * WATER_BUFF; maxWater += wb; water = Math.min(maxWater, water + wb); }   // special heads add tank capacity (granted on completion)
+      slot.flash = 0.7; spawnFloat(slot.x, slot.y - gap * 0.4, "✅ READY", "#8fd14a", 1.4);
+      if (activeSlots().length >= 3) tipOnce("pressure", "Heads share one supply — more open heads = less pressure each. Add a Pump or raise K-factor.");
+    }
+    function tickBuilds(dt) {
+      for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (s.build) { s.build.t -= dt; if (s.build.t <= 0) finalizeBuild(s); } }
+    }
+    function buildBusy() { return slots.some(function (s) { return !!s.build; }); }   // a slot is mid-construction/teardown
     function autoPickKind(kind) {
       selectKind = kind; var elig = slots.filter(selectEligible); selectKind = null;
       if (elig.length) { elig.sort(function (a, b) { return b.kTier - a.kTier; }); applyPickTo(elig[0], kind); }
@@ -1279,32 +1328,31 @@
     }
     function renderBuild() {
       var box = $("buildChoices"); if (!box) return;
-      var hasPlug = lockedCount() > 0, rec = recommendBuild();
-      $("buildCoins").textContent = "💰 " + coins.toLocaleString() + " coins" + (hasPlug ? "" : " · all slots full");
+      var hasPlug = lockedCount() > 0, busy = buildBusy(), rec = recommendBuild(), canPlace = hasPlug && !busy;
+      $("buildCoins").textContent = busy ? "🔧 A head is being installed — wait for it to finish" : (hasPlug ? "Free to build — installs over ~one wave. Higher levels unlock more heads." : "All slots full — demolish a head to free one");
       box.innerHTML = "";
       var types = ["standard"].concat(UNLOCK_ORDER.filter(function (t) { return unlocked[t]; }));
       if (currentAct >= 4 || loopN >= 1) types.push("dry");   // Dry sprinkler buildable in Act 4 / Endless (survives Freeze Overs)
       types.forEach(function (ty) {
-        var cost = placeCost(ty), aff = coins >= cost && hasPlug;
         var card = document.createElement("div");
-        card.className = "bcard" + (aff ? "" : " dim") + (ty === rec ? " rec" : "");
-        card.innerHTML = '<div class="e">' + headMenuIco(ty) + '</div><div class="t">' + headLabel(ty, 0) + '</div><div class="c">💰 ' + cost + '</div>' + (ty === rec ? '<div class="recbadge">★ vs grease</div>' : '');
-        card.onclick = function () { if (state === "build" && coins >= cost && lockedCount() > 0) buildPlace(ty, cost); };
+        card.className = "bcard" + (canPlace ? "" : " dim") + (ty === rec ? " rec" : "");
+        card.innerHTML = '<div class="e">' + headMenuIco(ty) + '</div><div class="t">' + headLabel(ty, 0) + '</div><div class="c">⏱ 1 wave</div>' + (ty === rec ? '<div class="recbadge">★ vs grease</div>' : '');
+        card.onclick = function () { if (state === "build" && canPlace) buildPlace(ty); };
         box.appendChild(card);
       });
-      $("buildDemolishBtn").hidden = activeSlots().length < 1;   // demolish needs a head to remove
+      $("buildDemolishBtn").hidden = activeSlots().length < 1 || busy;   // demolish needs a head to remove and no build in progress
     }
     function beginDemolish() {
-      if (activeSlots().length < 1) return;
+      if (activeSlots().length < 1 || buildBusy()) return;
       selectKind = "demolish"; state = "select";
       $("buildOv").classList.remove("show");
-      $("selectPrompt").textContent = "🧨 Tap a head to demolish (no refund) — then build a new one"; $("selectPrompt").hidden = false;
+      $("selectPrompt").textContent = "🧨 Tap a head to remove — teardown takes ~one wave"; $("selectPrompt").hidden = false;
     }
-    function buildPlace(ty, cost) {
-      if (coins < cost || lockedCount() === 0) return;
-      pendingType = ty; pendingCost = cost; selectKind = "place"; state = "select";
+    function buildPlace(ty) {
+      if (lockedCount() === 0 || buildBusy()) return;
+      pendingType = ty; selectKind = "place"; state = "select";
       $("buildOv").classList.remove("show");
-      $("selectPrompt").textContent = "👆 Tap a slot to place " + headLabel(ty, 0) + " (💰" + cost + ")"; $("selectPrompt").hidden = false;
+      $("selectPrompt").textContent = "👆 Tap a slot to build " + headLabel(ty, 0) + " — installs over ~one wave"; $("selectPrompt").hidden = false;
     }
     function resumeFromBuild() {
       $("buildOv").classList.remove("show"); state = "playing"; last = 0;
@@ -1346,13 +1394,13 @@
       var best = null, bd = 1e9;
       for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (!selectEligible(s)) continue; var d = Math.hypot(tx - s.x, ty - s.y); if (d < bd) { bd = d; best = s; } }
       var hit = best && bd < gap * 0.7;
-      if (selectKind === "place") {                         // building: tap a slot to place (tap elsewhere cancels)
-        if (hit && coins >= pendingCost) { coins -= pendingCost; placeUnlock(best); hud(); if (activeSlots().length >= 3) tipOnce("pressure", "Heads share one supply — more open heads = less pressure each. Add a Pump or raise K-factor."); selectKind = null; $("selectPrompt").hidden = true; if (best.type === "lawn") beginLawnRotate(best); else openBuild(); }
+      if (selectKind === "place") {                         // building: tap a slot to start a one-wave install (tap elsewhere cancels)
+        if (hit) { startBuild(best, pendingType); hud(); selectKind = null; $("selectPrompt").hidden = true; if (best.type === "lawn") beginLawnRotate(best); else openBuild(); }
         else { selectKind = null; $("selectPrompt").hidden = true; openBuild(); }   // cancel → back to build panel
         return;
       }
-      if (selectKind === "demolish") {                       // demolish: tap a head to clear it back to a plug, then rebuild
-        if (hit) { best.state = "locked"; best.kTier = 0; best.q = 0; best.type = null; best.ec = best.hp = best.fr = false; best.dmgWave = 0; best.healWave = 0; best.flash = 0.6; spawnFloat(best.x, best.y - gap * 0.4, "🧨 DEMOLISHED", "#ff5a4f", 1.4); }
+      if (selectKind === "demolish") {                       // demolish: tap a head to begin a one-wave teardown back to a plug
+        if (hit) { startDemolish(best); }
         selectKind = null; $("selectPrompt").hidden = true; openBuild();
         return;
       }
@@ -1398,9 +1446,10 @@
       overloadT = 15; overloadCd = 60; spawnFloat(W / 2, H / 2 - coreR * 1.2, "⚡ OVERLOAD ×1.5", "#ff5a2f", 1.8); updateAbar();
     }
 
-    function gameOver() { state = "over"; $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("loopInd").hidden = true; $("buffInd").hidden = true; $("headStats").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); $("finalExtra").textContent = "Reached Level " + playerLevel + " · doused " + kills.toLocaleString() + " fires" + (currentAct >= 2 ? " · made it to Act " + currentAct : ""); pendingScore = score; $("overOv").classList.add("show"); mountLb("overOv", "againBtn"); }
-    function win() { state = "win"; $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("loopInd").hidden = true; $("buffInd").hidden = true; $("headStats").hidden = true; $("winScore").textContent = score.toLocaleString(); $("winExtra").textContent = "Reached Level " + playerLevel + " · doused " + kills.toLocaleString() + " fires"; pendingScore = score; $("winOv").classList.add("show"); mountLb("winOv", "winAgainBtn"); }
-    function pauseGame() { if (state !== "playing") return; state = "paused"; holding = false; $("pauseOv").classList.add("show"); $("abar").hidden = true; $("ffBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("loopInd").hidden = true; $("buffInd").hidden = true; $("pauseAutoWrap").hidden = !easyMode; $("pauseAutoToggle").checked = autoPick; }
+    function gameOver(manualEnd) { state = "over"; var earned = bankRun(manualEnd); $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("loopInd").hidden = true; $("buffInd").hidden = true; $("headStats").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); $("finalExtra").innerHTML = "Reached Level " + playerLevel + " · doused " + kills.toLocaleString() + " fires" + (currentAct >= 2 ? " · made it to Act " + currentAct : "") + "<br>" + (manualEnd ? '<span style="color:#ffd24a">🪙 +' + earned.toLocaleString() + ' Gold banked (' + gold.toLocaleString() + ' total)</span>' : '<span style="color:#ff8f6a">💀 Overrun — ' + earned.toLocaleString() + ' Gold lost</span>'); pendingScore = score; $("overOv").classList.add("show"); mountLb("overOv", "againBtn"); }
+    function bankRun(manualEnd) { var earned = coins; if (manualEnd) { gold += earned; saveGold(); refreshWallet(); } coins = 0; return earned; }   // Gold persists only if you END a run manually; overrun forfeits this run's earnings
+    function win() { state = "win"; var earned = bankRun(true); $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("loopInd").hidden = true; $("buffInd").hidden = true; $("headStats").hidden = true; $("winScore").textContent = score.toLocaleString(); $("winExtra").innerHTML = "Reached Level " + playerLevel + " · doused " + kills.toLocaleString() + " fires<br><span style=\"color:#ffd24a\">🪙 +" + earned.toLocaleString() + " Gold banked (" + gold.toLocaleString() + " total)</span>"; pendingScore = score; $("winOv").classList.add("show"); mountLb("winOv", "winAgainBtn"); }
+    function pauseGame() { if (state !== "playing") return; state = "paused"; holding = false; $("pauseOv").classList.add("show"); $("abar").hidden = true; $("ffBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("loopInd").hidden = true; $("buffInd").hidden = true; $("pauseAutoWrap").hidden = hardMode; $("pauseAutoToggle").checked = autoPick; }
     function resumeGame() { if (state !== "paused") return; state = "playing"; last = 0; $("pauseOv").classList.remove("show"); $("easyInd").hidden = !easyMode; $("loopInd").hidden = loopN < 1; updateBuffInd(); $("ffBtn").hidden = false; updateHollywoodBtn(); }
 
     // ---- rendering ----
@@ -1448,7 +1497,18 @@
         ctx.save(); ctx.globalAlpha = pul; ctx.setLineDash([5, 4]); ctx.lineWidth = 3; ctx.strokeStyle = "#ffb03a";
         ctx.beginPath(); ctx.arc(x, y, pr, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
       }
-      if (!active) { drawPlug(x, y, r); return; }                 // empty slot = square head plug on the pipe
+      if (!active) {
+        if (s.build) {                                            // head under construction / teardown — plug + ghost + progress ring
+          drawPlug(x, y, r);
+          var prog = 1 - Math.max(0, s.build.t) / s.build.dur, dem = s.build.mode === "demolish", col = dem ? "#ff5a4f" : "#6cd6f2";
+          ctx.save(); ctx.globalAlpha = 0.32; ctx.translate(x, y); ctx.scale(0.7 + 0.3 * prog, 0.7 + 0.3 * prog); drawDeflector(0, 0, r, s); ctx.restore();
+          ctx.save(); ctx.lineWidth = Math.max(2.5, r * 0.22); ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.beginPath(); ctx.arc(x, y, r + 7, 0, Math.PI * 2); ctx.stroke();
+          ctx.strokeStyle = col; ctx.beginPath(); ctx.arc(x, y, r + 7, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * prog); ctx.stroke();
+          ctx.fillStyle = col; ctx.font = "700 " + Math.round(r * 0.7) + "px Inter, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(dem ? "🧨" : "🔧", x, y - r - 14); ctx.restore();
+          return;
+        }
+        drawPlug(x, y, r); return;                                // empty slot = square head plug on the pipe
+      }
       drawHeadField(s, x, y, r, ty);                               // coverage / firing visuals
       if (dryFlash) { var dp = 0.35 + 0.35 * Math.sin(nowT * 0.02); ctx.globalAlpha = dp; ctx.strokeStyle = "#ff5a4f"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, r + 6, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1; }
       if (s.kTier > 0) { ctx.strokeStyle = "rgba(108,214,242,0.7)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2); ctx.stroke(); }
@@ -1927,7 +1987,7 @@
     canvas.addEventListener("pointercancel", endPress);
 
     function reset() {
-      for (var i = 0; i < slots.length; i++) { var ctr = slots[i].c === 1 && slots[i].r === 1; slots[i].state = ctr ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].hurt = 0; slots[i].ec = false; slots[i].hp = false; slots[i].fr = false; slots[i].type = ctr ? "standard" : null; slots[i].aim = 0; slots[i].dmgWave = 0; slots[i].healWave = 0; slots[i].frozenT = 0; }
+      for (var i = 0; i < slots.length; i++) { var ctr = slots[i].c === 1 && slots[i].r === 1; slots[i].state = ctr ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].hurt = 0; slots[i].ec = false; slots[i].hp = false; slots[i].fr = false; slots[i].type = ctr ? "standard" : null; slots[i].aim = 0; slots[i].dmgWave = 0; slots[i].healWave = 0; slots[i].frozenT = 0; slots[i].build = null; }
       enemies = []; particles = []; floats = []; foamPiles = []; laserShots = []; sparkles = []; items = []; flowers = []; shatters = []; currentAct = 1; loopN = 0; buffSurge = 0; buffFlood = 0; buffFreeze = 0; freezeWave = false; freezeT = 0; freezeFlash = 0; score = 0; integrity = 100; maxWater = Math.round(330 * (easyMode ? 1.5 : 1) * WATER_BUFF); water = maxWater; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
       tankFillMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0; overloadT = 0; overloadCd = 0; selectKind = null; hurtT = 0; dpsNow = 0; dpsShown = 0;
       gameSpeed = 1; inspectSlot = null; pressSlot = null; lastTapSlot = null; rotSlot = null; rotDragging = false; $("ffBtn").textContent = "▶▶"; $("ffBtn").classList.remove("on"); $("rotOkBtn").hidden = true;
@@ -1937,19 +1997,33 @@
       updatePumpIcons(); $("dpsMeter").hidden = true; $("abar").hidden = true; $("headStats").hidden = true; headRowEls = {}; if ($("headRows")) $("headRows").innerHTML = ""; $("unlockCard").hidden = true; clearTimeout(unlockTimer); $("soundNudge").hidden = true; clearTimeout(soundNudgeTimer);
     }
     function newGame() {
-      easyMode = !!($("easyToggle") && $("easyToggle").checked);          // locked for the whole run
-      autoPick = easyMode && !!($("autoToggle") && $("autoToggle").checked);
+      var btn = document.querySelector("#diffSel .sg-diff-btn.is-on");                 // difficulty locked for the whole run
+      difficulty = btn ? btn.getAttribute("data-diff") : "normal";
+      easyMode = difficulty === "easy"; hardMode = difficulty === "hard";
+      autoPick = difficulty !== "hard" && !!($("autoToggle") && $("autoToggle").checked);   // Hard mode never auto-picks
       resize(); reset(); hud(); startWave(1); ["overOv","winOv","startOv","upgradeOv","pauseOv"].forEach(function (id) { $(id).classList.remove("show"); });
     }
 
-    // Easy Mode toggles (remembered between sessions; auto-pick only shows when Easy is on)
+    // Difficulty selector + auto-pick toggle (remembered between sessions). Auto-pick offered on Easy/Normal, hidden on Hard.
+    var DIFF_DESC = { easy: "Gentler: +50% damage, −50% damage taken, more water. Auto-pick allowed.", normal: "Standard challenge. Auto-pick allowed.", hard: "Tankier enemies that hit harder. No auto-pick — but +50% Gold." };
     (function () {
-      var et = $("easyToggle"), at = $("autoToggle"), aw = $("autoWrap"); if (!et) return;
-      try { et.checked = localStorage.getItem("sg_easy") === "1"; at.checked = localStorage.getItem("sg_auto") === "1"; } catch (e) {}
-      aw.hidden = !et.checked;
-      et.onchange = function () { aw.hidden = !et.checked; try { localStorage.setItem("sg_easy", et.checked ? "1" : "0"); } catch (e) {} };
+      var sel = $("diffSel"), at = $("autoToggle"), aw = $("autoWrap"), dd = $("diffDesc"); if (!sel) return;
+      var saved = "normal"; try { saved = localStorage.getItem("sg_diff") || "normal"; at.checked = localStorage.getItem("sg_auto") === "1"; } catch (e) {}
+      function paint(d) {
+        var btns = sel.querySelectorAll(".sg-diff-btn");
+        for (var i = 0; i < btns.length; i++) btns[i].classList.toggle("is-on", btns[i].getAttribute("data-diff") === d);
+        if (dd) dd.textContent = DIFF_DESC[d] || "";
+        aw.hidden = d === "hard";
+      }
+      paint(saved);
+      sel.addEventListener("click", function (e) {
+        var b = e.target.closest(".sg-diff-btn"); if (!b) return;
+        var d = b.getAttribute("data-diff"); paint(d); try { localStorage.setItem("sg_diff", d); } catch (err) {}
+      });
       at.onchange = function () { try { localStorage.setItem("sg_auto", at.checked ? "1" : "0"); } catch (e) {} };
+      refreshWallet();
     })();
+    function refreshWallet() { var w = $("goldWallet"); if (!w) return; var b = w.querySelector("b"); if (b) b.textContent = gold.toLocaleString(); w.hidden = gold <= 0; }
     // ---- audio: optional looping music (per level) + procedural SFX (spray hiss, flame extinguish) ----
     var musicOn = false, sfxOn = false;
     try { var legacy = localStorage.getItem("sg_sound") === "1"; musicOn = localStorage.getItem("sg_music") === "1" || (legacy && localStorage.getItem("sg_music") === null); sfxOn = localStorage.getItem("sg_sfx") === "1" || (legacy && localStorage.getItem("sg_sfx") === null); } catch (e) {}
@@ -2033,7 +2107,7 @@
     $("pauseBtn").onclick = function () { if (state === "playing") pauseGame(); else if (state === "paused") resumeGame(); };
     $("resumeBtn").onclick = resumeGame;
     $("pauseRestartBtn").onclick = newGame;
-    $("pauseEndBtn").onclick = function () { if (state === "paused") { $("pauseOv").classList.remove("show"); gameOver(); } };
+    $("pauseEndBtn").onclick = function () { if (state === "paused") { $("pauseOv").classList.remove("show"); gameOver(true); } };   // manual end → bank this run's Gold
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" || e.key === "p" || e.key === "P") { if (state === "playing") pauseGame(); else if (state === "paused") resumeGame(); } });
     document.addEventListener("visibilitychange", function () { if (document.hidden) { last = 0; holding = false; pauseGame(); } else { resize(); if (state !== "playing") render(0); } });
     window.addEventListener("load", function () { resize(); if (state !== "playing") render(0); });
