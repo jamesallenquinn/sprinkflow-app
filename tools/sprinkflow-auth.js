@@ -230,4 +230,40 @@
   if (isSignedIn()) ensureFresh();
   setInterval(function () { if (isSignedIn() && !tokenFresh()) refreshSession(); }, 4 * 60 * 1000);
   document.addEventListener("visibilitychange", function () { if (!document.hidden && isSignedIn() && !tokenFresh()) refreshSession(); });
+
+  // ---- app gate: require a free sign-in before the tools/games can be used ----
+  // Opt out on a page with: <body data-no-auth-gate> (none currently do).
+  var gateStyled = false;
+  function gateStyles() {
+    if (gateStyled) return; gateStyled = true;
+    var css =
+      "#sf-gate{position:fixed;inset:0;z-index:80;background:var(--bg,#0d1116);display:flex;align-items:center;justify-content:center;padding:24px;font-family:Inter,system-ui,sans-serif;overflow:auto}" +
+      "#sf-gate .sf-gate-card{max-width:360px;text-align:center;color:var(--ink,#f5f7f8)}" +
+      "#sf-gate .sf-gate-logo{font-size:54px;line-height:1;margin-bottom:8px}" +
+      "#sf-gate h2{font:700 1.5rem 'Space Grotesk',sans-serif;margin:0 0 8px;background:linear-gradient(120deg,#ff5a2f,#ffb03a,#37b7e4);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}" +
+      "#sf-gate p{color:var(--muted,#aab4bd);margin:0 0 20px;line-height:1.5;font-size:.95rem}" +
+      "#sf-gate button{border:0;border-radius:14px;padding:15px 26px;font:700 1.05rem 'Space Grotesk',sans-serif;cursor:pointer;background:linear-gradient(120deg,#ff5a2f,#ffb03a);color:#1a0d06}";
+    var st = document.createElement("style"); st.textContent = css; document.head.appendChild(st);
+  }
+  function removeGate() { var w = document.getElementById("sf-gate"); if (w && w.parentNode) w.parentNode.removeChild(w); }
+  function buildGate() {
+    if (document.getElementById("sf-gate")) return;
+    gateStyles();
+    var w = document.createElement("div"); w.id = "sf-gate";
+    w.innerHTML = '<div class="sf-gate-card"><div class="sf-gate-logo">💧</div>' +
+      '<h2>SprinkFlow Tools</h2>' +
+      '<p>Create a free account or sign in to use the calculators, code references, and games.</p>' +
+      '<button type="button" id="sf-gate-btn">Sign in / Create account</button></div>';
+    document.body.appendChild(w);
+    document.getElementById("sf-gate-btn").onclick = function () { openSignIn({ onSuccess: removeGate }); };
+  }
+  function applyGate() {
+    if (document.body && document.body.hasAttribute("data-no-auth-gate")) return;
+    if (isSignedIn()) { removeGate(); return; }
+    buildGate();
+    openSignIn({ onSuccess: removeGate });   // auto-open the sign-in form over the wall
+  }
+  onChange(function () { if (isSignedIn()) removeGate(); else applyGate(); });
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", applyGate);
+  else applyGate();
 })();
