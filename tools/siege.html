@@ -788,7 +788,7 @@
       for (i2 = 0; i2 < act.length; i2++) {
         var sh = act[i2], fire;
         if (hw) fire = true;
-        else if (typeOf(sh) === "standard") fire = holding || (sh.kTier >= 2 && hasTarget(sh));   // AutoShot: K11.2+ standard heads auto-discharge at flames in range
+        else if (typeOf(sh) === "standard") fire = holding || ((easyMode || sh.kTier >= 2) && hasTarget(sh));   // AutoShot: K11.2+ standard heads auto-discharge (Easy Mode: from the start, even K5.6)
         else fire = hasTarget(sh);              // specials run automatically when they can hit something
         sh.firing = fire; if (fire) firing.push(sh);
       }
