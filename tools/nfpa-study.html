@@ -125,6 +125,10 @@
         <label for="topicSelect" style="margin-top:12px">Focus area</label>
         <select id="topicSelect"></select>
         <div class="count" id="topicCount">—</div>
+        <label class="hidenames" style="display:flex;align-items:center;gap:9px;margin-top:14px;cursor:pointer;font-size:.9rem">
+          <input type="checkbox" id="hideNamesChk" style="width:18px;height:18px;flex:0 0 auto;accent-color:var(--accent)">
+          <span>Hide chapter names in answers <span style="color:var(--muted)">(harder — show "Chapter 9" instead of "Chapter 9 — Sprinkler Location Requirements")</span></span>
+        </label>
       </div>
 
       <button class="btn primary" id="startBtn">▶ Start studying</button>
@@ -216,6 +220,13 @@
     (function () { var saved = null; try { saved = localStorage.getItem("nfpaStudyEdition"); } catch (e) {} if (saved && EDITIONS[saved]) $("editionSelect").value = saved; })();
     rebuildForEdition($("editionSelect").value);
 
+    // ---- "hide chapter names in answers" (harder) ----
+    var hideNames = false;
+    try { hideNames = localStorage.getItem("nfpaStudyHideNames") === "1"; } catch (e) {}
+    $("hideNamesChk").checked = hideNames;
+    $("hideNamesChk").addEventListener("change", function () { hideNames = this.checked; try { localStorage.setItem("nfpaStudyHideNames", hideNames ? "1" : "0"); } catch (e) {} });
+    function answerText(txt) { return hideNames ? String(txt).replace(/^(Chapter\s+\d+)\s*—.*$/, "$1") : txt; }   // strip "— Chapter Name" when hiding names; non-chapter answers unchanged
+
     // ---- study state ----
     var deck = [], ptr = 0, cur = null, seen = 0, correct = 0, streak = 0, locked = false;
     var letters = ["A", "B", "C", "D"];
@@ -285,7 +296,7 @@
       $("explain").classList.add("hidden");
       $("nextWrap").classList.add("hidden");
       $("choices").innerHTML = cur.c.map(function (txt, i) {
-        return '<button class="choice" data-i="' + i + '"><span class="badge">' + letters[i] + '</span><span>' + esc(txt) + '</span></button>';
+        return '<button class="choice" data-i="' + i + '"><span class="badge">' + letters[i] + '</span><span>' + esc(answerText(txt)) + '</span></button>';
       }).join("");
       [].forEach.call($("choices").children, function (b) { b.onclick = function () { pick(parseInt(b.dataset.i, 10)); }; });
     }
