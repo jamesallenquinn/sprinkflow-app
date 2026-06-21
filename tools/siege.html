@@ -104,6 +104,8 @@
     .sg-toggle[hidden] { display:none; }
     .sg-easy-ind { position:absolute; right:10px; bottom:10px; z-index:6; background:rgba(13,17,22,.7); border:1px solid var(--line); border-radius:999px; padding:4px 10px; font:700 .66rem Inter; letter-spacing:.04em; color:var(--ok); display:flex; align-items:center; gap:4px; }
     .sg-easy-ind[hidden] { display:none; }
+    .sg-loop-ind { position:absolute; right:10px; top:60px; z-index:6; background:rgba(34,18,12,.82); border:1px solid var(--brand); border-radius:999px; padding:4px 11px; font:700 .66rem Inter; letter-spacing:.04em; color:var(--accent); }
+    .sg-loop-ind[hidden] { display:none; }
     .sg-hazard { position:absolute; left:50%; top:46px; transform:translateX(-50%); z-index:6; background:rgba(40,20,8,.82); border:1px solid var(--accent); border-radius:999px; padding:5px 13px; font:700 .68rem Inter; color:var(--accent); white-space:nowrap; box-shadow:0 3px 12px rgba(0,0,0,.4); }
     .sg-hazard[hidden] { display:none; }
     .sg-tip { position:absolute; left:50%; top:78px; transform:translateX(-50%); z-index:7; max-width:88%; background:rgba(13,22,34,.94); border:1px solid var(--line-strong); border-radius:12px; padding:8px 14px; font:600 .8rem/1.3 Inter; color:#cfe3ff; text-align:center; box-shadow:0 4px 14px rgba(0,0,0,.45); animation:tipin .25s ease; }
@@ -252,6 +254,7 @@
       <div id="dpsMeter" class="sg-dps" hidden><div class="sg-dps-avg">AVG <b id="dpsAvg">0</b></div><div class="sg-dps-now"><b id="dpsNum">0</b> DPS</div></div>
       <div id="lowWater" class="sg-lowwater" hidden>💧 LOW WATER!</div>
       <div id="easyInd" class="sg-easy-ind" hidden>🍃 Easy</div>
+      <div id="loopInd" class="sg-loop-ind" hidden>♾️ Loop 1</div>
       <div id="hazardInd" class="sg-hazard" hidden></div>
       <div id="tipBanner" class="sg-tip" hidden></div>
       <div id="unlockCard" class="sg-unlock" hidden>
@@ -373,6 +376,9 @@
     var overloadT = 0, overloadCd = 0;   // Overload Fire Pump: 15s ×1.5 damage, 60s cooldown
     var gameSpeed = 1;                    // fast-forward (1×/2×/3×)
     var currentAct = 1;                   // music track follows the act (1 = track 1); persists across waves/pause/upgrade
+    var loopN = 0;                        // Endless: completed campaign loops (0 = first playthrough). Each loop ramps difficulty.
+    var ENDLESS_HP = 0.7, ENDLESS_CNT = 0.35;   // per-loop enemy HP + count multipliers
+    function endlessMul() { return 1 + loopN * ENDLESS_HP; }
     var waveDmg = 0, waveCombatT = 0;     // per-wave running average DPS (reset each wave)
     var inspectSlot = null, pressSlot = null, pressT0 = 0, lastTapT = 0, lastTapSlot = null;   // hold-to-inspect label + double-tap corridor rotate
     // combat feedback: floating text, integrity hit-flash, live damage-per-second
@@ -647,10 +653,16 @@
     var pendingReward = null, chestOpened = false;
     function openReward() {
       state = "reward"; holding = false;
-      $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true;
+      $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("loopInd").hidden = true;
       pendingReward = REWARDS[Math.floor(Math.random() * REWARDS.length)]; chestOpened = false;
-      $("rewardTitle").textContent = "Act " + currentAct + " cleared!";
-      $("rewardHint").textContent = "Tap the chest to claim your reward"; $("rewardHint").hidden = false;
+      if (currentAct >= MAX_ACT) {   // finished the final act → campaign clear / endless-loop clear
+        $("rewardTitle").textContent = loopN === 0 ? "🏆 Campaign cleared!" : "Endless Loop " + loopN + " cleared!";
+        $("rewardHint").textContent = loopN === 0 ? "All 3 acts down — Endless Mode begins. It only gets hotter!" : "Tap the chest — then back into the heat.";
+      } else {
+        $("rewardTitle").textContent = "Act " + currentAct + " cleared!";
+        $("rewardHint").textContent = "Tap the chest to claim your reward";
+      }
+      $("rewardHint").hidden = false;
       $("rewardCard").hidden = true; $("rewardCont").hidden = true;
       var box = $("chestBox"), img = $("chestImg"), em = $("chestEmoji");
       box.classList.remove("shaking", "opened"); em.textContent = "🧰"; em.hidden = false; img.hidden = true;
@@ -674,9 +686,14 @@
     }
     function continueFromReward() {
       $("rewardOv").classList.remove("show");
-      enemies.length = 0; foamPiles.length = 0;
-      currentAct++; bossPending = false;
-      spawnFloat(W / 2, H / 2 - coreR * 1.4, "ACT " + currentAct, "#ff5a2f", 2.4);
+      enemies.length = 0; foamPiles.length = 0; bossPending = false;
+      if (currentAct >= MAX_ACT) {                 // loop back to Act 1, harder (Endless)
+        currentAct = 1; loopN++; wave = 0;
+        spawnFloat(W / 2, H / 2 - coreR * 1.4, "♾️ ENDLESS · LOOP " + loopN, "#ff5a2f", 2.8);
+      } else {
+        currentAct++;
+        spawnFloat(W / 2, H / 2 - coreR * 1.4, "ACT " + currentAct, "#ff5a2f", 2.4);
+      }
       startWave(wave + 1);
     }
 
@@ -686,7 +703,7 @@
       waveDmg = 0; waveCombatT = 0;             // reset the running Avg. DPS each wave
       for (var hi = 0; hi < slots.length; hi++) { slots[hi].dmgWave = 0; slots[hi].healWave = 0; }   // reset per-head DPS readout
       if (bossPending) { bossPending = false; bossAlive = true; spawnBoss(); spawnQueue = 0; }
-      else { bossAlive = false; spawnQueue = currentAct >= 2 ? 4 + Math.round(n * 1.6) : 4 + n * 2; }   // Act 2: fewer enemies per wave
+      else { bossAlive = false; var cnt = currentAct >= 2 ? 4 + Math.round(n * 1.6) : 4 + n * 2; spawnQueue = Math.round(cnt * (1 + loopN * ENDLESS_CNT)); }   // Act 2: fewer enemies per wave; Endless: more each loop
       waveSpawnTotal = spawnQueue || 1;
       // Act 2 hazards — one per (non-boss) wave
       hazard = null; hzPump = false; hzTankMult = 1; hzSpeed = 1; hzReach = 1;
@@ -702,6 +719,7 @@
       $("upgradeOv").classList.remove("show"); $("startOv").classList.remove("show"); $("pauseOv").classList.remove("show");
       $("selectPrompt").hidden = true; $("lowWater").hidden = true;
       $("easyInd").hidden = !easyMode;
+      $("loopInd").hidden = loopN < 1; if (loopN >= 1) $("loopInd").textContent = "♾️ Loop " + loopN;
       $("pauseBtn").hidden = false; $("ffBtn").hidden = false;
       updateHollywoodBtn();
       if (wave === 1) { tipOnce("spray", "💧 Hold anywhere to spray your sprinklers."); showSoundNudge(); }
@@ -750,7 +768,7 @@
       noteSeen(type);   // first-encounter telegraph banner
       var ang = Math.random() * Math.PI * 2, m = S * 0.62 / viewScale;
       var x = W / 2 + Math.cos(ang) * m, y = H / 2 + Math.sin(ang) * m;
-      var base = (26 + wave * 13) * ENEMY_HP;
+      var base = (26 + wave * 13) * ENEMY_HP * endlessMul();
       if (type === "ember") {                                 // a cluster of small fast sparks
         var n = 4 + Math.floor(Math.random() * 3);
         for (var k = 0; k < n; k++) { var a2 = ang + (Math.random() - 0.5) * 0.7, mm = m * (0.88 + Math.random() * 0.24); enemies.push({ x: W / 2 + Math.cos(a2) * mm, y: H / 2 + Math.sin(a2) * mm, hp: base * 0.32, max: base * 0.32, spd: (34 + wave * 2.6) * (S / 400), sz: S * 0.034, boss: false, t: Math.random() * 9, hit: 0, type: "ember", minTier: 0, coreDmg: 5, splits: false }); }
@@ -772,9 +790,9 @@
     }
     function spawnBoss() {
       var ang = Math.random() * Math.PI * 2, m = S * 0.62 / viewScale, cx = W / 2 + Math.cos(ang) * m, cy = H / 2 + Math.sin(ang) * m;
-      if (currentAct >= 3) { var bh3 = Math.round(9500 * ENEMY_HP); enemies.push({ x: cx, y: cy, hp: bh3, max: bh3, spd: 13 * (S / 400), sz: S * 0.16, boss: true, meltdown: true, t: 0, mt: 0, type: "boss", minTier: 0, coreDmg: 32, splits: false }); }   // The Meltdown (cycles Class C → B → flashover)
-      else if (currentAct >= 2) { var bh2 = Math.round(6500 * ENEMY_HP); enemies.push({ x: cx, y: cy, hp: bh2, max: bh2, spd: 14 * (S / 400), sz: S * 0.15, boss: true, conflag: true, t: 0, mt: 0, type: "boss", minTier: 0, coreDmg: 30, splits: false }); }   // The Conflagration (multi-phase)
-      else { var bh1 = Math.round(2600 * ENEMY_HP); enemies.push({ x: cx, y: cy, hp: bh1, max: bh1, spd: 16 * (S / 400), sz: S * 0.13, boss: true, t: 0, mt: 0, type: "boss", minTier: 0, coreDmg: 28, splits: false }); }
+      if (currentAct >= 3) { var bh3 = Math.round(9500 * ENEMY_HP * endlessMul()); enemies.push({ x: cx, y: cy, hp: bh3, max: bh3, spd: 13 * (S / 400), sz: S * 0.16, boss: true, meltdown: true, t: 0, mt: 0, type: "boss", minTier: 0, coreDmg: 32, splits: false }); }   // The Meltdown (cycles Class C → B → flashover)
+      else if (currentAct >= 2) { var bh2 = Math.round(6500 * ENEMY_HP * endlessMul()); enemies.push({ x: cx, y: cy, hp: bh2, max: bh2, spd: 14 * (S / 400), sz: S * 0.15, boss: true, conflag: true, t: 0, mt: 0, type: "boss", minTier: 0, coreDmg: 30, splits: false }); }   // The Conflagration (multi-phase)
+      else { var bh1 = Math.round(2600 * ENEMY_HP * endlessMul()); enemies.push({ x: cx, y: cy, hp: bh1, max: bh1, spd: 16 * (S / 400), sz: S * 0.13, boss: true, t: 0, mt: 0, type: "boss", minTier: 0, coreDmg: 28, splits: false }); }
     }
 
     function update(dt) {
@@ -906,8 +924,7 @@
           enemies.splice(i, 1); hud();
           if (e.boss) {
             bossAlive = false;
-            if (currentAct < MAX_ACT) { openReward(); return; }   // act cleared → treasure-chest reward, then next act
-            win(); return;
+            openReward(); return;   // act cleared → treasure-chest reward; final act loops into Endless
           }
           continue;
         }
@@ -1076,7 +1093,7 @@
     // ---- Build: spend coins to place an unlocked sprinkler (pauses the action) ----
     function openBuild() {
       state = "build";
-      $("abar").hidden = true; $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("selectPrompt").hidden = true; $("rotOkBtn").hidden = true;
+      $("abar").hidden = true; $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("loopInd").hidden = true; $("selectPrompt").hidden = true; $("rotOkBtn").hidden = true;
       renderBuild(); $("buildOv").classList.add("show");
     }
     function recommendBuild() {   // suggest a counter the player hasn't built yet
@@ -1113,7 +1130,7 @@
     var rotSlot = null, rotDragging = false;
     function beginLawnRotate(s) {
       rotSlot = s; s.rotLocked = false; state = "rotate";
-      $("upgradeOv").classList.remove("show"); $("abar").hidden = true; $("ffBtn").hidden = true; $("pauseBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true;
+      $("upgradeOv").classList.remove("show"); $("abar").hidden = true; $("ffBtn").hidden = true; $("pauseBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("loopInd").hidden = true;
       $("selectPrompt").textContent = "🔄 Drag around the head to aim, then tap OK"; $("selectPrompt").hidden = false;
       $("rotOkBtn").hidden = false;
     }
@@ -1177,10 +1194,10 @@
       overloadT = 15; overloadCd = 60; spawnFloat(W / 2, H / 2 - coreR * 1.2, "⚡ OVERLOAD ×1.5", "#ff5a2f", 1.8); updateAbar();
     }
 
-    function gameOver() { state = "over"; $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("headStats").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); $("finalExtra").textContent = "Reached Level " + playerLevel + " · doused " + kills.toLocaleString() + " fires" + (currentAct >= 2 ? " · made it to Act " + currentAct : ""); pendingScore = score; $("overOv").classList.add("show"); mountLb("overOv", "againBtn"); }
-    function win() { state = "win"; $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("headStats").hidden = true; $("winScore").textContent = score.toLocaleString(); $("winExtra").textContent = "Reached Level " + playerLevel + " · doused " + kills.toLocaleString() + " fires"; pendingScore = score; $("winOv").classList.add("show"); mountLb("winOv", "winAgainBtn"); }
-    function pauseGame() { if (state !== "playing") return; state = "paused"; holding = false; $("pauseOv").classList.add("show"); $("abar").hidden = true; $("ffBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("pauseAutoWrap").hidden = !easyMode; $("pauseAutoToggle").checked = autoPick; }
-    function resumeGame() { if (state !== "paused") return; state = "playing"; last = 0; $("pauseOv").classList.remove("show"); $("easyInd").hidden = !easyMode; $("ffBtn").hidden = false; updateHollywoodBtn(); }
+    function gameOver() { state = "over"; $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("loopInd").hidden = true; $("headStats").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); $("finalExtra").textContent = "Reached Level " + playerLevel + " · doused " + kills.toLocaleString() + " fires" + (currentAct >= 2 ? " · made it to Act " + currentAct : ""); pendingScore = score; $("overOv").classList.add("show"); mountLb("overOv", "againBtn"); }
+    function win() { state = "win"; $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("loopInd").hidden = true; $("headStats").hidden = true; $("winScore").textContent = score.toLocaleString(); $("winExtra").textContent = "Reached Level " + playerLevel + " · doused " + kills.toLocaleString() + " fires"; pendingScore = score; $("winOv").classList.add("show"); mountLb("winOv", "winAgainBtn"); }
+    function pauseGame() { if (state !== "playing") return; state = "paused"; holding = false; $("pauseOv").classList.add("show"); $("abar").hidden = true; $("ffBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("loopInd").hidden = true; $("pauseAutoWrap").hidden = !easyMode; $("pauseAutoToggle").checked = autoPick; }
+    function resumeGame() { if (state !== "paused") return; state = "playing"; last = 0; $("pauseOv").classList.remove("show"); $("easyInd").hidden = !easyMode; $("loopInd").hidden = loopN < 1; $("ffBtn").hidden = false; updateHollywoodBtn(); }
 
     // ---- rendering ----
     function loadImg(src) { var im = new Image(); im.src = src; return im; }
@@ -1653,7 +1670,7 @@
 
     function reset() {
       for (var i = 0; i < slots.length; i++) { var ctr = slots[i].c === 1 && slots[i].r === 1; slots[i].state = ctr ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].hurt = 0; slots[i].ec = false; slots[i].hp = false; slots[i].fr = false; slots[i].type = ctr ? "standard" : null; slots[i].aim = 0; slots[i].dmgWave = 0; slots[i].healWave = 0; }
-      enemies = []; particles = []; floats = []; foamPiles = []; laserShots = []; currentAct = 1; score = 0; integrity = 100; maxWater = Math.round(330 * (easyMode ? 1.5 : 1) * WATER_BUFF); water = maxWater; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
+      enemies = []; particles = []; floats = []; foamPiles = []; laserShots = []; currentAct = 1; loopN = 0; score = 0; integrity = 100; maxWater = Math.round(330 * (easyMode ? 1.5 : 1) * WATER_BUFF); water = maxWater; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
       tankFillMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0; overloadT = 0; overloadCd = 0; selectKind = null; hurtT = 0; dpsNow = 0; dpsShown = 0;
       gameSpeed = 1; inspectSlot = null; pressSlot = null; lastTapSlot = null; rotSlot = null; rotDragging = false; $("ffBtn").textContent = "▶▶"; $("ffBtn").classList.remove("on"); $("rotOkBtn").hidden = true;
       hazard = null; hzPump = false; hzTankMult = 1; hzSpeed = 1; hzReach = 1; smokeMult = 1; $("hazardInd").hidden = true;
