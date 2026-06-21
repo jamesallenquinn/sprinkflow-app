@@ -375,7 +375,10 @@
     // grid: 3x3 sprinkler slots. col/row 0..2. center (1,1) starts active.
     var slots = [];
     for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) slots.push({ c: c, r: r, x: 0, y: 0, state: (c === 1 && r === 1) ? "active" : "locked", kTier: 0, q: 0, type: (c === 1 && r === 1) ? "standard" : null, ec: false, hp: false, fr: false, aim: 0 });
-    var enemies = [], particles = [], foamPiles = [], laserShots = [];
+    var enemies = [], particles = [], foamPiles = [], laserShots = [], flowers = [];   // flowers = lawn decoys that enemies attack
+    var FLOWER_SPAWN_INT = 2.6, FLOWER_MAX = 16;
+    function enemyFlowerDPS() { return 8 + wave * 1.0 + loopN * 6; }                    // how fast one enemy drains a flower (scales with phase)
+    function flowerHP(s) { return enemyFlowerDPS() * (2 + (s.kTier / (KLADDER.length - 1)) * 3); }   // ~2s of attacks at K5.6 → ~5s fully upgraded
     var state = "start";  // start | playing | upgrade | over | win
     var wave = 1, score = 0, integrity = 100, water = 330, maxWater = 330, holding = false;
     var spawnQueue = 0, spawnT = 0, bossPending = false, bossAlive = false, waveSpawnTotal = 1;
@@ -476,7 +479,9 @@
       if (ty === "laser") return true;          // lasers have infinite range — any flame on the field
       if (ty === "corridor") { var R = coverageRadius(s), ax = corridorAxis(s), along = ax === "x" ? Math.abs(dx) : Math.abs(dy), cross = ax === "x" ? Math.abs(dy) : Math.abs(dx); return along <= R * 3 && cross <= R * 0.35; }
       if (ty === "lawn") { if (Math.hypot(dx, dy) > headReach(s)) return false; var rel = Math.atan2(dy, dx) - (s.aim || 0); rel = Math.atan2(Math.sin(rel), Math.cos(rel)); return Math.abs(rel) <= 0.62; }
-      return Math.hypot(dx, dy) <= headReach(s);
+      var reach = headReach(s);
+      if (s.fr && (ty === "standard" || ty === "dry")) reach *= FR_RANGE;   // Fast Response: invisible extra reach
+      return Math.hypot(dx, dy) <= reach;
     }
     function canHit(s, e) { return typeOf(s) === "moon" ? inRange(s, e) : (s.kTier >= e.minTier && inRange(s, e)); }
     function hasTarget(s) { for (var i = 0; i < enemies.length; i++) if (canHit(s, enemies[i])) return true; return false; }
@@ -488,7 +493,8 @@
     var FLOW_FLOOR = 7;                         // a sprinkler always flows at >= this pressure (hard floor)
     var K_PHASE_BOOST = 6;                      // psi added to supply per K-ladder tier reached (max active kTier) — bigger heads earn more pressure
     var BASE_COV = 0.95;                        // FIXED spray radius (× gap) — K-factor & pressure raise OUTPUT, not radius
-    var EC_MIN = 1.15, EC_MAX = 1.9;            // Extended Coverage radius multiplier; scales with supply pressure (pump) min→max
+    var EC_MULT = 1.333;                        // Extended Coverage: +33.3% reach (real EC heads: ~15 ft → 20 ft)
+    var FR_RANGE = 1.35;                        // Fast Response on Manual/Dry: invisible attack-reach extension (hits flames before they reach the visible bubble)
     var PUMP_MAX = 5;                          // fire-pump tiers (L0..L5); see PUMP_CURVE
     // per-level supply: residual pressure at a rated flow; static (churn @ 0 gpm) = 1.3 × residual
     var PUMP_CURVE = [
@@ -602,8 +608,7 @@
     function coverageRadius(s) {
       var base = gap * BASE_COV * hzReach * smokeMult;        // Night hazard + Act-3 smolder smoke shorten reach
       if (!s.ec) return base;
-      var norm = Math.max(0, Math.min(1, pumpLevel / PUMP_MAX));   // EC radius scales with PUMP pressure only (0 at no pump → 1 at max pump)
-      return base * (EC_MIN + (EC_MAX - EC_MIN) * norm);
+      return base * EC_MULT;   // Extended Coverage: +33.3% reach
     }
     function sprayRadius(s) { return coverageRadius(s); }
     function sprayDps(s) { return (s.q || 0) * DMG_PER_GPM; }
@@ -769,7 +774,7 @@
     }
     function continueFromReward() {
       $("rewardOv").classList.remove("show");
-      enemies.length = 0; foamPiles.length = 0; bossPending = false;
+      enemies.length = 0; foamPiles.length = 0; flowers.length = 0; bossPending = false;
       if (currentAct >= MAX_ACT) {                 // loop back to Act 1, harder (Endless)
         currentAct = 1; loopN++; wave = 0;
         spawnFloat(W / 2, H / 2 - coreR * 1.4, "♾️ ENDLESS · LOOP " + loopN, "#ff5a2f", 2.8);
@@ -964,7 +969,7 @@
       // --- weapons pass: each firing head applies its type's damage / effect ---
       for (var ei = 0; ei < enemies.length; ei++) { enemies[ei].dmgFrame = 0; enemies[ei].weakHit = false; }
       for (var fh = 0; fh < firing.length; fh++) {
-        var s = firing[fh], ty = typeOf(s), per = s.q * DMG_PER_GPM * TYPE_INFO[ty].dmg * moonBuff(s) * (easyMode ? 1.5 : 1) * (overloadT > 0 ? 1.5 : 1) * (buffSurge > 0 ? 2 : 1) * ((s.fr && (ty === "standard" || ty === "dry")) ? 1.5 : 1), em, j;   // Fast Response = +50% dmg for Manual/Dry; Power Surge buff = ×2; other types get type-specific FR effects (laser: faster shots, below)
+        var s = firing[fh], ty = typeOf(s), per = s.q * DMG_PER_GPM * TYPE_INFO[ty].dmg * moonBuff(s) * (easyMode ? 1.5 : 1) * (overloadT > 0 ? 1.5 : 1) * (buffSurge > 0 ? 2 : 1), em, j;   // Power Surge buff = ×2; FR on Manual/Dry now extends reach (in inRange), not damage; other types get type-specific FR effects (laser: faster shots, below)
         if (ty === "moon") { for (j = 0; j < enemies.length; j++) if (inRange(s, enemies[j])) { var mh = s.q * 0.05 * dt * (s.fr ? 1.5 : 1); integrity = Math.min(100, integrity + mh); s.healWave = (s.healWave || 0) + mh; break; } continue; }   // FR: heals 50% more
         if (ty === "laser") {                                  // repeating projectile at the nearest flame
           var tgt = null, bd = 1e9; for (j = 0; j < enemies.length; j++) { em = enemies[j]; if (!canHit(s, em)) continue; var dd = Math.hypot(em.x - s.x, em.y - s.y); if (dd < bd) { bd = dd; tgt = em; } }
@@ -977,7 +982,16 @@
           }
           continue;
         }
-        if (ty === "lawn") { var hits = 0; for (j = 0; j < enemies.length && hits < 3; j++) { em = enemies[j]; if (canHit(s, em)) { var rl = resist("lawn", em); em.dmgFrame += per * rl; s.dmgWave = (s.dmgWave || 0) + per * rl * dt; if (rl < 1) em.weakHit = true; hits++; } } continue; }
+        if (ty === "lawn") {
+          var hits = 0; for (j = 0; j < enemies.length && hits < 3; j++) { em = enemies[j]; if (canHit(s, em)) { var rl = resist("lawn", em); em.dmgFrame += per * rl; s.dmgWave = (s.dmgWave || 0) + per * rl * dt; if (rl < 1) em.weakHit = true; hits++; } }
+          s.flowerT = (s.flowerT || 0) + dt;   // grow decoy flowers within the swept area
+          if (s.flowerT >= FLOWER_SPAWN_INT && flowers.length < FLOWER_MAX) {
+            s.flowerT = 0;
+            var fang = (s.aim0 || 0) + (Math.random() * 2 - 1) * (Math.PI / 2), frad = headReach(s) * (0.4 + Math.random() * 0.5), fhp = flowerHP(s);
+            flowers.push({ x: s.x + Math.cos(fang) * frad, y: s.y + Math.sin(fang) * frad, hp: fhp, max: fhp, r: gap * 0.17, t: Math.random() * 6.28, grow: 0, life: 14 });
+          }
+          continue;
+        }
         if (ty === "foam") { s.foamDropT = (s.foamDropT || 0) + dt; if (s.foamDropT >= (s.fr ? 0.107 : 0.16) && foamPiles.length < 110) { s.foamDropT = 0; var pa = Math.random() * Math.PI * 2, pr = headReach(s) * Math.sqrt(Math.random()); foamPiles.push({ x: s.x + Math.cos(pa) * pr, y: s.y + Math.sin(pa) * pr, r: gap * (0.16 + Math.random() * 0.14), life: FOAM_PILE_LIFE, max: FOAM_PILE_LIFE, dps: per, kTier: s.kTier, seed: Math.random() * 6.28, owner: s }); } continue; }   // foam lays piles on the ground; damage happens in the piles, not the spray
         for (j = 0; j < enemies.length; j++) { em = enemies[j]; if (canHit(s, em)) { var rc = resist(ty, em); em.dmgFrame += per * rc; s.dmgWave = (s.dmgWave || 0) + per * rc * dt; if (rc < 1) em.weakHit = true; } }  // standard + corridor
       }
@@ -990,18 +1004,33 @@
         var spd = e.spd * hzSpeed * (1 + loopN * ENDLESS_SPD); if (e.slowT > 0) { spd *= 0.5; e.slowT -= dt; } if (buffFreeze > 0) spd *= 0.65; if (e.flashing && !e.boss) spd *= 2.2; if (e.boss) spd *= bossEnrage(e);   // Endless speed; foam/Cold-Snap slow; flashover burst; bosses speed up each phase
         e.kb = Math.max(0, (e.kb || 0) - (e.spd * hzSpeed || 30) * KB_DECAY * dt);   // pushback decays back to 0
         var net = spd - e.kb;                                    // knockback opposes inward travel (can briefly reverse)
-        e.x += (dx / dist) * net * dt; e.y += (dy / dist) * net * dt; e.t += dt;
-        // reached core
-        if (dist < coreR + e.sz * 0.4) {
-          if (e.boss) {
-            takeDamage(Math.round((e.coreDmg || 28) * bossEnrage(e)));   // bosses hit harder each phase
-            var ba = Math.random() * Math.PI * 2; e.x = W / 2 + Math.cos(ba) * S * 0.56; e.y = H / 2 + Math.sin(ba) * S * 0.56;
-            if (integrity <= 0) { gameOver(); return; }
-          } else {
-            takeDamage(e.coreDmg); enemies.splice(i, 1);
-            if (integrity <= 0) { gameOver(); return; }
+        // lawn decoy flowers: non-boss flames aggro onto a nearby flower and attack it until it is drained, ignoring the core
+        if (e.flowerTgt && (e.flowerTgt.dead || flowers.indexOf(e.flowerTgt) < 0)) e.flowerTgt = null;
+        if (!e.flowerTgt && !e.boss && flowers.length) {
+          var bf = null, bd = gap * 1.15;
+          for (var ff = 0; ff < flowers.length; ff++) { var fl = flowers[ff]; if (fl.dead) continue; var f0 = Math.hypot(fl.x - e.x, fl.y - e.y); if (f0 < bd) { bd = f0; bf = fl; } }
+          e.flowerTgt = bf;
+        }
+        if (e.flowerTgt) {                                       // diverted to a flower — move to it / attack it instead of the core
+          var ft = e.flowerTgt, fdx = ft.x - e.x, fdy = ft.y - e.y, fdd = Math.hypot(fdx, fdy) || 1;
+          if (fdd <= ft.r + e.sz * 0.45) { ft.hp -= enemyFlowerDPS() * dt; if (ft.hp <= 0) ft.dead = true; e.atFlower = 1; }
+          else { e.x += (fdx / fdd) * net * dt; e.y += (fdy / fdd) * net * dt; e.atFlower = 0; }
+          e.t += dt;
+        } else {
+          e.atFlower = 0;
+          e.x += (dx / dist) * net * dt; e.y += (dy / dist) * net * dt; e.t += dt;
+          // reached core
+          if (dist < coreR + e.sz * 0.4) {
+            if (e.boss) {
+              takeDamage(Math.round((e.coreDmg || 28) * bossEnrage(e)));   // bosses hit harder each phase
+              var ba = Math.random() * Math.PI * 2; e.x = W / 2 + Math.cos(ba) * S * 0.56; e.y = H / 2 + Math.sin(ba) * S * 0.56;
+              if (integrity <= 0) { gameOver(); return; }
+            } else {
+              takeDamage(e.coreDmg); enemies.splice(i, 1);
+              if (integrity <= 0) { gameOver(); return; }
+            }
+            continue;
           }
-          continue;
         }
         // foam piles: flames wading through take damage (strongest overlapping pile) + slow
         var pileDmg = 0, inFoam = false, pileOwner = null;
@@ -1051,6 +1080,14 @@
       // particles
       for (var q = particles.length - 1; q >= 0; q--) { var pt = particles[q]; pt.life -= dt; if (pt.life <= 0) { particles.splice(q, 1); continue; } pt.x += pt.vx * dt; pt.y += pt.vy * dt; }
       for (var sq = sparkles.length - 1; sq >= 0; sq--) { var sk = sparkles[sq]; sk.life -= dt; if (sk.life <= 0) { sparkles.splice(sq, 1); continue; } sk.x += sk.vx * dt; sk.y += sk.vy * dt; if (!sk.ring) { sk.vy += 70 * dt; sk.rot += dt * 4; } }
+      // decoy flowers: sprout in, wilt over time, removed when drained or wilted
+      for (var fq = flowers.length - 1; fq >= 0; fq--) {
+        var fw = flowers[fq]; fw.grow = Math.min(1, (fw.grow || 0) + dt * 3); fw.life -= dt;
+        if (fw.dead || fw.hp <= 0 || fw.life <= 0) {
+          for (var fp = 0; fp < 7; fp++) { var fa = Math.random() * Math.PI * 2, fs = 40 + Math.random() * 90; particles.push({ x: fw.x, y: fw.y, vx: Math.cos(fa) * fs, vy: Math.sin(fa) * fs, life: 0.5, max: 0.5, r: 2 + Math.random() * 2, c: "#8fd14a", spray: true }); }
+          flowers.splice(fq, 1);
+        }
+      }
       // floating combat text + flash decay
       for (var fq = floats.length - 1; fq >= 0; fq--) { var ft = floats[fq]; ft.life -= dt; if (ft.life <= 0) { floats.splice(fq, 1); continue; } ft.y += ft.vy * dt; ft.vy *= 0.92; }
       for (var fp2 = foamPiles.length - 1; fp2 >= 0; fp2--) { foamPiles[fp2].life -= dt; if (foamPiles[fp2].life <= 0) foamPiles.splice(fp2, 1); }
@@ -1119,7 +1156,7 @@
         return { e: "🎯", t: lbl, d: elig.length === 1 ? "+50% throw — Extended Coverage" : "+50% throw — pick a head", kid: "Bigger", special: true, pick: "ec" };
       }
       if (pick === "hp") return { e: "🔺", t: "High Pressure", d: "Pick a head — it can exceed 175 psi, up to 300", kid: "300 PSI", special: true, pick: "hp" };
-      if (pick === "fr") return { e: "💨", t: "Fast Response", d: "Pick a head — +50% (dmg / laser & lawn speed / moon heal / foam)", kid: "Fast", special: true, pick: "fr" };
+      if (pick === "fr") return { e: "💨", t: "Fast Response", d: "Pick a head — Manual/Dry: longer reach; Laser/Lawn: faster; Moon: +heal; Foam: +foam", kid: "Fast", special: true, pick: "fr" };
       return { e: pick.e, t: pick.t, d: pick.d, kid: pick.kid, apply: pick.apply, special: true };
     }
     function waveComplete() {
@@ -1713,6 +1750,16 @@
       drawFoamPiles();
       drawMoonLinks();
       for (var i = 0; i < slots.length; i++) drawSprinkler(slots[i]);
+      // decoy flowers (drawn under enemies) — petals + center, sized by remaining HP, HP ring
+      for (var fr2 = 0; fr2 < flowers.length; fr2++) {
+        var fw = flowers[fr2], hpf = Math.max(0.15, fw.hp / fw.max), gr = fw.grow || 1, fr0 = fw.r * gr, wob = Math.sin(nowT * 0.004 + fw.t) * 0.12;
+        ctx.save(); ctx.translate(fw.x, fw.y); ctx.rotate(wob);
+        ctx.globalAlpha = Math.min(1, gr + 0.2) * (fw.life < 2 ? Math.max(0.35, fw.life / 2) : 1);
+        for (var pe = 0; pe < 6; pe++) { var pa = pe * Math.PI / 3 + nowT * 0.0006; ctx.fillStyle = "#ff8fc4"; ctx.beginPath(); ctx.ellipse(Math.cos(pa) * fr0 * 0.9, Math.sin(pa) * fr0 * 0.9, fr0 * 0.7, fr0 * 0.42, pa, 0, Math.PI * 2); ctx.fill(); }
+        ctx.fillStyle = "#ffd24a"; ctx.beginPath(); ctx.arc(0, 0, fr0 * 0.55, 0, Math.PI * 2); ctx.fill();
+        ctx.lineWidth = Math.max(1.5, fr0 * 0.18); ctx.strokeStyle = "#8fd14a"; ctx.beginPath(); ctx.arc(0, 0, fr0 * 1.35, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * hpf); ctx.stroke();   // HP ring
+        ctx.restore();
+      }
       // enemies
       for (var e = 0; e < enemies.length; e++) {
         var en = enemies[e];
@@ -1846,7 +1893,7 @@
 
     function reset() {
       for (var i = 0; i < slots.length; i++) { var ctr = slots[i].c === 1 && slots[i].r === 1; slots[i].state = ctr ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].hurt = 0; slots[i].ec = false; slots[i].hp = false; slots[i].fr = false; slots[i].type = ctr ? "standard" : null; slots[i].aim = 0; slots[i].dmgWave = 0; slots[i].healWave = 0; slots[i].frozenT = 0; }
-      enemies = []; particles = []; floats = []; foamPiles = []; laserShots = []; sparkles = []; items = []; currentAct = 1; loopN = 0; buffSurge = 0; buffFlood = 0; buffFreeze = 0; freezeWave = false; freezeT = 0; freezeFlash = 0; score = 0; integrity = 100; maxWater = Math.round(330 * (easyMode ? 1.5 : 1) * WATER_BUFF); water = maxWater; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
+      enemies = []; particles = []; floats = []; foamPiles = []; laserShots = []; sparkles = []; items = []; flowers = []; currentAct = 1; loopN = 0; buffSurge = 0; buffFlood = 0; buffFreeze = 0; freezeWave = false; freezeT = 0; freezeFlash = 0; score = 0; integrity = 100; maxWater = Math.round(330 * (easyMode ? 1.5 : 1) * WATER_BUFF); water = maxWater; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
       tankFillMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0; overloadT = 0; overloadCd = 0; selectKind = null; hurtT = 0; dpsNow = 0; dpsShown = 0;
       gameSpeed = 1; inspectSlot = null; pressSlot = null; lastTapSlot = null; rotSlot = null; rotDragging = false; $("ffBtn").textContent = "▶▶"; $("ffBtn").classList.remove("on"); $("rotOkBtn").hidden = true;
       hazard = null; hzPump = false; hzTankMult = 1; hzSpeed = 1; hzReach = 1; smokeMult = 1; $("hazardInd").hidden = true;
