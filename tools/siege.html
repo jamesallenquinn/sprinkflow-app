@@ -1100,15 +1100,23 @@
       lawn: loadImg("../assets/head-lawn.png"), corridor: loadImg("../assets/head-corridor.png"), moon: loadImg("../assets/head-moon.png"), moonOn: loadImg("../assets/head-moon-on.png"),
       std: [0, 1, 2, 3, 4, 5].map(function (i) { return loadImg("../assets/head-std-" + i + ".png"); }),   // standard head art by K-tier (brass→chrome→white→black→ENT→royal gold)
       eNormal: loadImg("../assets/enemy-normal.png"), eSplitter: loadImg("../assets/enemy-splitter.png"), eElo: loadImg("../assets/enemy-elo.png"), eGrease: loadImg("../assets/enemy-grease.png"), eEmber: loadImg("../assets/enemy-ember.png"), eBackdraft: loadImg("../assets/enemy-backdraft.png"),
-      bossInferno: loadImg("../assets/boss-inferno.png"), bossA: loadImg("../assets/boss-conflag-a.png"), bossB: loadImg("../assets/boss-conflag-b.png"), bossC: loadImg("../assets/boss-conflag-c.png") };
+      eElec: loadImg("../assets/enemy-elec.png"), eSmolder: loadImg("../assets/enemy-smolder.png"),
+      bossInferno: loadImg("../assets/boss-inferno.png"), bossA: loadImg("../assets/boss-conflag-a.png"), bossB: loadImg("../assets/boss-conflag-b.png"), bossC: loadImg("../assets/boss-conflag-c.png"),
+      meltA: loadImg("../assets/boss-meltdown-a.png"), meltB: loadImg("../assets/boss-meltdown-b.png"), meltC: loadImg("../assets/boss-meltdown-c.png") };
     function imgReady(im) { return im && im.complete && im.naturalWidth > 0; }
     function enemySprite(e) {
-      if (e.boss) return (e.conflag || e.meltdown) ? (e.hp / e.max > 0.66 ? IMG.bossA : e.hp / e.max > 0.33 ? IMG.bossB : IMG.bossC) : IMG.bossInferno;
+      if (e.boss) {
+        if (e.meltdown) return e.hp / e.max > 0.66 ? IMG.meltA : e.hp / e.max > 0.33 ? IMG.meltB : IMG.meltC;
+        if (e.conflag) return e.hp / e.max > 0.66 ? IMG.bossA : e.hp / e.max > 0.33 ? IMG.bossB : IMG.bossC;
+        return IMG.bossInferno;
+      }
       if (e.type === "grease") return IMG.eGrease;
       if (e.type === "splitter") return IMG.eSplitter;
-      if (e.type === "elo" || e.type === "elec") return IMG.eElo;   // elec placeholder = blue flame (Act-3 art TBD)
+      if (e.type === "elec") return IMG.eElec;
+      if (e.type === "elo") return IMG.eElo;
       if (e.type === "ember") return IMG.eEmber;
-      if (e.type === "backdraft" || e.type === "smolder") return IMG.eBackdraft;   // smolder placeholder = dark (Act-3 art TBD)
+      if (e.type === "smolder") return IMG.eSmolder;
+      if (e.type === "backdraft") return IMG.eBackdraft;
       return IMG.eNormal;
     }
     var HEAD_IMG = 2.9;   // image draw box = HEAD_IMG × head radius (tune for fit)
