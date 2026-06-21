@@ -1495,7 +1495,7 @@
     // ---- audio: optional looping music (per level) + procedural SFX (spray hiss, flame extinguish) ----
     var musicOn = false, sfxOn = false;
     try { var legacy = localStorage.getItem("sg_sound") === "1"; musicOn = localStorage.getItem("sg_music") === "1" || (legacy && localStorage.getItem("sg_music") === null); sfxOn = localStorage.getItem("sg_sfx") === "1" || (legacy && localStorage.getItem("sg_sfx") === null); } catch (e) {}
-    var musicTracks = [new Audio("../assets/music-level1.mp3"), new Audio("../assets/music-level2.mp3")];
+    var musicTracks = [new Audio("../assets/music-level1.mp3"), new Audio("../assets/music-level2.mp3"), new Audio("../assets/music-level3.mp3")];   // act 1 / 2 / 3
     musicTracks.forEach(function (a) { a.loop = true; a.preload = "none"; a.volume = 0; });
     var curTrack = -1, actx = null, noiseBuf = null, sprayGain = null, lastExt = 0;
     function ensureAudio() {
