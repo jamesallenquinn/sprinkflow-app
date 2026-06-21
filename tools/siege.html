@@ -1358,6 +1358,7 @@
       if (seenTypes.grease && unlocked.foam && !slots.some(function (s) { return s.state === "active" && typeOf(s) === "foam"; })) return "foam";
       return null;
     }
+    function laserOnField() { return slots.some(function (s) { return (s.state === "active" && typeOf(s) === "laser") || (s.build && s.build.type === "laser"); }); }   // laser is capped at one on the field (active or building)
     function renderBuild() {
       var box = $("buildChoices"); if (!box) return;
       var hasPlug = lockedCount() > 0, busy = buildBusy(), rec = recommendBuild(), canPlace = hasPlug && !busy;
@@ -1366,10 +1367,11 @@
       var types = ["standard"].concat(UNLOCK_ORDER.filter(function (t) { return unlocked[t]; }));
       if (currentAct >= 4 || loopN >= 1) types.push("dry");   // Dry sprinkler buildable in Act 4 / Endless (survives Freeze Overs)
       types.forEach(function (ty) {
+        var laserMax = ty === "laser" && laserOnField(), avail = canPlace && !laserMax;
         var card = document.createElement("div");
-        card.className = "bcard" + (canPlace ? "" : " dim") + (ty === rec ? " rec" : "");
-        card.innerHTML = '<div class="e">' + headMenuIco(ty) + '</div><div class="t">' + headLabel(ty, 0) + '</div><div class="c">⏱ 1 wave</div>' + (ty === rec ? '<div class="recbadge">★ vs grease</div>' : '');
-        card.onclick = function () { if (state === "build" && canPlace) buildPlace(ty); };
+        card.className = "bcard" + (avail ? "" : " dim") + (ty === rec ? " rec" : "");
+        card.innerHTML = '<div class="e">' + headMenuIco(ty) + '</div><div class="t">' + headLabel(ty, 0) + '</div><div class="c">' + (laserMax ? "max 1 on field" : "⏱ 1 wave") + '</div>' + (ty === rec ? '<div class="recbadge">★ vs grease</div>' : '');
+        card.onclick = function () { if (state === "build" && avail) buildPlace(ty); };
         box.appendChild(card);
       });
       $("buildDemolishBtn").hidden = activeSlots().length < 1 || busy;   // demolish needs a head to remove and no build in progress
@@ -1382,6 +1384,7 @@
     }
     function buildPlace(ty) {
       if (lockedCount() === 0 || buildBusy()) return;
+      if (ty === "laser" && laserOnField()) return;   // only one laser allowed on the field
       pendingType = ty; selectKind = "place"; state = "select";
       $("buildOv").classList.remove("show");
       $("selectPrompt").textContent = "👆 Tap a slot to build " + headLabel(ty, 0) + " — installs over ~one wave"; $("selectPrompt").hidden = false;
