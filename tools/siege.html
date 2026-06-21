@@ -417,10 +417,10 @@
     var UNLOCK_TYPES = ["standard", "laser", "foam", "lawn", "corridor", "moon"];
     // ---- progression + economy ----
     var UNLOCK_ORDER = ["foam", "moon", "lawn", "corridor", "laser"];   // standard free at start; specials unlock by leveling, laser last
-    var UNLOCK_XP = [50, 130, 230, 340, 440];          // cumulative XP per unlock (foam≈w2, moon≈w4, lawn≈w6, corridor≈w8, laser≈w10)
+    var UNLOCK_XP = [60, 170, 320, 480, 1100];          // cumulative XP per unlock — laser comes MUCH later (it's very strong)
     var XP_KILL = 1, XP_WAVE = 28, XP_BOSS = 120, XP_PER_LEVEL = 40;   // ~level 60 by end of campaign, climbs in Endless
     var COIN_KILL = 1, COIN_WAVE = 15, COIN_BOSS = 60;                 // halved — was draining too slowly
-    var PLACE_COST = { standard: 25, foam: 50, moon: 45, lawn: 55, corridor: 65, laser: 100, dry: 70 };
+    var PLACE_COST = { standard: 25, foam: 130, moon: 110, lawn: 130, corridor: 170, laser: 320, dry: 150 };   // specials cost much more — save up, then they feel earned (laser = a late power spike)
     var coins = 0, xp = 0, playerLevel = 1, unlocked = { standard: true }, pendingCost = 0;
     var seenTypes = {}, kills = 0, bannerT = 0;
     function showBanner(text, dur, color) { var b = $("tipBanner"); if (!b) return; b.textContent = text; b.style.borderColor = color || "var(--line-strong)"; b.hidden = false; bannerT = dur || 4; }
@@ -902,7 +902,7 @@
           var lsp2 = hh.fr ? 1.5 : 1;                              // FR: sweeps faster
           if (hh.swPhase === "rev") { hh.sweep -= dt * 2.6 * lsp2; if (hh.sweep <= 0) { hh.sweep = 0; hh.swPhase = "fwd"; } }   // fast stuttery snap back to start
           else { hh.sweep = (hh.sweep || 0) + dt * 0.34 * lsp2; if (hh.sweep >= 1) { hh.sweep = 1; hh.swPhase = "rev"; } }      // smooth 180° sweep
-          hh.aim = (hh.aim0 || 0) + hh.sweep * Math.PI + (hh.swPhase === "rev" ? Math.sin(nowT * 0.05) * 0.06 : 0);            // classic lawn-sprinkler stutter on the reset
+          hh.aim = (hh.aim0 || 0) - Math.PI / 2 + hh.sweep * Math.PI + (hh.swPhase === "rev" ? Math.sin(nowT * 0.05) * 0.06 : 0);   // sweep is CENTERED on aim0 (so the aim arrow points at the middle of the spray); classic stutter on reset
         } else if (tt === "foam") hh.foamOpen = (hh.foamOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.foamOpen || 0)) * Math.min(1, dt * 8); else if (tt === "moon") hh.moonOpen = (hh.moonOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.moonOpen || 0)) * Math.min(1, dt * 8); }  // lawn sweeps; foam & moon open/close
       var dispP = Math.round(spraying ? Math.max(FLOW_FLOOR, supplyP(totalQ)) : supplyP(0)), pumpTxt = pumpLevel > 0 ? " · Pump " + pumpLevel : "";
       lastSupplyP = dispP;   // live supply pressure for the per-head readout
@@ -1603,7 +1603,14 @@
         ctx.save(); ctx.setLineDash([4, 4]); ctx.lineWidth = 1; ctx.strokeStyle = "rgba(110,200,240,0.22)";
         if (ax === "x") ctx.strokeRect(x - R * 3, y - R * 0.35, R * 6, R * 0.7); else ctx.strokeRect(x - R * 0.35, y - R * 3, R * 0.7, R * 6); ctx.restore(); return;
       }
-      if (ty === "lawn") { var Rl = headReach(s), a = s.aim || 0; ctx.fillStyle = firing ? "rgba(120,220,150,0.16)" : "rgba(110,200,240,0.07)"; ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, Rl, a - 0.62, a + 0.62); ctx.closePath(); ctx.fill(); return; }
+      if (ty === "lawn") {
+        var Rl = headReach(s), c = s.aim0 || 0, half = Math.PI / 2 + 0.62;   // full swept fan: 180° sweep ± the cone half-angle, centered on aim0
+        ctx.fillStyle = firing ? "rgba(120,220,150,0.12)" : "rgba(110,200,240,0.11)";
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, Rl, c - half, c + half); ctx.closePath(); ctx.fill();   // accurate coverage preview
+        ctx.save(); ctx.setLineDash([4, 4]); ctx.lineWidth = 1; ctx.strokeStyle = "rgba(120,220,150,0.3)"; ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, Rl, c - half, c + half); ctx.closePath(); ctx.stroke(); ctx.restore();
+        if (firing) { var a = s.aim || 0; ctx.fillStyle = "rgba(150,235,170,0.22)"; ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, Rl, a - 0.62, a + 0.62); ctx.closePath(); ctx.fill(); }   // bright = where it's spraying right now
+        return;
+      }
       var R2 = headReach(s);
       if (firing) { var col = ty === "foam" ? "rgba(255,255,255,0.16)" : ty === "moon" ? "rgba(120,200,255,0.16)" : "rgba(80,200,240,0.14)", g = ctx.createRadialGradient(x, y, 0, x, y, R2); g.addColorStop(0, col); g.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R2, 0, Math.PI * 2); ctx.fill(); }
       ctx.save(); ctx.setLineDash([4, 4]); ctx.lineWidth = 1; ctx.strokeStyle = ty === "moon" ? "rgba(140,200,255,0.3)" : ty === "foam" ? "rgba(255,255,255,0.26)" : "rgba(110,200,240,0.22)";
