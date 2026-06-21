@@ -50,8 +50,8 @@
       '<h3 id="sfTitle">Sign in to compete</h3>' +
       '<p id="sfBlurb">One free SprinkFlow account works across all the games and the study tool. Your leaderboard name is shown publicly; your email is never shown.</p>' +
       '<form id="sfAuthForm">' +
-      '<div class="sf-field"><label>SprinkFlow email</label><input id="sfEmail" type="email" autocomplete="username" inputmode="email" placeholder="you@company.com" required></div>' +
-      '<div class="sf-field"><label>Password</label><input id="sfPass" type="password" autocomplete="current-password" placeholder="At least 6 characters" required></div>' +
+      '<div class="sf-field"><label id="sfEmailLabel">Email</label><input id="sfEmail" type="email" autocomplete="username" inputmode="email" placeholder="you@company.com" required></div>' +
+      '<div class="sf-field"><label id="sfPassLabel">Password</label><input id="sfPass" type="password" autocomplete="current-password" placeholder="At least 6 characters" required></div>' +
       '<div class="sf-field"><label>Leaderboard name (shown publicly)</label><input id="sfHandle" type="text" maxlength="24" placeholder="e.g. SprinkNerd"></div>' +
       '<div class="sf-err" id="sfErr"></div>' +
       '<button class="sf-btn" type="submit" id="sfSubmit">Sign in</button>' +
@@ -72,7 +72,8 @@
     mode = (m === "signup") ? "signup" : "signin";
     var t = document.getElementById("sfTitle"), b = document.getElementById("sfBlurb"),
         sub = document.getElementById("sfSubmit"), sw = document.getElementById("sfSwitch"),
-        pass = document.getElementById("sfPass"), err = document.getElementById("sfErr");
+        pass = document.getElementById("sfPass"), err = document.getElementById("sfErr"),
+        passLabel = document.getElementById("sfPassLabel");
     if (!t) return;
     err.textContent = ""; err.className = "sf-err";
     if (mode === "signup") {
@@ -80,12 +81,16 @@
       b.textContent = "One free SprinkFlow account unlocks all the games, the study tool, and the global leaderboards. Your leaderboard name is public; your email never is.";
       sub.textContent = "Create account";
       pass.setAttribute("autocomplete", "new-password");
+      if (passLabel) passLabel.textContent = "Create a password";
+      pass.setAttribute("placeholder", "At least 6 characters");
       sw.innerHTML = 'Already have an account? <a data-mode="signin">Sign in</a>';
     } else {
       t.textContent = "Sign in to compete";
       b.textContent = "One free SprinkFlow account works across all the games and the study tool. Your leaderboard name is shown publicly; your email is never shown.";
       sub.textContent = "Sign in";
       pass.setAttribute("autocomplete", "current-password");
+      if (passLabel) passLabel.textContent = "Password";
+      pass.setAttribute("placeholder", "Your password");
       sw.innerHTML = 'New here? <a data-mode="signup">Create a free account</a>';
     }
   }
