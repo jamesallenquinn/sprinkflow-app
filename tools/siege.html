@@ -137,7 +137,9 @@
     .sg-heads-h b { font:700 .92rem 'Space Grotesk'; color:var(--water); letter-spacing:0; }
     .sg-head-row { display:flex; align-items:center; gap:8px; padding:3px 0; font:500 .82rem Inter; }
     .sg-head-row .he { font-size:1rem; width:20px; text-align:center; }
-    .sg-head-row .hn { flex:1; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sg-head-row .hn { flex:1; min-width:0; display:flex; flex-direction:column; }
+    .sg-head-row .hnm { color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sg-head-row .hsub { font:500 .68rem Inter; color:var(--muted); margin-top:1px; }
     .sg-head-row .hd { font:700 .9rem 'Space Grotesk'; color:var(--ink); }
     .sg-head-row .hd.heal { color:var(--ok); }
     .sg-head-row .hd.dim { color:var(--line-strong); }
@@ -624,7 +626,7 @@
       el.classList.toggle("hot", v >= 250 && v < 700);
       el.classList.toggle("blaze", v >= 700);
     }
-    var headStatsLast = 0, headRowEls = {};   // persistent rows keyed by slot index (for FLIP reorder animation)
+    var headStatsLast = 0, headRowEls = {}, lastSupplyP = 0;   // persistent rows keyed by slot index (for FLIP reorder animation)
     function updateHeadStats() {
       var el = $("headStats"); if (!el) return;
       if (nowT - headStatsLast < 180) return; headStatsLast = nowT;   // throttle
@@ -648,9 +650,11 @@
       data.forEach(function (d) {
         alive[d.idx] = 1;
         var row = headRowEls[d.idx];
-        if (!row) { row = document.createElement("div"); row.className = "sg-head-row"; row.innerHTML = '<span class="he"></span><span class="hn"></span><span class="hd"></span>'; headRowEls[d.idx] = row; }
+        if (!row) { row = document.createElement("div"); row.className = "sg-head-row"; row.innerHTML = '<span class="he"></span><span class="hn"><span class="hnm"></span><small class="hsub"></small></span><span class="hd"></span>'; headRowEls[d.idx] = row; }
         row.children[0].textContent = TYPE_INFO[d.ty].e;
-        row.children[1].textContent = TYPE_INFO[d.ty].n + " K" + KLADDER[d.s.kTier].toFixed(1);
+        row.children[1].children[0].textContent = TYPE_INFO[d.ty].n + " K" + KLADDER[d.s.kTier].toFixed(1);
+        var psi = Math.round(Math.min(lastSupplyP, headCap(d.s))), gpm = Math.round(d.s.q || 0);
+        row.children[1].children[1].textContent = psi + " PSI · " + gpm + " GPM";
         var hd = row.children[2];
         hd.className = d.isMoon ? "hd heal" : ("hd" + (d.val ? "" : " dim"));
         hd.textContent = d.isMoon ? ("+" + d.val.toLocaleString() + " HP/s") : d.val.toLocaleString();
@@ -871,6 +875,7 @@
           hh.aim = (hh.aim0 || 0) + hh.sweep * Math.PI + (hh.swPhase === "rev" ? Math.sin(nowT * 0.05) * 0.06 : 0);            // classic lawn-sprinkler stutter on the reset
         } else if (tt === "foam") hh.foamOpen = (hh.foamOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.foamOpen || 0)) * Math.min(1, dt * 8); else if (tt === "moon") hh.moonOpen = (hh.moonOpen || 0) + (((hh.q > 0) ? 1 : 0) - (hh.moonOpen || 0)) * Math.min(1, dt * 8); }  // lawn sweeps; foam & moon open/close
       var dispP = Math.round(spraying ? Math.max(FLOW_FLOOR, supplyP(totalQ)) : supplyP(0)), pumpTxt = pumpLevel > 0 ? " · Pump " + pumpLevel : "";
+      lastSupplyP = dispP;   // live supply pressure for the per-head readout
       var wf = capW() ? water / capW() : 0;
       var supplyWord = (water <= 0 || dryFlash) ? "CRITICAL" : (wf < 0.25 || (spraying && dispP <= FLOW_FLOOR + 2)) ? "STRAINING" : "STRONG";
       var swCol = supplyWord === "CRITICAL" ? "#ff5a4f" : supplyWord === "STRAINING" ? "#ffb03a" : "#3ddc97";
