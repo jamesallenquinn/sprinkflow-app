@@ -169,7 +169,7 @@
     .sg-soundnudge.out { animation:none; opacity:0; transform:translateY(-6px); transition:opacity .3s, transform .3s; }
     @keyframes nudgeBob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-3px)} }
     /* WoW-style action bar (usable abilities) at bottom center */
-    .sg-abar { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); z-index:6; display:flex; gap:10px; }
+    .sg-abar { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); z-index:6; display:flex; gap:10px; max-width:94vw; flex-wrap:wrap; justify-content:center; }
     .sg-abar[hidden] { display:none; }
     .sg-ability { position:relative; width:52px; height:52px; border-radius:12px; border:1px solid var(--line-strong); background:rgba(13,17,22,.82); backdrop-filter:blur(2px); color:var(--ink); font-size:1.5rem; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; }
     .sg-ability:active { transform:scale(.94); }
@@ -181,6 +181,8 @@
     .sg-ability .badge { position:absolute; bottom:0; right:4px; font:800 .64rem Inter; color:var(--accent); text-shadow:0 1px 2px #000; pointer-events:none; }
     .sg-ability .badge[hidden] { display:none; }
     .sg-ability .ab-ic { width:84%; height:84%; object-fit:contain; pointer-events:none; }
+    .sg-ability.sg-item { border-color:var(--ok); background:rgba(13,30,22,.84); }
+    .sg-ability.sg-item .badge { color:var(--ok); }
     #buildChoices { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; max-width:340px; }
     #buildChoices .bcard { width:92px; background:var(--surface); border:1px solid var(--line-strong); border-radius:14px; padding:12px 6px; cursor:pointer; text-align:center; transition:transform .1s; }
     #buildChoices .bcard:active { transform:scale(.95); }
@@ -252,6 +254,7 @@
         <button class="sg-ability" id="buildBtn" aria-label="Build sprinkler">🔧</button>
         <button class="sg-ability" id="overloadBtn" aria-label="Overload Fire Pump"><img class="ab-ic" src="../assets/overload-pump.png" alt="" /><div class="cd" id="overloadCdEl" hidden></div></button>
         <button class="sg-ability" id="hollywoodBtn" aria-label="Hollywood Scene" hidden>🎬<div class="badge" id="hollyBadge"></div></button>
+        <div id="itemBar" style="display:contents"></div>
       </div>
       <div id="selectPrompt" class="sg-prompt" hidden>👆 Tap a dusty sprinkler to fix</div>
       <button id="rotOkBtn" class="sg-btn" hidden style="position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:7;padding:12px 32px">OK</button>
@@ -393,6 +396,11 @@
     var inspectSlot = null, pressSlot = null, pressT0 = 0, lastTapT = 0, lastTapSlot = null;   // hold-to-inspect label + double-tap corridor rotate
     // combat feedback: floating text, integrity hit-flash, live damage-per-second
     var floats = [], hurtT = 0, dpsNow = 0, dpsShown = 0;
+    var sparkles = [], items = [];   // sparkle FX + held consumable items (from act-clear chests)
+    function sparkleHeal(cx, cy, color) {   // a nice twinkle burst + expanding ring when an item is used
+      for (var i = 0; i < 24; i++) { var an = Math.random() * Math.PI * 2, rad = Math.random() * coreR * 0.55; sparkles.push({ x: cx + Math.cos(an) * rad, y: cy + Math.sin(an) * rad, vx: Math.cos(an) * (20 + Math.random() * 50), vy: -45 - Math.random() * 95, life: 0.7 + Math.random() * 0.6, max: 1.3, r: 2.5 + Math.random() * 4, c: color, rot: Math.random() * 6.28, ring: false }); }
+      sparkles.push({ x: cx, y: cy, vx: 0, vy: 0, life: 0.55, max: 0.55, r: coreR * 0.35, c: color, rot: 0, ring: true });
+    }
     function spawnFloat(x, y, text, color, scale) { if (floats.length > 40) floats.shift(); floats.push({ x: x, y: y, vy: -34, life: 0.85, max: 0.85, text: text, color: color, sc: scale || 1 }); }
     var W = 360, H = 430, S = 360, dpr = 1, gap = 70, coreR = 30, colXs = [], rowYs = [];
     // battlefield zoom: stays at 1 until a head's coverage reaches the screen edge, then
@@ -704,14 +712,26 @@
     function applyCapacity() { tankLevel++; maxWater = Math.round(maxWater * (1 + TANK_PCT)); water = maxWater; for (var i = 0; i < slots.length; i++) if (slots[i].state === "active") slots[i].flash = 0.6; }
 
     // ---- end-of-act treasure-chest reward ----
-    var REWARDS = [
-      { e: "⚙️", n: "Pressure Surge", d: "+1 Fire Pump level", apply: function () { if (pumpLevel < PUMP_MAX) applyPump(); else coins += 200; } },
-      { e: "🛢️", n: "Reserve Tank", d: "+" + Math.round(TANK_PCT * 100) + "% water capacity (refilled)", apply: function () { applyCapacity(); } },
-      { e: "💰", n: "Salvage Haul", d: "+250 coins to build with", apply: function () { coins += 250; } },
-      { e: "🛡️", n: "Reinforced Core", d: "Core fully repaired to 100%", apply: function () { integrity = 100; } },
-      { e: "⭐", n: "Veteran Crew", d: "Every head +1 K-factor tier", apply: function () { var any = false; for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (s.state === "active" && s.kTier < KLADDER.length - 1) { s.kTier++; s.flash = 0.6; any = true; } } if (!any) coins += 200; } },
-      { e: "🎬", n: "Hollywood Reel", d: "+1 stored Hollywood blast", apply: function () { hollywoodCharges++; updateHollywoodBtn(); } }
-    ];
+    // act-clear chest rewards are now CONSUMABLE ITEMS: stored on the action bar, tap to use when you need them
+    var ITEM_DEFS = {
+      supply: { e: "💧", n: "Supply Potion", d: "Refill water + boost capacity 30%",
+        use: function () { maxWater = Math.round(maxWater * 1.3); water = capW(); sparkleHeal(W / 2, H / 2, "#37b7e4"); spawnFloat(W / 2, H / 2 - coreR * 1.2, "💧 SUPPLY RESTORED", "#7fe0ff", 1.7); } },
+      repair: { e: "🛡️", n: "Repair Kit", d: "Restore the core to 100%",
+        use: function () { integrity = 100; sparkleHeal(W / 2, H / 2, "#3ddc97"); spawnFloat(W / 2, H / 2 - coreR * 1.2, "🛡️ CORE REPAIRED", "#7ef2b0", 1.7); } },
+      pump: { e: "⚙️", n: "Pump Boost", d: "+1 Fire Pump level",
+        use: function () { if (pumpLevel < PUMP_MAX) applyPump(); else { coins += 200; spawnFloat(W / 2, H / 2 - coreR * 1.2, "💰 +200", "#ffd24a", 1.4); } } },
+      coins: { e: "💰", n: "Salvage", d: "+250 coins to build with",
+        use: function () { coins += 250; sparkleHeal(W / 2, H / 2, "#ffd24a"); spawnFloat(W / 2, H / 2 - coreR * 1.2, "💰 +250", "#ffd24a", 1.6); } },
+      kboost: { e: "⭐", n: "Crew Boost", d: "Every head +1 K-factor tier",
+        use: function () { var any = false; for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (s.state === "active" && s.kTier < KLADDER.length - 1) { s.kTier++; s.flash = 0.6; any = true; } } if (!any) coins += 200; sparkleHeal(W / 2, H / 2, "#8fd14a"); spawnFloat(W / 2, H / 2 - coreR * 1.2, "⭐ CREW BOOST", "#8fd14a", 1.6); } }
+    };
+    var REWARDS = ["supply", "repair", "pump", "coins", "kboost"];   // chest grants one as an item
+    function useItem(id) {
+      if (state !== "playing") return;
+      var idx = items.indexOf(id); if (idx < 0) return;
+      var def = ITEM_DEFS[id]; if (!def) return;
+      items.splice(idx, 1); def.use(); hud(); updateAbar();
+    }
     var pendingReward = null, chestOpened = false;
     function openReward() {
       state = "reward"; holding = false;
@@ -739,8 +759,8 @@
       setTimeout(function () {
         box.classList.remove("shaking"); box.classList.add("opened");
         em.textContent = "🎉"; img.src = "../assets/reward-chest-open.png";
-        var rw = pendingReward; if (rw) rw.apply();
-        $("rewardE").textContent = rw.e; $("rewardN").textContent = rw.n; $("rewardD").textContent = rw.d;
+        var def = ITEM_DEFS[pendingReward]; if (pendingReward) items.push(pendingReward);
+        $("rewardE").textContent = def.e; $("rewardN").textContent = def.n; $("rewardD").textContent = def.d + " — tap it on the action bar to use!";
         $("rewardHint").hidden = true;
         var card = $("rewardCard"); card.hidden = false; card.classList.remove("reveal"); void card.offsetWidth; card.classList.add("reveal");
         $("rewardCont").hidden = false; hud();
@@ -1029,6 +1049,7 @@
       }
       // particles
       for (var q = particles.length - 1; q >= 0; q--) { var pt = particles[q]; pt.life -= dt; if (pt.life <= 0) { particles.splice(q, 1); continue; } pt.x += pt.vx * dt; pt.y += pt.vy * dt; }
+      for (var sq = sparkles.length - 1; sq >= 0; sq--) { var sk = sparkles[sq]; sk.life -= dt; if (sk.life <= 0) { sparkles.splice(sq, 1); continue; } sk.x += sk.vx * dt; sk.y += sk.vy * dt; if (!sk.ring) { sk.vy += 70 * dt; sk.rot += dt * 4; } }
       // floating combat text + flash decay
       for (var fq = floats.length - 1; fq >= 0; fq--) { var ft = floats[fq]; ft.life -= dt; if (ft.life <= 0) { floats.splice(fq, 1); continue; } ft.y += ft.vy * dt; ft.vy *= 0.92; }
       for (var fp2 = foamPiles.length - 1; fp2 >= 0; fp2--) { foamPiles[fp2].life -= dt; if (foamPiles[fp2].life <= 0) foamPiles.splice(fp2, 1); }
@@ -1295,6 +1316,20 @@
       var hb = $("hollywoodBtn"), hbg = $("hollyBadge"), hshow = hollywoodCharges > 0;
       hb.hidden = !hshow;
       if (hshow) { hb.classList.toggle("ready", hollywoodT <= 0); hb.classList.toggle("active", hollywoodT > 0); hbg.hidden = false; hbg.textContent = hollywoodCharges; }
+      renderItemBar();
+    }
+    var _itemSig = "x";
+    function renderItemBar() {
+      var bar = $("itemBar"); if (!bar) return;
+      var sig = items.slice().sort().join(",");
+      if (sig === _itemSig) return; _itemSig = sig;   // only rebuild when the held items change
+      var counts = {}, order = [];
+      for (var i = 0; i < items.length; i++) { if (!counts[items[i]]) { counts[items[i]] = 0; order.push(items[i]); } counts[items[i]]++; }   // stack identical items
+      var html = "";
+      for (var k = 0; k < order.length; k++) { var id = order[k], d = ITEM_DEFS[id]; html += '<button class="sg-ability sg-item ready" data-item="' + id + '" aria-label="' + d.n + '">' + d.e + '<div class="badge">' + counts[id] + '</div></button>'; }
+      bar.innerHTML = html;
+      var btns = bar.querySelectorAll(".sg-item");
+      for (var b = 0; b < btns.length; b++) btns[b].onclick = function () { useItem(this.getAttribute("data-item")); };
     }
     function activateHollywood() {
       if (state !== "playing" || hollywoodCharges <= 0 || hollywoodT > 0) return;
@@ -1717,6 +1752,15 @@
         ctx.globalAlpha = a; ctx.fillStyle = "#ecfbff";
         ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r * 0.7, 0, Math.PI * 2); ctx.fill();
       }
+      // item-use sparkles: expanding ring + twinkling 4-point stars
+      for (var sp2 = 0; sp2 < sparkles.length; sp2++) {
+        var sk = sparkles[sp2], sa = Math.max(0, sk.life / sk.max);
+        if (sk.ring) { ctx.globalAlpha = sa * 0.7; ctx.strokeStyle = sk.c; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(sk.x, sk.y, sk.r + (1 - sa) * coreR * 1.3, 0, Math.PI * 2); ctx.stroke(); continue; }
+        var tw = (0.7 + 0.3 * Math.sin(nowT * 0.02 + sk.rot)) * sk.r;
+        ctx.save(); ctx.globalAlpha = sa; ctx.translate(sk.x, sk.y); ctx.rotate(sk.rot); ctx.fillStyle = sk.c; ctx.shadowBlur = 8; ctx.shadowColor = sk.c;
+        ctx.beginPath(); ctx.moveTo(0, -tw); ctx.lineTo(tw * 0.28, -tw * 0.28); ctx.lineTo(tw, 0); ctx.lineTo(tw * 0.28, tw * 0.28); ctx.lineTo(0, tw); ctx.lineTo(-tw * 0.28, tw * 0.28); ctx.lineTo(-tw, 0); ctx.lineTo(-tw * 0.28, -tw * 0.28); ctx.closePath(); ctx.fill();
+        ctx.globalAlpha = sa * 0.9; ctx.fillStyle = "#ffffff"; ctx.beginPath(); ctx.arc(0, 0, tw * 0.28, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      }
       ctx.globalAlpha = 1;
       // laser projectiles — red bolts
       for (var lj = 0; lj < laserShots.length; lj++) {
@@ -1801,7 +1845,7 @@
 
     function reset() {
       for (var i = 0; i < slots.length; i++) { var ctr = slots[i].c === 1 && slots[i].r === 1; slots[i].state = ctr ? "active" : "locked"; slots[i].kTier = 0; slots[i].q = 0; slots[i].flash = 0; slots[i].hurt = 0; slots[i].ec = false; slots[i].hp = false; slots[i].fr = false; slots[i].type = ctr ? "standard" : null; slots[i].aim = 0; slots[i].dmgWave = 0; slots[i].healWave = 0; slots[i].frozenT = 0; }
-      enemies = []; particles = []; floats = []; foamPiles = []; laserShots = []; currentAct = 1; loopN = 0; buffSurge = 0; buffFlood = 0; buffFreeze = 0; freezeWave = false; freezeT = 0; freezeFlash = 0; score = 0; integrity = 100; maxWater = Math.round(330 * (easyMode ? 1.5 : 1) * WATER_BUFF); water = maxWater; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
+      enemies = []; particles = []; floats = []; foamPiles = []; laserShots = []; sparkles = []; items = []; currentAct = 1; loopN = 0; buffSurge = 0; buffFlood = 0; buffFreeze = 0; freezeWave = false; freezeT = 0; freezeFlash = 0; score = 0; integrity = 100; maxWater = Math.round(330 * (easyMode ? 1.5 : 1) * WATER_BUFF); water = maxWater; wave = 1; bossPending = false; bossAlive = false; pumpLevel = 0; tankLevel = 0; nextSupplyPump = false; dryFlash = false; holding = false;
       tankFillMult = 1; shield = 0; hollywoodCharges = 0; hollywoodT = 0; overloadT = 0; overloadCd = 0; selectKind = null; hurtT = 0; dpsNow = 0; dpsShown = 0;
       gameSpeed = 1; inspectSlot = null; pressSlot = null; lastTapSlot = null; rotSlot = null; rotDragging = false; $("ffBtn").textContent = "▶▶"; $("ffBtn").classList.remove("on"); $("rotOkBtn").hidden = true;
       hazard = null; hzPump = false; hzTankMult = 1; hzSpeed = 1; hzReach = 1; smokeMult = 1; $("hazardInd").hidden = true;
