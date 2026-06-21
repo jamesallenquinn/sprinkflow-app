@@ -1490,6 +1490,7 @@
       bossInferno: loadImg("../assets/boss-inferno.png"), bossA: loadImg("../assets/boss-conflag-a.png"), bossB: loadImg("../assets/boss-conflag-b.png"), bossC: loadImg("../assets/boss-conflag-c.png"),
       meltA: loadImg("../assets/boss-meltdown-a.png"), meltB: loadImg("../assets/boss-meltdown-b.png"), meltC: loadImg("../assets/boss-meltdown-c.png"),
       dryHead: loadImg("../assets/icon-head-dry.png"), frozen: loadImg("../assets/fx-head-frozen.png"), shatter: loadImg("../assets/fx-head-shatter.png"),
+      flower: loadImg("../assets/flower-lawn.png"),   // lawn decoy bloom (viney magical flower)
       bg4: loadImg("../assets/bg-act4.png"),   // Act 4 frozen background (art TBD)
       eFrost: loadImg("../assets/enemy-frost.png"), eSleet: loadImg("../assets/enemy-sleet.png"), eBlizzard: loadImg("../assets/enemy-blizzard.png"),
       glacierA: loadImg("../assets/boss-glacier-a.png"), glacierB: loadImg("../assets/boss-glacier-b.png"), glacierC: loadImg("../assets/boss-glacier-c.png") };
@@ -1876,9 +1877,9 @@
         var fw = flowers[fr2], hpf = Math.max(0.15, fw.hp / fw.max), gr = fw.grow || 1, fr0 = fw.r * gr, wob = Math.sin(nowT * 0.004 + fw.t) * 0.12;
         ctx.save(); ctx.translate(fw.x, fw.y); ctx.rotate(wob);
         ctx.globalAlpha = Math.min(1, gr + 0.2) * (fw.life < 2 ? Math.max(0.35, fw.life / 2) : 1);
-        for (var pe = 0; pe < 6; pe++) { var pa = pe * Math.PI / 3 + nowT * 0.0006; ctx.fillStyle = "#ff8fc4"; ctx.beginPath(); ctx.ellipse(Math.cos(pa) * fr0 * 0.9, Math.sin(pa) * fr0 * 0.9, fr0 * 0.7, fr0 * 0.42, pa, 0, Math.PI * 2); ctx.fill(); }
-        ctx.fillStyle = "#ffd24a"; ctx.beginPath(); ctx.arc(0, 0, fr0 * 0.55, 0, Math.PI * 2); ctx.fill();
-        ctx.lineWidth = Math.max(1.5, fr0 * 0.18); ctx.strokeStyle = "#8fd14a"; ctx.beginPath(); ctx.arc(0, 0, fr0 * 1.35, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * hpf); ctx.stroke();   // HP ring
+        if (imgReady(IMG.flower)) { var fs = fr0 * 3.4; ctx.drawImage(IMG.flower, -fs / 2, -fs / 2, fs, fs); }   // viney magical bloom art
+        else { for (var pe = 0; pe < 6; pe++) { var pa = pe * Math.PI / 3 + nowT * 0.0006; ctx.fillStyle = "#5ad0ff"; ctx.beginPath(); ctx.ellipse(Math.cos(pa) * fr0 * 0.9, Math.sin(pa) * fr0 * 0.9, fr0 * 0.7, fr0 * 0.42, pa, 0, Math.PI * 2); ctx.fill(); } ctx.fillStyle = "#d8f4ff"; ctx.beginPath(); ctx.arc(0, 0, fr0 * 0.55, 0, Math.PI * 2); ctx.fill(); }
+        ctx.lineWidth = Math.max(1.5, fr0 * 0.18); ctx.strokeStyle = "#8fd14a"; ctx.beginPath(); ctx.arc(0, 0, fr0 * 1.55, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * hpf); ctx.stroke();   // HP ring
         ctx.restore();
       }
       // ice-shatter fx (when a sub-K11.2 head breaks in a Freeze Over)
