@@ -114,6 +114,22 @@
     .sg-diff-desc { font:600 .78rem Inter, sans-serif; color:var(--ink-dim,#9fb0bd); min-height:1em; text-align:center; max-width:280px; }
     .sg-wallet { font:700 .9rem Inter, sans-serif; color:#ffd24a; background:rgba(255,210,74,.08); border:1px solid rgba(255,210,74,.3); border-radius:999px; padding:7px 16px; }
     .sg-wallet[hidden] { display:none; }
+    #storeOv { justify-content:flex-start; padding-top:18px; }
+    .sg-store-head { display:flex; align-items:center; justify-content:space-between; width:100%; max-width:440px; margin-bottom:8px; }
+    .sg-store-head h1 { margin:0; font-size:1.5rem; }
+    .sg-store-gold { font:800 1.05rem 'Space Grotesk'; color:#ffd24a; }
+    .sg-store-body { width:100%; max-width:440px; overflow-y:auto; -webkit-overflow-scrolling:touch; flex:1; padding-bottom:8px; }
+    .sg-store-sec { font:700 .82rem Inter, sans-serif; letter-spacing:.05em; text-transform:uppercase; color:var(--muted,#9fb0bd); margin:14px 2px 7px; }
+    .sg-store-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .sg-item { background:var(--surface); border:1px solid var(--line); border-radius:13px; padding:10px; display:flex; flex-direction:column; gap:6px; }
+    .sg-item .nm { font:700 .9rem Inter, sans-serif; color:var(--ink); }
+    .sg-item .pr { font:700 .82rem Inter, sans-serif; color:#ffd24a; }
+    .sg-item .thumb { width:100%; height:62px; border-radius:9px; background:#0c1116 center/contain no-repeat; border:1px solid var(--line); }
+    .sg-item button { border:0; border-radius:9px; padding:8px; font:700 .82rem Inter, sans-serif; cursor:pointer; background:var(--grad-fire); color:#1a0d06; }
+    .sg-item button.own { background:var(--surface); color:var(--ok); border:1px solid var(--line-strong); cursor:default; }
+    .sg-item button.eq { background:linear-gradient(135deg,#8fd14a,#5ba62f); color:#0c1406; }
+    .sg-item button.locked { background:var(--surface); color:var(--muted,#9fb0bd); border:1px solid var(--line); opacity:.7; cursor:not-allowed; }
+    .sg-item .cnt { font:700 .76rem Inter, sans-serif; color:var(--water,#6cd6f2); }
     .sg-loop-ind { position:absolute; right:10px; top:60px; z-index:6; background:rgba(34,18,12,.82); border:1px solid var(--brand); border-radius:999px; padding:4px 11px; font:700 .66rem Inter; letter-spacing:.04em; color:var(--accent); }
     .sg-loop-ind[hidden] { display:none; }
     .sg-buff-ind { position:absolute; right:10px; top:88px; z-index:6; background:rgba(13,17,22,.82); border:1px solid var(--line-strong); border-radius:999px; padding:4px 11px; font:700 .8rem Inter; letter-spacing:.02em; color:var(--ink); }
@@ -306,7 +322,17 @@
           <div id="goldWallet" class="sg-wallet" hidden>🪙 <b>0</b> Gold banked</div>
         </div>
         <button class="sg-btn" id="playBtn">▶ Start the siege</button>
+        <button class="sg-btn ghost" id="storeBtn" style="margin-top:10px">🛒 Store</button>
         <button class="sg-btn ghost" id="howBtn" style="margin-top:10px">📖 How to play</button>
+      </div>
+
+      <div class="sg-ov" id="storeOv">
+        <div class="sg-store-head">
+          <h1>🛒 <span class="grad">Store</span></h1>
+          <div class="sg-store-gold">🪙 <span id="storeGold">0</span></div>
+        </div>
+        <div class="sg-store-body" id="storeBody"></div>
+        <button class="sg-btn" id="storeClose" style="margin-top:8px">◀ Back</button>
       </div>
 
       <div class="sg-ov" id="howOv">
@@ -346,6 +372,7 @@
           <div class="sg-lb"><div class="sg-lb-h" id="sgLbTitle">🏆 Top Commanders</div><div id="sgLbList"><div class="sg-lb-empty">Loading…</div></div></div>
           <button class="sg-btn ghost" id="sgPostBtn" style="margin-top:10px">Sign in to post your score</button>
         </div>
+        <button class="sg-btn ghost" id="overStoreBtn" style="margin-top:10px">🛒 Spend Gold in the Store</button>
       </div>
 
       <div class="sg-ov end" id="winOv">
@@ -1552,6 +1579,7 @@
     }
     // gear deflector (standard spray head) — colored art by K-tier, vector fallback
     function drawDeflector(x, y, r, s) {
+      if (IMG.skin && imgReady(IMG.skin)) { drawHeadImg(IMG.skin, x, y, r); return; }   // equipped store skin overrides the per-tier look
       var si2 = Math.min(s.kTier, 5); if (IMG.std && imgReady(IMG.std[si2])) { drawHeadImg(IMG.std[si2], x, y, r); return; }
       var fin = finish(s.kTier), teeth = 16, step = Math.PI * 2 / teeth, rRoot = r * 0.84, ti, pi;
       ctx.beginPath();
@@ -1830,7 +1858,8 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
       // act background (wood = Act 1, steel = Act 2; act 3 reserved), darkened so heads & flames pop
-      var bg = (currentAct >= 4 && imgReady(IMG.bg4)) ? IMG.bg4 : currentAct >= 3 ? IMG.bg3 : currentAct >= 2 ? IMG.bg2 : IMG.bg1;
+      var bg = (IMG.board && imgReady(IMG.board)) ? IMG.board   // equipped store board theme overrides the per-act background
+             : (currentAct >= 4 && imgReady(IMG.bg4)) ? IMG.bg4 : currentAct >= 3 ? IMG.bg3 : currentAct >= 2 ? IMG.bg2 : IMG.bg1;
       if (imgReady(bg)) { ctx.drawImage(bg, 0, 0, W, H); ctx.fillStyle = "rgba(9,13,17,0.52)"; ctx.fillRect(0, 0, W, H); }
       ctx.save();
       if (viewScale !== 1) { ctx.translate(W / 2, H / 2); ctx.scale(viewScale, viewScale); ctx.translate(-W / 2, -H / 2); }
@@ -2001,7 +2030,7 @@
       difficulty = btn ? btn.getAttribute("data-diff") : "normal";
       easyMode = difficulty === "easy"; hardMode = difficulty === "hard";
       autoPick = difficulty !== "hard" && !!($("autoToggle") && $("autoToggle").checked);   // Hard mode never auto-picks
-      resize(); reset(); hud(); startWave(1); ["overOv","winOv","startOv","upgradeOv","pauseOv"].forEach(function (id) { $(id).classList.remove("show"); });
+      resize(); reset(); applyHeadStarts(); grantConsumables(); hud(); startWave(1);   // store: owned head-starts pre-unlock types; owned consumables load into the action bar ["overOv","winOv","startOv","upgradeOv","pauseOv"].forEach(function (id) { $(id).classList.remove("show"); });
     }
 
     // Difficulty selector + auto-pick toggle (remembered between sessions). Auto-pick offered on Easy/Normal, hidden on Hard.
@@ -2024,6 +2053,87 @@
       refreshWallet();
     })();
     function refreshWallet() { var w = $("goldWallet"); if (!w) return; var b = w.querySelector("b"); if (b) b.textContent = gold.toLocaleString(); w.hidden = gold <= 0; }
+
+    // ================= STORE — spend banked Gold on skins, head starts, backgrounds, consumables =================
+    var STORE = {
+      skins: [
+        { id: "skin-grey", name: "Flat Grey ENT", price: 300 },
+        { id: "skin-white", name: "Pure White", price: 350 },
+        { id: "skin-brass", name: "Dark Brass", price: 400 },
+        { id: "skin-black", name: "Matte Black", price: 500 },
+        { id: "skin-chrome", name: "Shining Chrome", price: 650 },
+        { id: "skin-gold", name: "Royal Gold", price: 1200 }
+      ],
+      backgrounds: [
+        { id: "board-wood", name: "Charred Wood", price: 600 },
+        { id: "board-concrete", name: "Service Room", price: 600 },
+        { id: "board-metal", name: "Metal Pan Deck", price: 700 },
+        { id: "board-blueprint", name: "Blueprint", price: 800 }
+      ],
+      heads: [
+        { id: "hs-foam", type: "foam", name: "Foam head start", price: 500 },
+        { id: "hs-lawn", type: "lawn", name: "Lawn head start", price: 500 },
+        { id: "hs-moon", type: "moon", name: "Moon head start", price: 650 },
+        { id: "hs-dry", type: "dry", name: "Dry head start", price: 700 },
+        { id: "hs-corridor", type: "corridor", name: "Corridor head start", price: 900 },
+        { id: "hs-laser", type: "laser", name: "Laser head start", price: 1600 }
+      ],
+      consumables: [
+        { id: "coins", name: "Salvage", price: 90 },
+        { id: "supply", name: "Supply Potion", price: 120 },
+        { id: "repair", name: "Repair Kit", price: 150 },
+        { id: "kboost", name: "Crew Boost", price: 220 },
+        { id: "pump", name: "Pump Boost", price: 260 }
+      ]
+    };
+    var owned = {}, equipSkin = "", equipBg = "", cons = {}, storeFrom = "startOv";
+    try { JSON.parse(localStorage.getItem("sg_owned") || "[]").forEach(function (id) { owned[id] = true; }); } catch (e) {}
+    try { equipSkin = localStorage.getItem("sg_skin") || ""; } catch (e) {}
+    try { equipBg = localStorage.getItem("sg_bg") || ""; } catch (e) {}
+    try { cons = JSON.parse(localStorage.getItem("sg_cons") || "{}") || {}; } catch (e) {}
+    function saveOwned() { try { localStorage.setItem("sg_owned", JSON.stringify(Object.keys(owned))); } catch (e) {} }
+    function saveCons() { try { localStorage.setItem("sg_cons", JSON.stringify(cons)); } catch (e) {} }
+    function applyCosmetics() { IMG.skin = equipSkin ? loadImg("../assets/" + equipSkin + ".png") : null; IMG.board = equipBg ? loadImg("../assets/" + equipBg + ".png") : null; }
+    function applyHeadStarts() { STORE.heads.forEach(function (h) { if (owned[h.id]) unlocked[h.type] = true; }); }   // owned head-starts pre-unlock their type for the run
+    function grantConsumables() { var changed = false; STORE.consumables.forEach(function (c) { while ((cons[c.id] || 0) > 0 && items.length < 8) { items.push(c.id); cons[c.id]--; changed = true; } }); if (changed) saveCons(); }   // stocked consumables load into the action bar (single-use)
+    function storeFind(id) { var cats = ["skins", "backgrounds", "heads", "consumables"], i, j; for (i = 0; i < cats.length; i++) for (j = 0; j < STORE[cats[i]].length; j++) if (STORE[cats[i]][j].id === id) { STORE[cats[i]][j].cat = cats[i]; return STORE[cats[i]][j]; } return null; }
+    function storeBuy(id) {
+      var it = storeFind(id); if (!it) return; var isCons = it.cat === "consumables";
+      if (!isCons && owned[id]) return; if (gold < it.price) return;
+      gold -= it.price; saveGold(); refreshWallet();
+      if (isCons) { cons[id] = (cons[id] || 0) + 1; saveCons(); }
+      else { owned[id] = true; saveOwned(); if (it.cat === "skins") storeEquip(id, "skin"); else if (it.cat === "backgrounds") storeEquip(id, "bg"); }
+      renderStore();
+    }
+    function storeEquip(id, kind) {
+      if (kind === "skin") { equipSkin = equipSkin === id ? "" : id; try { localStorage.setItem("sg_skin", equipSkin); } catch (e) {} }
+      else { equipBg = equipBg === id ? "" : id; try { localStorage.setItem("sg_bg", equipBg); } catch (e) {} }
+      applyCosmetics(); renderStore();
+    }
+    function openStore(fromId) { storeFrom = fromId || "startOv"; state = "store"; $("startOv").classList.remove("show"); $("overOv").classList.remove("show"); $("storeOv").classList.add("show"); renderStore(); }
+    function closeStore() { $("storeOv").classList.remove("show"); $(storeFrom).classList.add("show"); state = storeFrom === "overOv" ? "over" : "start"; refreshWallet(); }
+    function buyBtn(s) { var aff = gold >= s.price; return '<button class="' + (aff ? "" : "locked") + '" data-buy="' + s.id + '"' + (aff ? "" : " disabled") + '>🪙 ' + s.price + '</button>'; }
+    function ownEqBtn(s, attr, equipped) { if (equipped) return '<button class="eq" ' + attr + '="' + s.id + '">✓ Equipped</button>'; return '<button class="own" ' + attr + '="' + s.id + '">Equip</button>'; }
+    function skinCard(s) { return '<div class="sg-item"><div class="thumb" style="background-image:url(../assets/' + s.id + '.png)"></div><div class="nm">' + s.name + '</div>' + (owned[s.id] ? ownEqBtn(s, "data-eqs", equipSkin === s.id) : buyBtn(s)) + '</div>'; }
+    function bgCard(s) { return '<div class="sg-item"><div class="thumb" style="background-image:url(../assets/' + s.id + '.png);background-size:cover"></div><div class="nm">' + s.name + '</div>' + (owned[s.id] ? ownEqBtn(s, "data-eqb", equipBg === s.id) : buyBtn(s)) + '</div>'; }
+    function headCard(s) { return '<div class="sg-item"><div class="nm">' + headMenuIco(s.type) + ' ' + s.name + '</div>' + (owned[s.id] ? '<button class="own">✓ Owned</button>' : buyBtn(s)) + '</div>'; }
+    function consCard(s) { var d = ITEM_DEFS[s.id], n = cons[s.id] || 0; return '<div class="sg-item"><div class="nm">' + (d ? d.e : "") + ' ' + s.name + '</div><div class="pr">' + (d ? d.d : "") + '</div>' + (n > 0 ? '<div class="cnt">Stocked: ' + n + '</div>' : "") + buyBtn(s) + '</div>'; }
+    function renderStore() {
+      $("storeGold").textContent = gold.toLocaleString();
+      var body = $("storeBody"); if (!body) return; var h = "";
+      h += '<div class="sg-store-sec">Sprinkler skins · cosmetic</div><div class="sg-store-grid">' + STORE.skins.map(skinCard).join("") + '</div>';
+      h += '<div class="sg-store-sec">Board backgrounds</div><div class="sg-store-grid">' + STORE.backgrounds.map(bgCard).join("") + '</div>';
+      h += '<div class="sg-store-sec">Head starts · begin runs with the type unlocked</div><div class="sg-store-grid">' + STORE.heads.map(headCard).join("") + '</div>';
+      h += '<div class="sg-store-sec">Consumables · loaded into your next run</div><div class="sg-store-grid">' + STORE.consumables.map(consCard).join("") + '</div>';
+      body.innerHTML = h;
+      Array.prototype.forEach.call(body.querySelectorAll("button[data-buy]"), function (b) { b.onclick = function () { storeBuy(b.getAttribute("data-buy")); }; });
+      Array.prototype.forEach.call(body.querySelectorAll("button[data-eqs]"), function (b) { b.onclick = function () { storeEquip(b.getAttribute("data-eqs"), "skin"); }; });
+      Array.prototype.forEach.call(body.querySelectorAll("button[data-eqb]"), function (b) { b.onclick = function () { storeEquip(b.getAttribute("data-eqb"), "bg"); }; });
+    }
+    applyCosmetics();
+    if ($("storeBtn")) $("storeBtn").onclick = function () { openStore("startOv"); };
+    if ($("storeClose")) $("storeClose").onclick = closeStore;
+    if ($("overStoreBtn")) $("overStoreBtn").onclick = function () { openStore("overOv"); };
     // ---- audio: optional looping music (per level) + procedural SFX (spray hiss, flame extinguish) ----
     var musicOn = false, sfxOn = false;
     try { var legacy = localStorage.getItem("sg_sound") === "1"; musicOn = localStorage.getItem("sg_music") === "1" || (legacy && localStorage.getItem("sg_music") === null); sfxOn = localStorage.getItem("sg_sfx") === "1" || (legacy && localStorage.getItem("sg_sfx") === null); } catch (e) {}
