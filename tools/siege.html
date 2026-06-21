@@ -114,6 +114,15 @@
     .sg-diff-desc { font:600 .78rem Inter, sans-serif; color:var(--ink-dim,#9fb0bd); min-height:1em; text-align:center; max-width:280px; }
     .sg-wallet { font:700 .9rem Inter, sans-serif; color:#ffd24a; background:rgba(255,210,74,.08); border:1px solid rgba(255,210,74,.3); border-radius:999px; padding:7px 16px; }
     .sg-wallet[hidden] { display:none; }
+    .sg-reveal { width:100%; max-width:330px; margin:8px 0 6px; }
+    .sg-reveal-lines { display:flex; flex-direction:column; gap:3px; margin-bottom:8px; }
+    .sg-reveal-row { display:flex; justify-content:space-between; gap:10px; font:700 .84rem Inter, sans-serif; color:var(--ink); opacity:0; transform:translateY(7px); transition:opacity .25s ease, transform .25s ease; }
+    .sg-reveal-row.in { opacity:1; transform:none; }
+    .sg-reveal-row .ra { color:#ffd24a; white-space:nowrap; }
+    .sg-reveal-total { font:900 2.5rem 'Space Grotesk', sans-serif; color:#ffd24a; line-height:1; text-shadow:0 2px 16px rgba(255,210,74,.5); transition:transform .3s ease; }
+    .sg-reveal.done .sg-reveal-total { animation:goldpop .6s ease forwards; }
+    @keyframes goldpop { 0%{ transform:scale(1);} 45%{ transform:scale(1.34);} 100%{ transform:scale(1.16);} }
+    .sg-reveal-sub { font:600 .72rem Inter, sans-serif; color:var(--muted); margin-top:4px; }
     #storeOv { justify-content:flex-start; padding-top:18px; }
     .sg-store-head { display:flex; align-items:center; justify-content:space-between; width:100%; max-width:440px; margin-bottom:8px; }
     .sg-store-head h1 { margin:0; font-size:1.5rem; }
@@ -344,7 +353,7 @@
         <h1>How to <span class="grad">play</span></h1>
         <div class="sg-how">
           <p>You're the brass upright in the center. <b>Tap and hold</b> to spray — but the supply is weak (~7 psi static), so residual pressure drops as more heads open.</p>
-          <p>Put out fires to earn <b>🪙 Gold</b> and <b>level up</b>. Leveling unlocks stronger sprinkler types (laser last, ~level 5). Tap <b>🔧 Build</b> to add them to a slot — free, but each takes <b>~one wave to install</b> (demolishing takes a wave too). Grab the end-of-wave <b>upgrade cards</b> (K-factor, supply, specials). <b>Gold banks only when you END a run manually</b> — get overrun and you lose that run's Gold.</p>
+          <p>Put out fires to earn <b>🪙 Gold</b> and <b>level up</b>. Leveling unlocks stronger sprinkler types (laser last, ~level 5). Tap <b>🔧 Build</b> to add them to a slot — free, but each takes <b>~one wave to install</b> (demolishing takes a wave too). Grab the end-of-wave <b>upgrade cards</b> (K-factor, supply, specials). <b>Your Gold is always kept</b> — every run banks what you earned plus <b>performance bonuses</b>. Spend it in the 🛒 <b>Store</b> on skins &amp; head starts.</p>
           <p><b>Green splitters</b> break into two when doused; from wave 10, <b>blue ELO flames</b> shrug off small heads — only K11.2+ can put them out. Hold to wave 15 for the boss — then <b>Act 2</b> brings grease fires (only foam works), ember swarms, backdraft, and hazards.</p>
         </div>
         <button class="sg-btn" id="howClose" style="margin-top:14px">Got it</button>
@@ -367,10 +376,15 @@
 
       <div class="sg-ov end" id="overOv">
         <button class="sg-btn ghost sg-restart" id="againBtn">↻ Try again</button>
-        <div class="ic">🔥</div>
-        <h1>Overrun</h1>
+        <div class="ic" id="overIc">🔥</div>
+        <h1 id="overTitle">Overrun</h1>
         <div class="sg-final"><div><div class="v gold" id="finalWave">1</div><div class="k">Waves held</div></div><div><div class="v" id="finalScore" style="color:var(--water)">0</div><div class="k">Score</div></div></div>
         <p id="finalExtra" style="color:var(--muted);font-size:.85rem;margin:4px 0 0"></p>
+        <div class="sg-reveal" id="goldReveal">
+          <div class="sg-reveal-lines" id="revealLines"></div>
+          <div class="sg-reveal-total">🪙 <span id="goldBig">0</span></div>
+          <div class="sg-reveal-sub">Gold earned this run — tap 🛒 to spend it</div>
+        </div>
         <div class="sg-lb-block" id="sgLb">
           <div class="sg-rankmsg" id="sgRankMsg"></div>
           <div class="sg-who" id="sgWho"></div>
@@ -1481,9 +1495,60 @@
       overloadT = 15; overloadCd = 60; spawnFloat(W / 2, H / 2 - coreR * 1.2, "⚡ OVERLOAD ×1.5", "#ff5a2f", 1.8); updateAbar();
     }
 
-    function gameOver(manualEnd) { state = "over"; var earned = bankRun(manualEnd); $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("loopInd").hidden = true; $("buffInd").hidden = true; $("headStats").hidden = true; $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString(); $("finalExtra").innerHTML = "Reached Level " + playerLevel + " · doused " + kills.toLocaleString() + " fires" + (currentAct >= 2 ? " · made it to Act " + currentAct : "") + "<br>" + (manualEnd ? '<span style="color:#ffd24a">🪙 +' + earned.toLocaleString() + ' Gold banked (' + gold.toLocaleString() + ' total)</span>' : '<span style="color:#ff8f6a">💀 Overrun — ' + earned.toLocaleString() + ' Gold lost</span>'); pendingScore = score; $("overOv").classList.add("show"); mountLb("overOv", "againBtn"); }
-    function bankRun(manualEnd) { var earned = coins; if (manualEnd) { gold += earned; saveGold(); refreshWallet(); } coins = 0; return earned; }   // Gold persists only if you END a run manually; overrun forfeits this run's earnings
-    function win() { state = "win"; var earned = bankRun(true); $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("loopInd").hidden = true; $("buffInd").hidden = true; $("headStats").hidden = true; $("winScore").textContent = score.toLocaleString(); $("winExtra").innerHTML = "Reached Level " + playerLevel + " · doused " + kills.toLocaleString() + " fires<br><span style=\"color:#ffd24a\">🪙 +" + earned.toLocaleString() + " Gold banked (" + gold.toLocaleString() + " total)</span>"; pendingScore = score; $("winOv").classList.add("show"); mountLb("winOv", "winAgainBtn"); }
+    function perfBonuses() {   // performance bonuses tallied at the end of every run
+      var b = [];
+      b.push({ label: "🌊 Held " + wave + " waves", amt: wave * 8 });
+      b.push({ label: "⭐ Reached level " + playerLevel, amt: playerLevel * 12 });
+      if (kills > 0) b.push({ label: "🔥 " + kills.toLocaleString() + " fires doused", amt: kills });
+      if (currentAct >= 2) b.push({ label: "🎬 Reached Act " + currentAct, amt: (currentAct - 1) * 150 });
+      if (loopN >= 1) b.push({ label: "♾️ Endless loop " + loopN, amt: loopN * 250 });
+      return b;
+    }
+    function endRunGold() {   // Gold is ALWAYS kept now (overrun or manual end) + performance bonuses
+      var base = coins, bonuses = perfBonuses();
+      var total = base + bonuses.reduce(function (a, x) { return a + x.amt; }, 0);
+      gold += total; saveGold(); refreshWallet(); coins = 0;
+      return { base: base, bonuses: bonuses, total: total };
+    }
+    var revealTimers = [];
+    function audioBlip(freq, dur, vol) {
+      if (!sfxOn || !actx) return;
+      try { var o = actx.createOscillator(), g = actx.createGain(); o.type = "triangle"; o.frequency.value = freq; g.gain.value = vol || 0.05; o.connect(g); g.connect(actx.destination); var t = actx.currentTime; o.start(t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); o.stop(t + dur); } catch (e) {}
+    }
+    function countUp(el, from, to, ms) {   // eased number roll-up (slot-machine style)
+      var t0 = null;
+      function step(ts) { if (t0 === null) t0 = ts; var p = Math.min(1, (ts - t0) / ms); var v = Math.round(from + (to - from) * (1 - Math.pow(1 - p, 3))); el.textContent = v.toLocaleString(); if (p < 1) requestAnimationFrame(step); }
+      requestAnimationFrame(step);
+    }
+    function startGoldReveal(r) {
+      revealTimers.forEach(clearTimeout); revealTimers = [];
+      var wrap = $("goldReveal"), lines = $("revealLines"), big = $("goldBig"); if (!wrap) return;
+      wrap.classList.remove("done"); lines.innerHTML = ""; big.textContent = "0";
+      var steps = [{ label: "💧 Run earnings", amt: r.base }].concat(r.bonuses), running = 0, stepMs = 620, start = 350;
+      steps.forEach(function (s, i) {
+        revealTimers.push(setTimeout(function () {
+          var row = document.createElement("div"); row.className = "sg-reveal-row";
+          row.innerHTML = '<span class="rl">' + s.label + '</span><span class="ra">+' + s.amt.toLocaleString() + '</span>';
+          lines.appendChild(row); void row.offsetWidth; row.classList.add("in");
+          var from = running; running += s.amt; countUp(big, from, running, 520);
+          audioBlip(620 + i * 70, 0.06, 0.05);
+        }, start + i * stepMs));
+      });
+      revealTimers.push(setTimeout(function () {
+        countUp(big, running, r.total, 320); wrap.classList.add("done");   // big bold pop + glow
+        audioBlip(990, 0.16, 0.06); revealTimers.push(setTimeout(function () { audioBlip(1320, 0.28, 0.06); }, 120));
+      }, start + steps.length * stepMs + 180));
+    }
+    function gameOver(manualEnd) {
+      state = "over";
+      $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("loopInd").hidden = true; $("buffInd").hidden = true; $("headStats").hidden = true;
+      $("overTitle").textContent = manualEnd ? "Run banked!" : "Overrun"; $("overIc").textContent = manualEnd ? "🏁" : "🔥";
+      $("finalWave").textContent = wave; $("finalScore").textContent = score.toLocaleString();
+      $("finalExtra").textContent = "Reached Level " + playerLevel + " · doused " + kills.toLocaleString() + " fires" + (currentAct >= 2 ? " · made it to Act " + currentAct : "");
+      pendingScore = score;
+      var r = endRunGold(); $("overOv").classList.add("show"); startGoldReveal(r); mountLb("overOv", "againBtn");
+    }
+    function win() { state = "win"; var r = endRunGold(); $("pauseBtn").hidden = true; $("ffBtn").hidden = true; $("abar").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("loopInd").hidden = true; $("buffInd").hidden = true; $("headStats").hidden = true; $("winScore").textContent = score.toLocaleString(); $("winExtra").innerHTML = "Reached Level " + playerLevel + " · doused " + kills.toLocaleString() + " fires<br><span style=\"color:#ffd24a\">🪙 +" + r.total.toLocaleString() + " Gold banked (" + gold.toLocaleString() + " total)</span>"; pendingScore = score; $("winOv").classList.add("show"); mountLb("winOv", "winAgainBtn"); }
     function pauseGame() { if (state !== "playing") return; state = "paused"; holding = false; $("pauseOv").classList.add("show"); $("abar").hidden = true; $("ffBtn").hidden = true; $("dpsMeter").hidden = true; $("lowWater").hidden = true; $("easyInd").hidden = true; $("hazardInd").hidden = true; $("loopInd").hidden = true; $("buffInd").hidden = true; $("pauseAutoWrap").hidden = hardMode; $("pauseAutoToggle").checked = autoPick; }
     function resumeGame() { if (state !== "paused") return; state = "playing"; last = 0; $("pauseOv").classList.remove("show"); $("easyInd").hidden = !easyMode; $("loopInd").hidden = loopN < 1; updateBuffInd(); $("ffBtn").hidden = false; updateHollywoodBtn(); }
 
@@ -1588,8 +1653,8 @@
     }
     // gear deflector (standard spray head) — colored art by K-tier, vector fallback
     function drawDeflector(x, y, r, s) {
-      if (IMG.skin && imgReady(IMG.skin)) { drawHeadImg(IMG.skin, x, y, r); return; }   // equipped store skin overrides the per-tier look
-      var si2 = Math.min(s.kTier, 5); if (IMG.std && imgReady(IMG.std[si2])) { drawHeadImg(IMG.std[si2], x, y, r); return; }
+      if (IMG.skin && imgReady(IMG.skin)) { drawHeadImg(IMG.skin, x, y, r); return; }   // equipped store skin overrides the look
+      if (IMG.std && imgReady(IMG.std[0])) { drawHeadImg(IMG.std[0], x, y, r); return; }   // default = brass at every K-tier (size grows via r; color only changes with a Store skin)
       var fin = finish(s.kTier), teeth = 16, step = Math.PI * 2 / teeth, rRoot = r * 0.84, ti, pi;
       ctx.beginPath();
       for (ti = 0; ti < teeth; ti++) { var b = ti * step - Math.PI / 2, pa = [[b, rRoot], [b + step * 0.18, r], [b + step * 0.5, r], [b + step * 0.68, rRoot]]; for (pi = 0; pi < 4; pi++) { var px = x + Math.cos(pa[pi][0]) * pa[pi][1], py = y + Math.sin(pa[pi][0]) * pa[pi][1]; if (ti === 0 && pi === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); } }
@@ -2033,6 +2098,7 @@
       hazard = null; hzPump = false; hzTankMult = 1; hzSpeed = 1; hzReach = 1; smokeMult = 1; $("hazardInd").hidden = true;
       coins = 0; xp = 0; playerLevel = 1; unlocked = { standard: true }; pendingCost = 0; seenTypes = {}; kills = 0; bannerT = 0; pendingReward = null; chestOpened = false; $("buildOv").classList.remove("show"); $("tipBanner").hidden = true; $("rewardOv").classList.remove("show");
       viewScale = 1; zoomTarget = 1; manualZoomIdx = 0; if ($("zoomBtn")) $("zoomBtn").textContent = "1×";
+      revealTimers.forEach(clearTimeout); revealTimers = [];   // stop any in-flight Gold-reveal animation
       updatePumpIcons(); $("dpsMeter").hidden = true; $("abar").hidden = true; $("headStats").hidden = true; headRowEls = {}; if ($("headRows")) $("headRows").innerHTML = ""; $("unlockCard").hidden = true; clearTimeout(unlockTimer); $("soundNudge").hidden = true; clearTimeout(soundNudgeTimer);
     }
     function newGame() {
@@ -2068,13 +2134,12 @@
     // ================= STORE — spend banked Gold on skins, head starts, backgrounds, consumables =================
     var STORE = {
       skins: [
-        { id: "skin-grey", name: "Flat Grey ENT", price: 300 },
-        { id: "skin-white", name: "Pure White", price: 350 },
-        { id: "skin-brass", name: "Dark Brass", price: 400 },
-        { id: "skin-black", name: "Matte Black", price: 500 },
-        { id: "skin-chrome", name: "Shining Chrome", price: 650 },
-        { id: "skin-gold", name: "Royal Gold", price: 1200 }
-      ],
+        { id: "skin-chrome", name: "Shining Chrome", price: 500 },
+        { id: "skin-white", name: "Pure White", price: 1000 },
+        { id: "skin-grey", name: "Flat Grey ENT", price: 1800 },
+        { id: "skin-black", name: "Matte Black", price: 3000 },
+        { id: "skin-gold", name: "Royal Gold", price: 6000 }
+      ],   // brass is the free default (always equipped when no skin is chosen); chrome is the first buy (~one Act-1 win), gold is the save-up flex
       backgrounds: [
         { id: "board-wood", name: "Charred Wood", price: 600 },
         { id: "board-concrete", name: "Service Room", price: 600 },
