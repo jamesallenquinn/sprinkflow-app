@@ -311,7 +311,8 @@
         <p style="margin-bottom:2px">Pick a head, then tap an empty slot to place it.</p>
         <p id="buildCoins" style="color:#ffd24a">💰 0 coins · level up to unlock more</p>
         <div id="buildChoices"></div>
-        <button class="sg-btn" id="buildDone" style="margin-top:14px">▶ Resume</button>
+        <button class="sg-btn ghost" id="buildDemolishBtn" style="margin-top:12px" hidden>🧨 Demolish a head</button>
+        <button class="sg-btn" id="buildDone" style="margin-top:10px">▶ Resume</button>
       </div>
 
       <div class="sg-ov end" id="overOv">
@@ -409,8 +410,8 @@
     // ---- progression + economy ----
     var UNLOCK_ORDER = ["foam", "moon", "lawn", "corridor", "laser"];   // standard free at start; specials unlock by leveling, laser last
     var UNLOCK_XP = [50, 130, 230, 340, 440];          // cumulative XP per unlock (foam≈w2, moon≈w4, lawn≈w6, corridor≈w8, laser≈w10)
-    var XP_KILL = 1, XP_WAVE = 28, XP_BOSS = 120;
-    var COIN_KILL = 2, COIN_WAVE = 30, COIN_BOSS = 120;
+    var XP_KILL = 1, XP_WAVE = 28, XP_BOSS = 120, XP_PER_LEVEL = 40;   // ~level 60 by end of campaign, climbs in Endless
+    var COIN_KILL = 1, COIN_WAVE = 15, COIN_BOSS = 60;                 // halved — was draining too slowly
     var PLACE_COST = { standard: 25, foam: 50, moon: 45, lawn: 55, corridor: 65, laser: 100 };
     var coins = 0, xp = 0, playerLevel = 1, unlocked = { standard: true }, pendingCost = 0;
     var seenTypes = {}, kills = 0, bannerT = 0;
@@ -439,11 +440,16 @@
         setTimeout(function () { c.hidden = true; c.classList.remove("out"); }, 350);
       }, 4400);
     }
+    function updateLevel() {   // XP-derived level — climbs to ~60 over a run; a quick floating "Level Up!" flag, no pause
+      var nl = 1 + Math.floor(xp / XP_PER_LEVEL);
+      if (nl > playerLevel) { playerLevel = nl; spawnFloat(W / 2, H / 2 - coreR * 1.5, "⭐ LEVEL " + playerLevel, "#8fd14a", 1.4); }
+    }
     function checkUnlocks() {
       for (var i = 0; i < UNLOCK_ORDER.length; i++) {
         var ty = UNLOCK_ORDER[i];
-        if (!unlocked[ty] && xp >= UNLOCK_XP[i]) { unlocked[ty] = true; playerLevel++; showUnlock(ty); }
+        if (!unlocked[ty] && xp >= UNLOCK_XP[i]) { unlocked[ty] = true; showUnlock(ty); }
       }
+      updateLevel();
     }
     function placeCost(ty) { return PLACE_COST[ty] || 40; }
     function typeOf(s) { return s.type || "standard"; }
@@ -760,11 +766,7 @@
       else if (wave === 2) tipOnce("build", "🔧 Tap Build (bottom bar) to spend coins on new sprinklers.");
       else if (hazard) showBanner(hazard.name + " — " + hazard.desc, 3.5, "var(--accent)");
     }
-    function xpProgress() {   // progress (0..1) toward the next unlock
-      var prev = 0;
-      for (var i = 0; i < UNLOCK_ORDER.length; i++) { if (!unlocked[UNLOCK_ORDER[i]]) return Math.max(0, Math.min(1, (xp - prev) / (UNLOCK_XP[i] - prev))); prev = UNLOCK_XP[i]; }
-      return 1;   // everything unlocked
-    }
+    function xpProgress() { return (xp % XP_PER_LEVEL) / XP_PER_LEVEL; }   // progress (0..1) toward the next level
     function hud() {
       $("scoreVal").textContent = score.toLocaleString();
       $("lvlVal").textContent = playerLevel;
@@ -1110,6 +1112,7 @@
     function selectEligible(s) {
       if (selectKind === "unlock" || selectKind === "place") return s.state === "locked";
       if (s.state !== "active") return false;
+      if (selectKind === "demolish") return true;   // any active head can be demolished
       if (selectKind === "ec") return !s.ec && typeOf(s) !== "laser";   // lasers have infinite range — no EC
       if (selectKind === "hp") return !s.hp;
       if (selectKind === "kf") return s.kTier < KLADDER.length - 1;
@@ -1135,7 +1138,7 @@
       afterChoice();
     }
     function placeUnlock(best) {
-      best.state = "active"; best.kTier = 0; best.q = 0; best.ec = false; best.hp = false; best.fr = false; best.type = pendingType; best.aim = 0; best.foamOpen = 0; best.moonOpen = 0;
+      best.state = "active"; best.kTier = 0; best.q = 0; best.ec = false; best.hp = false; best.fr = false; best.type = pendingType; best.aim = 0; best.foamOpen = 0; best.moonOpen = 0; best.dmgWave = 0; best.healWave = 0;
       if (pendingType === "corridor") best.axis = Math.random() < 0.5 ? "x" : "y";
       if (pendingType === "lawn") { best.aim0 = Math.atan2(H / 2 - best.y, W / 2 - best.x); best.sweep = 0; best.swPhase = "fwd"; best.rotLocked = false; }   // default aim toward core; rotate at placement
       if (pendingType !== "standard") { var wb = SPECIAL_WATER_BONUS * (easyMode ? 1.5 : 1) * WATER_BUFF; maxWater += wb; water = Math.min(maxWater, water + wb); }
@@ -1171,6 +1174,13 @@
         card.onclick = function () { if (state === "build" && coins >= cost && lockedCount() > 0) buildPlace(ty, cost); };
         box.appendChild(card);
       });
+      $("buildDemolishBtn").hidden = activeSlots().length < 1;   // demolish needs a head to remove
+    }
+    function beginDemolish() {
+      if (activeSlots().length < 1) return;
+      selectKind = "demolish"; state = "select";
+      $("buildOv").classList.remove("show");
+      $("selectPrompt").textContent = "🧨 Tap a head to demolish (no refund) — then build a new one"; $("selectPrompt").hidden = false;
     }
     function buildPlace(ty, cost) {
       if (coins < cost || lockedCount() === 0) return;
@@ -1221,6 +1231,11 @@
       if (selectKind === "place") {                         // building: tap a slot to place (tap elsewhere cancels)
         if (hit && coins >= pendingCost) { coins -= pendingCost; placeUnlock(best); hud(); if (activeSlots().length >= 3) tipOnce("pressure", "Heads share one supply — more open heads = less pressure each. Add a Pump or raise K-factor."); selectKind = null; $("selectPrompt").hidden = true; if (best.type === "lawn") beginLawnRotate(best); else openBuild(); }
         else { selectKind = null; $("selectPrompt").hidden = true; openBuild(); }   // cancel → back to build panel
+        return;
+      }
+      if (selectKind === "demolish") {                       // demolish: tap a head to clear it back to a plug, then rebuild
+        if (hit) { best.state = "locked"; best.kTier = 0; best.q = 0; best.type = null; best.ec = best.hp = best.fr = false; best.dmgWave = 0; best.healWave = 0; best.flash = 0.6; spawnFloat(best.x, best.y - gap * 0.4, "🧨 DEMOLISHED", "#ff5a4f", 1.4); }
+        selectKind = null; $("selectPrompt").hidden = true; openBuild();
         return;
       }
       if (hit) { applyPickTo(best, selectKind); selectKind = null; $("selectPrompt").hidden = true; afterChoice(); }   // upgrade picks (ec/hp/kf/fr)
@@ -1826,6 +1841,7 @@
     $("rotOkBtn").onclick = confirmRotate;
     $("buildBtn").onclick = function () { if (state === "playing") openBuild(); };
     $("buildDone").onclick = resumeFromBuild;
+    $("buildDemolishBtn").onclick = beginDemolish;
     $("howBtn").onclick = function () { $("howOv").classList.add("show"); };
     $("howClose").onclick = function () { $("howOv").classList.remove("show"); };
     $("pauseBtn").onclick = function () { if (state === "playing") pauseGame(); else if (state === "paused") resumeGame(); };
