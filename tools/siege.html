@@ -108,11 +108,11 @@
     .sg-hollybtn[hidden] { display:none; }
     .sg-ffbtn { right:60px; width:auto; min-width:42px; padding:0 10px; font:800 .82rem 'Space Grotesk',sans-serif; gap:0; }
     .sg-ffbtn.on { border-color:var(--accent); color:var(--accent); }
-    .sg-musicbtn { left:10px; right:auto; }
-    .sg-sfxbtn { left:60px; right:auto; }
-    .sg-musicbtn.on { border-color:var(--water); color:var(--water); }
-    .sg-sfxbtn.on { border-color:var(--ok); color:var(--ok); }
-    .sg-musicbtn:not(.on), .sg-sfxbtn:not(.on) { opacity:.45; }
+    .sg-setbtn { left:10px; right:auto; }
+    .sg-setbtn.on { border-color:var(--accent); }
+    .sg-setpop { position:absolute; left:10px; top:60px; z-index:8; background:rgba(13,17,22,.94); border:1px solid var(--line-strong); border-radius:12px; padding:10px; display:flex; flex-direction:column; gap:8px; box-shadow:0 6px 18px rgba(0,0,0,.5); }
+    .sg-setpop[hidden] { display:none; }
+    .sg-setpop .sg-toggle { padding:7px 12px; font-size:.84rem; }
     /* WoW-style action bar (usable abilities) at bottom center */
     .sg-abar { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); z-index:6; display:flex; gap:10px; }
     .sg-abar[hidden] { display:none; }
@@ -186,8 +186,11 @@
       <canvas id="game" width="360" height="430"></canvas>
       <button id="pauseBtn" class="sg-pausebtn" aria-label="Pause" hidden>❚❚</button>
       <button id="ffBtn" class="sg-pausebtn sg-ffbtn" aria-label="Fast forward" hidden>▶▶</button>
-      <button id="musicBtn" class="sg-pausebtn sg-musicbtn" aria-label="Toggle music">🎵</button>
-      <button id="sfxBtn" class="sg-pausebtn sg-sfxbtn" aria-label="Toggle sound effects">🔊</button>
+      <button id="settingsBtn" class="sg-pausebtn sg-setbtn" aria-label="Sound settings">⚙️</button>
+      <div id="settingsPop" class="sg-setpop" hidden>
+        <label class="sg-toggle"><input type="checkbox" id="musicChk"><span>🎵 Music</span></label>
+        <label class="sg-toggle"><input type="checkbox" id="sfxChk"><span>🔊 Sound effects</span></label>
+      </div>
       <div class="sg-abar" id="abar" hidden>
         <button class="sg-ability" id="buildBtn" aria-label="Build sprinkler">🔧</button>
         <button class="sg-ability" id="overloadBtn" aria-label="Overload Fire Pump"><img class="ab-ic" src="../assets/overload-pump.png" alt="" /><div class="cd" id="overloadCdEl" hidden></div></button>
@@ -628,7 +631,8 @@
       var dispP = Math.round(spraying ? Math.max(FLOW_FLOOR, supplyP(totalQ)) : supplyP(0)), pumpTxt = pumpLevel > 0 ? " · Pump " + pumpLevel : "";
       var wf = capW() ? water / capW() : 0;
       var supplyWord = (water <= 0 || dryFlash) ? "CRITICAL" : (wf < 0.25 || (spraying && dispP <= FLOW_FLOOR + 2)) ? "STRAINING" : "STRONG";
-      $("psiRead").textContent = "Supply: " + supplyWord + " · " + (spraying
+      var swCol = supplyWord === "CRITICAL" ? "#ff5a4f" : supplyWord === "STRAINING" ? "#ffb03a" : "#3ddc97";
+      $("psiRead").innerHTML = 'Supply: <b style="color:' + swCol + '">' + supplyWord + '</b> · ' + (spraying
         ? dispP + " PSI @ " + Math.round(totalQ) + " GPM" + (dryFlash ? " · TANK DRY" : "")
         : dispP + " PSI static") + pumpTxt;
       // boss spawns minions (Conflagration: phase by HP — armored → Class-B → flashover)
@@ -1297,6 +1301,16 @@
       }
       ctx.globalAlpha = 1;
     }
+    // faint green links from a Moon head to the orthogonal neighbors it buffs (teaches the adjacency mechanic)
+    function drawMoonLinks() {
+      var a = activeSlots(), i, j;
+      for (i = 0; i < a.length; i++) { if (typeOf(a[i]) !== "moon") continue; var m = a[i];
+        for (j = 0; j < a.length; j++) { var o = a[j]; if (o === m) continue; if (Math.abs(o.c - m.c) + Math.abs(o.r - m.r) !== 1) continue;
+          ctx.save(); ctx.globalAlpha = 0.3 + 0.2 * Math.sin(nowT * 0.005); ctx.strokeStyle = "#8fd14a"; ctx.lineWidth = Math.max(2, gap * 0.045); ctx.lineCap = "round"; ctx.setLineDash([4, 5]);
+          ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(o.x, o.y); ctx.stroke(); ctx.restore();
+        }
+      }
+    }
     function render(t) {
       if (typeof updateMusic === "function") updateMusic();
       if (sprayGain && state !== "playing") sprayGain.gain.value = 0;   // SFX silent during pauses/menus/overlays
@@ -1313,6 +1327,7 @@
       ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(W / 2, H / 2, coreR, 0, Math.PI * 2); ctx.fill();
       drawPipes();
       drawFoamPiles();
+      drawMoonLinks();
       for (var i = 0; i < slots.length; i++) drawSprinkler(slots[i]);
       // enemies
       for (var e = 0; e < enemies.length; e++) {
@@ -1487,21 +1502,23 @@
       if (want !== curTrack) { musicTracks.forEach(function (a, i) { if (i !== want) { try { a.pause(); a.currentTime = 0; } catch (e) {} } }); curTrack = want; }
       var tr = musicTracks[want]; tr.volume = 0.4; if (tr.paused) tr.play().catch(function () {});
     }
+    function syncSetBtn() { var b = $("settingsBtn"); if (b) b.classList.toggle("on", musicOn || sfxOn); }
     function setMusic(on) {
       musicOn = on; try { localStorage.setItem("sg_music", on ? "1" : "0"); } catch (e) {}
       if (on) { ensureAudio(); if (actx && actx.state === "suspended") actx.resume(); }
       else musicTracks.forEach(function (a) { try { a.pause(); } catch (e) {} });
-      var b = $("musicBtn"); if (b) b.classList.toggle("on", on);
+      var c = $("musicChk"); if (c) c.checked = on; syncSetBtn();
       updateMusic();
     }
     function setSfx(on) {
       sfxOn = on; try { localStorage.setItem("sg_sfx", on ? "1" : "0"); } catch (e) {}
       if (on) { ensureAudio(); if (actx && actx.state === "suspended") actx.resume(); }
       else if (sprayGain) sprayGain.gain.value = 0;
-      var b = $("sfxBtn"); if (b) b.classList.toggle("on", on);
+      var c = $("sfxChk"); if (c) c.checked = on; syncSetBtn();
     }
-    $("musicBtn").onclick = function () { setMusic(!musicOn); };
-    $("sfxBtn").onclick = function () { setSfx(!sfxOn); };
+    $("settingsBtn").onclick = function () { $("settingsPop").hidden = !$("settingsPop").hidden; };
+    $("musicChk").onchange = function () { setMusic(this.checked); };
+    $("sfxChk").onchange = function () { setSfx(this.checked); };
     setMusic(musicOn); setSfx(sfxOn);   // reflect saved prefs (won't autoplay until a gesture)
     $("playBtn").onclick = function () { if (musicOn || sfxOn) { ensureAudio(); if (actx && actx.state === "suspended") actx.resume(); } newGame(); };
     $("againBtn").onclick = newGame;
