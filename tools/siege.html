@@ -441,7 +441,7 @@
     var seenTypes = {}, kills = 0, bannerT = 0;
     function showBanner(text, dur, color) { var b = $("tipBanner"); if (!b) return; b.textContent = text; b.style.borderColor = color || "var(--line-strong)"; b.hidden = false; bannerT = dur || 4; }
     function tipOnce(id, text) { try { if (localStorage.getItem("sg_tip_" + id)) return; localStorage.setItem("sg_tip_" + id, "1"); } catch (e) {} showBanner(text, 5, "#5b91d6"); }
-    var FIRST_SEEN = { grease: "🛢️ Grease fire — only FOAM puts it out!", ember: "✨ Ember swarm — hit them with AoE (Lawn/Foam)!", backdraft: "🔥 Backdraft — it flashes over and rushes the core!", elo: "🔵 ELO flame — needs K11.2+ heads!", splitter: "🟢 Splitter — it breaks in two when doused!", elec: "⚡ Electrical fire (Class C) — only LASER works!", smolder: "💨 Smolder — its smoke shrinks your sprinkler reach!" };
+    var FIRST_SEEN = { grease: "🛢️ Grease fire — only FOAM puts it out!", ember: "✨ Ember swarm — hit them with AoE (Lawn/Foam)!", backdraft: "🔥 Backdraft — it flashes over and rushes the core!", elo: "🔵 ELO flame — needs K11.2+ heads!", splitter: "🟢 Splitter — it breaks in two when doused!", elec: "⚡ Electrical fire (Class C) — only LASER works!", smolder: "💨 Smolder — its smoke shrinks your sprinkler reach!", frost: "🧊 Frostbite — tanky and freezing; build Dry heads!", sleet: "🌨️ Sleet swarm — fast and icy, hit them with AoE!", blizzard: "❄️ Blizzard — it FREEZES your heads when it reaches the core!" };
     function noteSeen(type) { if (type && !seenTypes[type]) { seenTypes[type] = true; if (FIRST_SEEN[type]) showBanner(FIRST_SEEN[type], 5, "#ffb03a"); } }
     var UNLOCK_DESC = {
       foam: "Lays foam piles that smother grease (Class B) fires.",
@@ -515,10 +515,10 @@
     var TANK_PCT = 0.30;                        // tank upgrades scale by % of CURRENT capacity → compounds to massive end-game tanks
     var FOAM_PILE_LIFE = 5.5;                  // foam piles persist (sec); flames wading through take damage + slow (no damage from the spray itself)
     var DROOP_N = 0.95;                        // supply droop exponent: P = static − C·Q^DROOP_N (C derived per level to hit residual@ratedQ)
-    var DMG_PER_GPM = 2.2, TANK_DRAIN = 1.2, TANK_REGEN = 26, BOSS_WAVE = 15, ACT2_BOSS_WAVE = 25, ACT3_BOSS_WAVE = 35, MAX_ACT = 3;
+    var DMG_PER_GPM = 2.2, TANK_DRAIN = 1.2, TANK_REGEN = 26, BOSS_WAVE = 15, ACT2_BOSS_WAVE = 25, ACT3_BOSS_WAVE = 35, ACT4_BOSS_WAVE = 45, MAX_ACT = 4;
     var smokeMult = 1;   // Act 3: living Smolders shrink sprinkler reach
     var KB_SPRAY = 1.2, KB_BOLT = 1.3, KB_DECAY = 7;   // pushback: impulse on spray-tick / laser-bolt (× speed), and decay rate
-    function bossWaveFor(a) { return a >= 3 ? ACT3_BOSS_WAVE : a >= 2 ? ACT2_BOSS_WAVE : BOSS_WAVE; }
+    function bossWaveFor(a) { return a >= 4 ? ACT4_BOSS_WAVE : a >= 3 ? ACT3_BOSS_WAVE : a >= 2 ? ACT2_BOSS_WAVE : BOSS_WAVE; }
     // boss phases by remaining HP: 1 (>66%), 2 (33-66%), 3 (<33%) — each gets faster + hits harder
     function bossPhaseOf(bo) { var f = bo.hp / bo.max; return f > 0.66 ? 1 : f > 0.33 ? 2 : 3; }
     function bossEnrage(bo) { var p = bossPhaseOf(bo); return p === 1 ? 1 : p === 2 ? 1.45 : 2.0; }
@@ -750,7 +750,7 @@
       pendingReward = REWARDS[Math.floor(Math.random() * REWARDS.length)]; chestOpened = false;
       if (currentAct >= MAX_ACT) {   // finished the final act → campaign clear / endless-loop clear
         $("rewardTitle").textContent = loopN === 0 ? "🏆 Campaign cleared!" : "Endless Loop " + loopN + " cleared!";
-        $("rewardHint").textContent = loopN === 0 ? "All 3 acts down — Endless Mode begins. It only gets hotter!" : "Tap the chest — then back into the heat.";
+        $("rewardHint").textContent = loopN === 0 ? "All 4 acts down — Endless Mode begins. It only gets hotter!" : "Tap the chest — then back into the heat.";
       } else {
         $("rewardTitle").textContent = "Act " + currentAct + " cleared!";
         $("rewardHint").textContent = "Tap the chest to claim your reward";
@@ -786,7 +786,8 @@
         if (loopN === 1) tipOnce("dryhead", "🧊 New: Dry sprinklers (in Build) survive Freeze Overs. ❄️ Freeze fronts shatter non-dry heads under K11.2!");
       } else {
         currentAct++;
-        spawnFloat(W / 2, H / 2 - coreR * 1.4, "ACT " + currentAct, "#ff5a2f", 2.4);
+        spawnFloat(W / 2, H / 2 - coreR * 1.4, currentAct === 4 ? "ACT IV · ❄️ FREEZE OVER" : "ACT " + currentAct, currentAct === 4 ? "#8fd6ff" : "#ff5a2f", 2.6);
+        if (currentAct === 4) tipOnce("dryhead", "🧊 New: Dry sprinklers (in Build) survive Freeze Overs. ❄️ Freeze fronts shatter non-dry heads under K11.2!");
       }
       startWave(wave + 1);
     }
@@ -808,7 +809,7 @@
       $("hazardInd").hidden = !hazard; if (hazard) $("hazardInd").textContent = hazard.name + " · " + hazard.desc;
       // Endless "Freeze Over" front — a chance each non-boss wave
       freezeWave = false; freezeT = 0; nextFreezeAt = 6; freezeFlash = 0;
-      if (loopN >= 1 && !bossAlive && Math.random() < 0.4) { freezeWave = true; showBanner("❄️ FREEZE FRONT — non-dry heads under K11.2 will shatter! Build Dry heads.", 4.5, "#8fd6ff"); }
+      if ((currentAct >= 4 || loopN >= 1) && !bossAlive && Math.random() < (currentAct >= 4 ? 0.5 : 0.4)) { freezeWave = true; showBanner("❄️ FREEZE FRONT — non-dry heads under K11.2 will shatter! Build Dry heads.", 4.5, "#8fd6ff"); }
       water = capW();
       spawnT = 0;
       $("waveVal").textContent = bossAlive ? "BOSS" : n;
@@ -837,6 +838,12 @@
         var re = Math.random();
         if (re < 0.14) return "elec"; if (re < 0.26) return "smolder"; if (re < 0.42) return "grease";
         if (re < 0.56) return "backdraft"; if (re < 0.70) return "ember"; if (re < 0.84) return "elo";
+        return Math.random() < 0.4 ? "splitter" : "normal";
+      }
+      if (currentAct >= 4) {                                  // Act 4 "Freeze Over": frozen enemies + carryover challenge types
+        var r4 = Math.random();
+        if (r4 < 0.24) return "frost"; if (r4 < 0.42) return "sleet"; if (r4 < 0.52) return "blizzard";
+        if (r4 < 0.64) return "elec"; if (r4 < 0.76) return "grease"; if (r4 < 0.86) return "elo";
         return Math.random() < 0.4 ? "splitter" : "normal";
       }
       if (currentAct >= 3) {                                  // Act 3: electrical + smolder join the multi-class chaos
@@ -880,6 +887,9 @@
       else if (type === "grease") { e.hp = base * 1.3; e.spd = (22 + wave * 1.6) * (S / 400); e.sz = S * 0.058; e.cls = "B"; e.coreDmg = 13; }
       else if (type === "elec") { e.hp = base * 1.4; e.spd = (24 + wave * 1.8) * (S / 400); e.sz = S * 0.06; e.cls = "C"; e.coreDmg = 15; }
       else if (type === "smolder") { e.hp = base * 2.2; e.spd = (14 + wave * 1.0) * (S / 400); e.sz = S * 0.082; e.coreDmg = 12; e.smolder = true; }
+      else if (type === "frost") { e.hp = base * 2.5; e.spd = (13 + wave * 0.9) * (S / 400); e.sz = S * 0.088; e.coreDmg = 15; e.frost = true; }
+      else if (type === "sleet") { e.hp = base * 0.7; e.spd = (30 + wave * 2.3) * (S / 400); e.sz = S * 0.045; e.coreDmg = 7; e.frost = true; }
+      else if (type === "blizzard") { e.hp = base * 2.0; e.spd = (16 + wave * 1.0) * (S / 400); e.sz = S * 0.08; e.coreDmg = 14; e.frost = true; e.blizzard = true; }
       else if (type === "backdraft") { e.hp = base * 2.9; e.spd = (12 + wave * 0.9) * (S / 400); e.sz = S * 0.088; e.coreDmg = 18; e.flashCd = 3.5 + Math.random() * 2; e.flashT = 0; }
       else { e.hp = base; e.spd = (26 + wave * 2.4) * (S / 400); e.sz = S * 0.05; }
       e.max = e.hp; enemies.push(e);
@@ -890,7 +900,8 @@
     }
     function spawnBoss() {
       var ang = Math.random() * Math.PI * 2, m = S * 0.62 / viewScale, cx = W / 2 + Math.cos(ang) * m, cy = H / 2 + Math.sin(ang) * m;
-      if (currentAct >= 3) { var bh3 = Math.round(24000 * ENEMY_HP * endlessMul()); enemies.push({ x: cx, y: cy, hp: bh3, max: bh3, spd: 13 * (S / 400), sz: S * 0.16, boss: true, meltdown: true, t: 0, mt: 0, phase: 1, type: "boss", minTier: 0, coreDmg: 32, splits: false }); }   // The Meltdown (cycles Class C → B → flashover)
+      if (currentAct >= 4) { var bh4 = Math.round(30000 * ENEMY_HP * endlessMul()); enemies.push({ x: cx, y: cy, hp: bh4, max: bh4, spd: 12 * (S / 400), sz: S * 0.17, boss: true, glacier: true, frost: true, t: 0, mt: 0, fz: 0, phase: 1, type: "boss", minTier: 0, coreDmg: 34, splits: false }); }   // The Glacier (frost minions + freeze attacks)
+      else if (currentAct >= 3) { var bh3 = Math.round(24000 * ENEMY_HP * endlessMul()); enemies.push({ x: cx, y: cy, hp: bh3, max: bh3, spd: 13 * (S / 400), sz: S * 0.16, boss: true, meltdown: true, t: 0, mt: 0, phase: 1, type: "boss", minTier: 0, coreDmg: 32, splits: false }); }   // The Meltdown (cycles Class C → B → flashover)
       else if (currentAct >= 2) { var bh2 = Math.round(16000 * ENEMY_HP * endlessMul()); enemies.push({ x: cx, y: cy, hp: bh2, max: bh2, spd: 14 * (S / 400), sz: S * 0.15, boss: true, conflag: true, t: 0, mt: 0, phase: 1, type: "boss", minTier: 0, coreDmg: 30, splits: false }); }   // The Conflagration (multi-phase)
       else { var bh1 = Math.round(6500 * ENEMY_HP * endlessMul()); enemies.push({ x: cx, y: cy, hp: bh1, max: bh1, spd: 16 * (S / 400), sz: S * 0.13, boss: true, t: 0, mt: 0, phase: 1, type: "boss", minTier: 0, coreDmg: 28, splits: false }); }
     }
@@ -959,7 +970,10 @@
           showBanner(nowPhase >= 3 ? "⚠️ Boss ENRAGED — faster & deadlier!" : "Boss Phase " + nowPhase + " — faster & stronger", 2.6, "#ff5a2f");
         }
         var ben = bossEnrage(bo);   // later phases spawn minions faster too
-        if (bo.meltdown) {                                       // Meltdown: armored → Class-C(laser) → Class-B(foam) → flashover
+        if (bo.glacier) {                                        // The Glacier: spawns frost minions; unleashes a Freeze Over every ~14s (sooner when enraged)
+          bo.mt += dt; if (bo.mt > 2.2 / ben) { bo.mt = 0; var gr = bo.hp / bo.max; spawnEdge(gr <= 0.33 ? "blizzard" : gr <= 0.66 ? "frost" : "sleet"); }
+          bo.fz = (bo.fz || 0) + dt; if (bo.fz > 14 / ben) { bo.fz = 0; doFreeze(); }
+        } else if (bo.meltdown) {                                 // Meltdown: armored → Class-C(laser) → Class-B(foam) → flashover
           var fm = bo.hp / bo.max;
           bo.cls = (fm <= 0.7 && fm > 0.45) ? "C" : (fm <= 0.45 && fm > 0.2) ? "B" : null;
           bo.flashing = fm <= 0.2;
@@ -1031,7 +1045,7 @@
               var ba = Math.random() * Math.PI * 2; e.x = W / 2 + Math.cos(ba) * S * 0.56; e.y = H / 2 + Math.sin(ba) * S * 0.56;
               if (integrity <= 0) { gameOver(); return; }
             } else {
-              takeDamage(e.coreDmg); enemies.splice(i, 1);
+              takeDamage(e.coreDmg); if (e.blizzard) doFreeze(); enemies.splice(i, 1);   // blizzard freezes your heads on impact
               if (integrity <= 0) { gameOver(); return; }
             }
             continue;
@@ -1269,7 +1283,7 @@
       $("buildCoins").textContent = "💰 " + coins.toLocaleString() + " coins" + (hasPlug ? "" : " · all slots full");
       box.innerHTML = "";
       var types = ["standard"].concat(UNLOCK_ORDER.filter(function (t) { return unlocked[t]; }));
-      if (loopN >= 1) types.push("dry");   // Dry sprinkler buildable in Endless (survives Freeze Overs)
+      if (currentAct >= 4 || loopN >= 1) types.push("dry");   // Dry sprinkler buildable in Act 4 / Endless (survives Freeze Overs)
       types.forEach(function (ty) {
         var cost = placeCost(ty), aff = coins >= cost && hasPlug;
         var card = document.createElement("div");
@@ -1399,14 +1413,21 @@
       eElec: loadImg("../assets/enemy-elec.png"), eSmolder: loadImg("../assets/enemy-smolder.png"),
       bossInferno: loadImg("../assets/boss-inferno.png"), bossA: loadImg("../assets/boss-conflag-a.png"), bossB: loadImg("../assets/boss-conflag-b.png"), bossC: loadImg("../assets/boss-conflag-c.png"),
       meltA: loadImg("../assets/boss-meltdown-a.png"), meltB: loadImg("../assets/boss-meltdown-b.png"), meltC: loadImg("../assets/boss-meltdown-c.png"),
-      dryHead: loadImg("../assets/icon-head-dry.png"), frozen: loadImg("../assets/fx-head-frozen.png"), shatter: loadImg("../assets/fx-head-shatter.png") };
+      dryHead: loadImg("../assets/icon-head-dry.png"), frozen: loadImg("../assets/fx-head-frozen.png"), shatter: loadImg("../assets/fx-head-shatter.png"),
+      bg4: loadImg("../assets/bg-act4.png"),   // Act 4 frozen background (art TBD)
+      eFrost: loadImg("../assets/enemy-frost.png"), eSleet: loadImg("../assets/enemy-sleet.png"), eBlizzard: loadImg("../assets/enemy-blizzard.png"),
+      glacierA: loadImg("../assets/boss-glacier-a.png"), glacierB: loadImg("../assets/boss-glacier-b.png"), glacierC: loadImg("../assets/boss-glacier-c.png") };
     function imgReady(im) { return im && im.complete && im.naturalWidth > 0; }
     function enemySprite(e) {
       if (e.boss) {
+        if (e.glacier) { var gf = e.hp / e.max, g = gf > 0.66 ? IMG.glacierA : gf > 0.33 ? IMG.glacierB : IMG.glacierC; return imgReady(g) ? g : (gf > 0.66 ? IMG.meltA : gf > 0.33 ? IMG.meltB : IMG.meltC); }   // Glacier art TBD → Meltdown placeholder
         if (e.meltdown) return e.hp / e.max > 0.66 ? IMG.meltA : e.hp / e.max > 0.33 ? IMG.meltB : IMG.meltC;
         if (e.conflag) return e.hp / e.max > 0.66 ? IMG.bossA : e.hp / e.max > 0.33 ? IMG.bossB : IMG.bossC;
         return IMG.bossInferno;
       }
+      if (e.type === "frost") return imgReady(IMG.eFrost) ? IMG.eFrost : IMG.eSmolder;       // art TBD → placeholder
+      if (e.type === "sleet") return imgReady(IMG.eSleet) ? IMG.eSleet : IMG.eEmber;
+      if (e.type === "blizzard") return imgReady(IMG.eBlizzard) ? IMG.eBlizzard : IMG.eElo;
       if (e.type === "grease") return IMG.eGrease;
       if (e.type === "splitter") return IMG.eSplitter;
       if (e.type === "elec") return IMG.eElec;
@@ -1749,7 +1770,7 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
       // act background (wood = Act 1, steel = Act 2; act 3 reserved), darkened so heads & flames pop
-      var bg = currentAct >= 3 ? IMG.bg3 : currentAct >= 2 ? IMG.bg2 : IMG.bg1;
+      var bg = (currentAct >= 4 && imgReady(IMG.bg4)) ? IMG.bg4 : currentAct >= 3 ? IMG.bg3 : currentAct >= 2 ? IMG.bg2 : IMG.bg1;
       if (imgReady(bg)) { ctx.drawImage(bg, 0, 0, W, H); ctx.fillStyle = "rgba(9,13,17,0.52)"; ctx.fillRect(0, 0, W, H); }
       ctx.save();
       if (viewScale !== 1) { ctx.translate(W / 2, H / 2); ctx.scale(viewScale, viewScale); ctx.translate(-W / 2, -H / 2); }
@@ -1778,7 +1799,8 @@
         var en = enemies[e];
         var fl = 1 + Math.sin(t * 0.012 + en.t) * 0.08;
         var sz = en.sz * 2 * fl;
-        var glow = en.type === "elo" ? ["rgba(120,180,255,0.55)", "rgba(80,120,255,0)"]
+        var glow = en.frost ? ["rgba(170,235,255,0.6)", "rgba(120,200,255,0)"]                 // frozen enemies — icy white-cyan
+                 : en.type === "elo" ? ["rgba(120,180,255,0.55)", "rgba(80,120,255,0)"]
                  : en.type === "splitter" ? ["rgba(120,255,150,0.5)", "rgba(50,200,90,0)"]
                  : en.cls === "C" ? ["rgba(120,230,255,0.6)", "rgba(40,160,230,0)"]            // electrical — cyan
                  : en.cls === "B" ? ["rgba(255,210,60,0.6)", "rgba(220,150,20,0)"]            // grease — amber
@@ -1931,7 +1953,7 @@
     // ---- audio: optional looping music (per level) + procedural SFX (spray hiss, flame extinguish) ----
     var musicOn = false, sfxOn = false;
     try { var legacy = localStorage.getItem("sg_sound") === "1"; musicOn = localStorage.getItem("sg_music") === "1" || (legacy && localStorage.getItem("sg_music") === null); sfxOn = localStorage.getItem("sg_sfx") === "1" || (legacy && localStorage.getItem("sg_sfx") === null); } catch (e) {}
-    var musicTracks = [new Audio("../assets/music-level1.mp3"), new Audio("../assets/music-level2.mp3"), new Audio("../assets/music-level3.mp3")];   // act 1 / 2 / 3
+    var musicTracks = [new Audio("../assets/music-level1.mp3"), new Audio("../assets/music-level2.mp3"), new Audio("../assets/music-level3.mp3"), new Audio("../assets/music-level4.mp3")];   // act 1 / 2 / 3 / 4 (Freeze Over)
     musicTracks.forEach(function (a) { a.loop = true; a.preload = "none"; a.volume = 0; });
     var curTrack = -1, actx = null, noiseBuf = null, sprayGain = null, lastExt = 0;
     function ensureAudio() {
