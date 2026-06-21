@@ -372,6 +372,7 @@
     var DROOP_N = 0.95;                        // supply droop exponent: P = static − C·Q^DROOP_N (C derived per level to hit residual@ratedQ)
     var DMG_PER_GPM = 2.2, TANK_DRAIN = 1.2, TANK_REGEN = 26, BOSS_WAVE = 15, ACT2_BOSS_WAVE = 25, ACT3_BOSS_WAVE = 35, MAX_ACT = 3;
     var smokeMult = 1;   // Act 3: living Smolders shrink sprinkler reach
+    var KB_SPRAY = 1.2, KB_BOLT = 1.3, KB_DECAY = 7;   // pushback: impulse on spray-tick / laser-bolt (× speed), and decay rate
     function bossWaveFor(a) { return a >= 3 ? ACT3_BOSS_WAVE : a >= 2 ? ACT2_BOSS_WAVE : BOSS_WAVE; }
     var ENEMY_HP = 0.78;   // global enemy-HP multiplier (−22%)
     // Act 2 per-wave hazards
@@ -384,6 +385,12 @@
     var hazard = null, hzPump = false, hzTankMult = 1, hzSpeed = 1, hzReach = 1;
     function capW() { return Math.round(maxWater * hzTankMult); }    // effective tank cap (Main Break shrinks it)
     // class-typed resistance: Class B (grease) fires only take real damage from Foam
+    // pushback: add a brief outward (away-from-core) impulse when a flame is hit; heavier enemies barely budge
+    function knockback(e, mult) {
+      var mass = e.boss ? 0.12 : e.type === "smolder" ? 0.45 : e.type === "backdraft" ? 0.6 : e.type === "elo" ? 0.8 : 1;
+      var base = (e.spd * hzSpeed) || 30;
+      e.kb = Math.min(base * 2.4, (e.kb || 0) + base * mult * mass);
+    }
     function resist(ty, e) {   // Class B (grease) → Foam; Class C (electrical) → Laser; others chip ~20% (boss 35%)
       if (!e || !e.cls) return 1;
       var counter = e.cls === "C" ? "laser" : "foam";
@@ -695,7 +702,9 @@
         var dx = W / 2 - e.x, dy = H / 2 - e.y, dist = Math.hypot(dx, dy) || 1;
         if (e.type === "backdraft") { e.flashT = (e.flashT || 0) + dt; if (!e.flashing && e.flashT >= (e.flashCd || 4)) { e.flashing = true; e.flashLeft = 2.5; e.flashT = 0; } if (e.flashing) { e.flashLeft -= dt; if (e.flashLeft <= 0) e.flashing = false; } }   // backdraft flashover
         var spd = e.spd * hzSpeed; if (e.slowT > 0) { spd *= 0.5; e.slowT -= dt; } if (e.flashing) spd *= (e.boss ? 1.8 : 2.2);   // foam slow; flashover speed burst; High-Rise hazard
-        e.x += (dx / dist) * spd * dt; e.y += (dy / dist) * spd * dt; e.t += dt;
+        e.kb = Math.max(0, (e.kb || 0) - (e.spd * hzSpeed || 30) * KB_DECAY * dt);   // pushback decays back to 0
+        var net = spd - e.kb;                                    // knockback opposes inward travel (can briefly reverse)
+        e.x += (dx / dist) * net * dt; e.y += (dy / dist) * net * dt; e.t += dt;
         // reached core
         if (dist < coreR + e.sz * 0.4) {
           if (e.boss) {
@@ -717,7 +726,8 @@
           {
             var dmg = e.dmgFrame;
             e.hp -= dmg * dt; e.hit = 0.12; frameDps += dmg;
-            e.dmgT = (e.dmgT || 0) + dt;
+            e.dmgT = (e.dmgT || 0) + dt; e.kbT = (e.kbT || 0) + dt;
+            if (e.kbT > 0.22) { knockback(e, KB_SPRAY); e.kbT = 0; }   // rhythmic outward nudge while sprayed
             if (e.dmgT > 0.33) { if (e.weakHit && e.cls) spawnFloat(e.x, e.y - e.sz, "RESIST", "#ffb03a", 1.0); else spawnFloat(e.x, e.y - e.sz, Math.round(dmg) + "", "#5fd0f5", 0.95); e.dmgT = 0; }  // blue dmg, or amber RESIST when wrong element
           }
         }
@@ -762,7 +772,7 @@
       for (var ls = laserShots.length - 1; ls >= 0; ls--) {
         var lp = laserShots[ls]; lp.x += lp.vx * dt; lp.y += lp.vy * dt; lp.life -= dt;
         var heE = null, hbd = 1e9; for (var hi = 0; hi < enemies.length; hi++) { var hen = enemies[hi], hdd = Math.hypot(hen.x - lp.x, hen.y - lp.y); if (hdd < hen.sz + lp.r && hdd < hbd) { hbd = hdd; heE = hen; } }
-        if (heE) { var lr = resist("laser", heE), ld = lp.dmg * lr; heE.hp -= ld; heE.hit = 0.12; frameDps += ld / Math.max(dt, 0.016); spawnFloat(heE.x, heE.y - heE.sz, lr < 1 && heE.cls ? "RESIST" : Math.round(ld) + "", lr < 1 && heE.cls ? "#ffb03a" : "#ff8a78", 0.9); laserShots.splice(ls, 1); continue; }
+        if (heE) { var lr = resist("laser", heE), ld = lp.dmg * lr; heE.hp -= ld; heE.hit = 0.12; knockback(heE, KB_BOLT); frameDps += ld / Math.max(dt, 0.016); spawnFloat(heE.x, heE.y - heE.sz, lr < 1 && heE.cls ? "RESIST" : Math.round(ld) + "", lr < 1 && heE.cls ? "#ffb03a" : "#ff8a78", 0.9); laserShots.splice(ls, 1); continue; }
         if (lp.life <= 0 || lp.x < -20 || lp.x > W + 20 || lp.y < -20 || lp.y > H + 20) laserShots.splice(ls, 1);
       }
       for (var k = 0; k < slots.length; k++) { if (slots[k].flash > 0) slots[k].flash = Math.max(0, slots[k].flash - dt); if (slots[k].hurt > 0) slots[k].hurt = Math.max(0, slots[k].hurt - dt); }
