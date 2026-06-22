@@ -219,6 +219,7 @@
       </section>
     </main>
 
+    <script src="./tools/sprinkflow-auth.js"></script>
     <script src="./storage-hazard.js?v=6"></script>
     <script>
       /* On phones, start the calc-trace and source-preview collapsed so results lead. */
@@ -347,6 +348,9 @@
         }
 
         btn.addEventListener("click", function () {
+          if (window.SFAuth && SFAuth.gateExport) { SFAuth.gateExport(doExport, { feature: "PNG export", body: "Run the storage analysis free as much as you like. Exporting the PNG report is part of the SprinkFlow membership." }); return; }
+          doExport();
+          function doExport() {
           var svg, W = 800, H;
           try { svg = buildSvg(); H = parseInt(svg.match(/height="(\d+)"/)[1], 10); } catch (e) { return; }
           var url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
@@ -362,6 +366,7 @@
           };
           img.onerror = function () { URL.revokeObjectURL(url); };
           img.src = url;
+          }
         });
       })();
     </script>

@@ -1700,6 +1700,9 @@ document.getElementById('btnDxf').onclick=exportDXF;
    ============================================================ */
 document.getElementById('btnExport').onclick=()=>{
   if(!state.pipe){ flash("Add a pipe before exporting."); return; }
+  if(window.SFAuth && SFAuth.gateExport){ SFAuth.gateExport(doExport, { feature:"PNG export", body:"Draw your hanger detail free as much as you like. Exporting the PNG is part of the SprinkFlow membership." }); return; }
+  doExport();
+  function doExport(){
   const scale=3;
   const ex=document.createElement('canvas');
   ex.width=W*scale; ex.height=H*scale;
@@ -1715,6 +1718,7 @@ document.getElementById('btnExport').onclick=()=>{
     setTimeout(()=>URL.revokeObjectURL(url),4000);
   },'image/png');
   flash("PNG exported ✓");
+  }
 };
 
 /* ============================================================

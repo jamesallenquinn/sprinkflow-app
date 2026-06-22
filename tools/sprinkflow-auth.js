@@ -234,11 +234,53 @@
       .then(function (r) { return r.ok ? r.json() : []; }).catch(function () { return []; });
   }
 
+  // ---- subscription entitlement (freemium: tools are free to use; exporting/saving needs a paid subscription) ----
+  var subCache = null;   // null = unknown; true/false once resolved
+  function isSubscriber() {
+    var s = getSession(); if (!s || !s.token || !s.userId) return Promise.resolve(false);
+    if (subCache !== null) return Promise.resolve(subCache);
+    return read("subscribers?user_id=eq." + encodeURIComponent(s.userId) + "&select=active").then(function (rows) {
+      subCache = !!(rows && rows.length && rows[0].active !== false); return subCache;
+    }).catch(function () { return false; });
+  }
+  onChange(function () { subCache = null; });   // re-check entitlement on sign-in/out
+  function buildUpsell() {
+    if (document.getElementById("sfUpsell")) return;
+    var st = document.createElement("style");
+    st.textContent =
+      "#sfUpsell{position:fixed;inset:0;z-index:95;background:rgba(5,8,11,.74);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:18px;font-family:Inter,system-ui,sans-serif}" +
+      "#sfUpsell.show{display:flex}" +
+      "#sfUpsell .c{max-width:380px;width:100%;box-sizing:border-box;background:var(--surface,#171d24);border:1px solid var(--line,#2d3742);border-radius:18px;padding:24px 22px;color:var(--ink,#f5f7f8);text-align:center}" +
+      "#sfUpsell .lk{font-size:42px;line-height:1}#sfUpsell h3{font:800 1.3rem 'Space Grotesk',sans-serif;margin:8px 0 6px}" +
+      "#sfUpsell p{color:var(--muted,#aab4bd);margin:0 0 14px;font-size:.92rem;line-height:1.5}" +
+      "#sfUpsell .pr{font:800 1rem 'Space Grotesk';color:var(--accent,#ffb03a);margin:0 0 16px}" +
+      "#sfUpsell a.b{display:block;border:0;border-radius:13px;padding:14px;font:700 1rem 'Space Grotesk';background:linear-gradient(120deg,#ff5a2f,#ffb03a);color:#1a0d06;text-decoration:none}" +
+      "#sfUpsell button.x{margin-top:12px;background:none;border:0;color:var(--muted,#aab4bd);font:500 .85rem Inter;cursor:pointer}";
+    document.head.appendChild(st);
+    var bk = document.createElement("div"); bk.id = "sfUpsell";
+    bk.innerHTML = '<div class="c"><div class="lk">🔒</div><h3 id="sfUpTitle">Exporting is a member feature</h3>' +
+      '<p id="sfUpBody"></p><div class="pr">$29/mo intro, locked for life</div>' +
+      '<a class="b" id="sfUpBtn" href="https://sprinkflow.studio" target="_blank" rel="noopener">Subscribe to unlock exports</a>' +
+      '<button class="x" id="sfUpLater">Maybe later</button></div>';
+    document.body.appendChild(bk);
+    bk.addEventListener("click", function (e) { if (e.target === bk) bk.classList.remove("show"); });
+    document.getElementById("sfUpLater").onclick = function () { bk.classList.remove("show"); };
+  }
+  function upsell(opts) {
+    opts = opts || {}; buildUpsell();
+    var t = document.getElementById("sfUpTitle"), b = document.getElementById("sfUpBody");
+    if (t) t.textContent = (opts.feature || "Exporting") + " is a member feature";
+    if (b) b.textContent = opts.body || "Use the tool free as much as you like — saving and exporting are part of the SprinkFlow membership.";
+    document.getElementById("sfUpsell").classList.add("show");
+  }
+  function gateExport(onAllowed, opts) { isSubscriber().then(function (ok) { if (ok) { try { onAllowed(); } catch (e) {} } else upsell(opts); }); }
+
   window.SFAuth = {
     SB_URL: SB_URL, SB_ANON: SB_ANON,
     session: getSession, handle: getHandle, setHandle: setHandle, displayName: displayName,
     isSignedIn: isSignedIn, onChange: onChange, openSignIn: openSignIn, signOut: clearSession,
-    rpc: rpc, read: read, ensureFresh: ensureFresh, freshToken: freshToken, refresh: refreshSession
+    rpc: rpc, read: read, ensureFresh: ensureFresh, freshToken: freshToken, refresh: refreshSession,
+    isSubscriber: isSubscriber, gateExport: gateExport, upsell: upsell
   };
 
   // keep the device signed in: refresh on load, on a timer, and when the app regains focus
