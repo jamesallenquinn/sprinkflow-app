@@ -1286,10 +1286,11 @@
     function recommendScore(cat) {
       var sumK = 0, bestGain = 0, i; for (i = 0; i < slots.length; i++) { var s = slots[i]; if (s.state !== "active") continue; sumK += KLADDER[s.kTier]; if (s.kTier < KLADDER.length - 1) { var g = KLADDER[s.kTier + 1] - KLADDER[s.kTier]; if (g > bestGain) bestGain = g; } }
       var P0 = supplyP(0);
+      var pumpScore = pumpLevel >= PUMP_MAX ? 0 : (3 + (Math.sqrt(Math.min(300, pumpStatic(pumpLevel + 1))) - Math.sqrt(Math.min(175, P0))) * sumK * 0.10);
       if (cat === "kfactor") return 6 + bestGain;
       if (cat === "unlock") return 8;
-      if (cat === "pump") return pumpLevel >= PUMP_MAX ? 0 : (3 + (Math.sqrt(Math.min(300, pumpStatic(pumpLevel + 1))) - Math.sqrt(Math.min(175, P0))) * sumK * 0.10);
-      if (cat === "tank") return 1.5;
+      if (cat === "pump") return pumpScore;
+      if (cat === "tank") return Math.max(8, pumpScore + 4);   // value supply/tank highly — always above a Fire Pump upgrade
       if (cat === "buff") return 7;   // temporary buffs are punchy
       return 3;   // special (EC / refill / etc) — utility
     }
@@ -1901,7 +1902,8 @@
     }
     function drawPipes() {
       ctx.lineCap = "butt";
-      var pad = S * 0.2;
+      // overhang grows as we zoom out so the rails always run off both screen edges (1/viewScale undoes the camera scale)
+      var pad = (W / 2) * (1 / Math.max(0.2, viewScale) - 1) + S * 0.2;
       // 3 horizontal branch lines, each running off the left & right edges
       for (var row = 0; row < 3; row++) { pipeSeg(-pad, rowYs[row], W + pad, rowYs[row]); }
     }
