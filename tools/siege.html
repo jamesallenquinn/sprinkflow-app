@@ -456,7 +456,7 @@
     var freezeGrace = 0;   // waves of Freeze-Over immunity granted on entering Act IV
     var gold = 0;                              // persistent wallet (sg_gold) — earned each run as "coins", banked only when you END A RUN MANUALLY (lost if overrun)
     try { gold = parseInt(localStorage.getItem("sg_gold"), 10) || 0; } catch (e) {}
-    function saveGold() { try { localStorage.setItem("sg_gold", String(gold)); } catch (e) {} }
+    function saveGold() { try { localStorage.setItem("sg_gold", String(gold)); } catch (e) {} if (typeof cloudSave === "function") cloudSave(); }
     var lastWaveDur = 16, waveClock = 0;       // build/demolish take ~one wave's length; tracked from the previous wave's playing time
     // special upgrades: refill rate ×, spray reach ×, integrity shield pool, Hollywood charges/timer
     var tankFillMult = 1, shield = 0, hollywoodCharges = 0, hollywoodT = 0;
@@ -2178,8 +2178,32 @@
     try { equipSkin = localStorage.getItem("sg_skin") || ""; } catch (e) {}
     try { equipBg = localStorage.getItem("sg_bg") || ""; } catch (e) {}
     try { cons = JSON.parse(localStorage.getItem("sg_cons") || "{}") || {}; } catch (e) {}
-    function saveOwned() { try { localStorage.setItem("sg_owned", JSON.stringify(Object.keys(owned))); } catch (e) {} }
-    function saveCons() { try { localStorage.setItem("sg_cons", JSON.stringify(cons)); } catch (e) {} }
+    function saveOwned() { try { localStorage.setItem("sg_owned", JSON.stringify(Object.keys(owned))); } catch (e) {} cloudSave(); }
+    function saveCons() { try { localStorage.setItem("sg_cons", JSON.stringify(cons)); } catch (e) {} cloudSave(); }
+    // ---- account sync: bank Gold + purchases to the signed-in SprinkFlow account (Supabase); localStorage stays as the offline cache ----
+    var _cloudSaveT = null, _cloudLoaded = false;
+    function cloudSave() {
+      if (!window.SFAuth || !SFAuth.isSignedIn() || !_cloudLoaded) return;   // don't push until we've merged the account copy (so a wiped device can't overwrite the cloud)
+      clearTimeout(_cloudSaveT);
+      _cloudSaveT = setTimeout(function () { try { SFAuth.rpc("save_siege_progress", { p_gold: gold, p_owned: Object.keys(owned), p_equip_skin: equipSkin, p_equip_bg: equipBg, p_consumables: cons }); } catch (e) {} }, 900);
+    }
+    function cloudLoad() {
+      if (!window.SFAuth || !SFAuth.isSignedIn()) { _cloudLoaded = true; return; }
+      var s = SFAuth.session(), uid = s && s.userId;
+      if (!uid) { _cloudLoaded = true; return; }
+      SFAuth.read("siege_progress?user_id=eq." + encodeURIComponent(uid) + "&select=gold,owned,equip_skin,equip_bg,consumables").then(function (rows) {
+        if (rows && rows.length) {
+          var c = rows[0];
+          if (typeof c.gold === "number" && c.gold > gold) { gold = c.gold; try { localStorage.setItem("sg_gold", String(gold)); } catch (e) {} refreshWallet(); }   // restore higher banked Gold
+          if (Array.isArray(c.owned)) { var oc = false; c.owned.forEach(function (id) { if (!owned[id]) { owned[id] = true; oc = true; } }); if (oc) try { localStorage.setItem("sg_owned", JSON.stringify(Object.keys(owned))); } catch (e) {} }   // union of purchased skins/head-starts
+          if (c.equip_skin && !equipSkin) { equipSkin = c.equip_skin; try { localStorage.setItem("sg_skin", equipSkin); } catch (e) {} }
+          if (c.equip_bg && !equipBg) { equipBg = c.equip_bg; try { localStorage.setItem("sg_bg", equipBg); } catch (e) {} }
+          if (c.consumables && typeof c.consumables === "object") { for (var k in c.consumables) { var n = c.consumables[k] || 0; if (n > (cons[k] || 0)) cons[k] = n; } try { localStorage.setItem("sg_cons", JSON.stringify(cons)); } catch (e) {} }
+          applyCosmetics(); if (state === "store") renderStore();
+        }
+        _cloudLoaded = true; cloudSave();   // push the merged state back up (creates the account row on first sync)
+      }).catch(function () { _cloudLoaded = true; });
+    }
     function applyCosmetics() { IMG.skin = equipSkin ? loadImg("../assets/" + equipSkin + ".png") : null; IMG.board = equipBg ? loadImg("../assets/" + equipBg + ".png") : null; }
     function applyHeadStarts() { STORE.heads.forEach(function (h) { if (owned[h.id]) unlocked[h.type] = true; }); }   // owned head-starts pre-unlock their type for the run
     function grantConsumables() { var changed = false; STORE.consumables.forEach(function (c) { while ((cons[c.id] || 0) > 0 && items.length < 8) { items.push(c.id); cons[c.id]--; changed = true; } }); if (changed) saveCons(); }   // stocked consumables load into the action bar (single-use)
@@ -2195,7 +2219,7 @@
     function storeEquip(id, kind) {
       if (kind === "skin") { equipSkin = equipSkin === id ? "" : id; try { localStorage.setItem("sg_skin", equipSkin); } catch (e) {} }
       else { equipBg = equipBg === id ? "" : id; try { localStorage.setItem("sg_bg", equipBg); } catch (e) {} }
-      applyCosmetics(); renderStore();
+      applyCosmetics(); cloudSave(); renderStore();
     }
     function openStore(fromId) { storeFrom = fromId || "startOv"; state = "store"; $("startOv").classList.remove("show"); $("overOv").classList.remove("show"); $("storeOv").classList.add("show"); renderStore(); }
     function closeStore() { $("storeOv").classList.remove("show"); $(storeFrom).classList.add("show"); state = storeFrom === "overOv" ? "over" : "start"; refreshWallet(); }
@@ -2218,6 +2242,8 @@
       Array.prototype.forEach.call(body.querySelectorAll("button[data-eqb]"), function (b) { b.onclick = function () { storeEquip(b.getAttribute("data-eqb"), "bg"); }; });
     }
     applyCosmetics();
+    cloudLoad();   // pull this account's banked Gold + purchases and merge them in (then keep them synced)
+    if (window.SFAuth && SFAuth.onChange) SFAuth.onChange(function () { if (SFAuth.isSignedIn()) { _cloudLoaded = false; cloudLoad(); } });   // re-sync if they sign in after the page loaded
     if ($("storeBtn")) $("storeBtn").onclick = function () { openStore("startOv"); };
     if ($("storeClose")) $("storeClose").onclick = closeStore;
     if ($("overStoreBtn")) $("overStoreBtn").onclick = function () { openStore("overOv"); };
