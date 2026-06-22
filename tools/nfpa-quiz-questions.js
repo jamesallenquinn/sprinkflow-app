@@ -284,7 +284,7 @@ window.NFPA_QUIZ_QUESTIONS = [
   { q: "Obstructions to sprinkler discharge are addressed by which general rule of thumb?", c: ["The three-times rule (distance versus obstruction width)", "The two-coats-of-paint rule", "The lucky-seven rule", "The look-away rule"], a: 0, ref: "NFPA 13 — obstruction three-times rule" },
   { q: "A sprinkler must be kept clear of obstructions and storage by maintaining what?", c: ["Minimum clearance below the deflector", "A coat of wax", "A warning sign only", "A velvet rope"], a: 0, ref: "NFPA 13 — clearance to storage" },
   { q: "Dry sprinklers are used to protect areas subject to what while keeping water back in a heated space?", c: ["Freezing", "Vibration", "Sunlight", "Gossip"], a: 0, ref: "NFPA 13 — dry sprinkler application" },
-  { q: "A fire pump may be added to a system to provide what?", c: ["Additional pressure and flow", "Backup lighting", "Cooler water", "A soothing hum"], a: 0, ref: "NFPA 13 — fire pump purpose" },
+  { q: "A fire pump may be added to a system to provide what?", c: ["Additional pressure", "Backup lighting", "Cooler water", "A soothing hum"], a: 0, ref: "NFPA 13 — fire pump purpose" },
   { q: "The acceptance test paperwork given to the AHJ is commonly called what?", c: ["The contractor's material and test certificate", "A gift receipt", "A permission slip", "An autograph"], a: 0, ref: "NFPA 13 — material and test certificate" },
   { q: "What is the primary purpose of an automatic sprinkler system?", c: ["To control or suppress a fire automatically", "To cool the building in summer", "To water indoor plants", "To impress visitors"], a: 0, ref: "NFPA 13 — purpose of sprinkler systems" },
 ];
