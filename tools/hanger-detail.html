@@ -233,7 +233,8 @@ const state = {
   customSeq:0,          // running counter for unique custom keynote ids
   keynoteShape:'bubble',// bubble | square | rectangle | plain (no outline) — global default shape
   ortho:false,          // snap keynote leaders to 45° increments while dragging
-  title:"PIPE HANGER DETAIL — CONCRETE DECK",
+  title:"PIPE HANGER DETAIL",
+  titleManual:false,    // false = title auto-built from fastener + structure
   detailNo:"1",
 };
 let keynoteHit = [];    // {at,x,y,r} bubbles for drag hit-testing, rebuilt each draw
@@ -250,7 +251,7 @@ function snapState(){
     fastener:state.fastener, kwikReveal:state.kwikReveal, swgSize:state.swgSize, detailScale:state.detailScale,
     keynotePos:state.keynotePos, keynoteArrow:state.keynoteArrow, keynoteText:state.keynoteText,
     knOpt:state.knOpt, customKeynotes:state.customKeynotes, customSeq:state.customSeq,
-    keynoteShape:state.keynoteShape, title:state.title, detailNo:state.detailNo });
+    keynoteShape:state.keynoteShape, title:state.title, titleManual:state.titleManual, detailNo:state.detailNo });
 }
 function commit(){                                  // push current state if it changed
   const s=snapState();
@@ -267,7 +268,7 @@ function restoreState(s){
   state.fastener=o.fastener; state.kwikReveal=o.kwikReveal; state.swgSize=o.swgSize||'20'; state.detailScale=o.detailScale;
   state.keynotePos=o.keynotePos||{}; state.keynoteArrow=o.keynoteArrow||{}; state.keynoteText=o.keynoteText||{};
   state.knOpt=o.knOpt||{}; state.customKeynotes=o.customKeynotes||[]; state.customSeq=o.customSeq||0;
-  state.keynoteShape=o.keynoteShape; state.title=o.title; state.detailNo=o.detailNo;
+  state.keynoteShape=o.keynoteShape; state.title=o.title; state.titleManual=!!o.titleManual; state.detailNo=o.detailNo;
   if(state.pipe) pendingNps=state.pipe.npsIndex;
 }
 function undo(){ if(histIndex>0){ histIndex--; restoreState(history[histIndex]); setTool(null); updateUI(); draw(); updateHistUI(); } }
@@ -955,6 +956,22 @@ function arrow(g, x1,y1,x2,y2){
   g.closePath(); g.fill();
 }
 
+/* ---------- Auto detail title: "PIPE HANGER DETAIL — {FASTENER} TO {STRUCTURE}" ---------- */
+const TITLE_FAST = {
+  dropin:'HILTI HDI DROP-IN ANCHOR', wedge:'WEDGE ANCHOR', kwikbolt:'HILTI KWIK BOLT TZ2',
+  castin:'CAST-IN CONCRETE INSERT', concretesammy:'SAMMY CST SCREW ANCHOR',
+  woodvertical:'SAMMY GST WOOD SCREW', woodside:'SAMMY SWG SIDE-MOUNT SCREW',
+};
+const TITLE_STRUCT = { concrete:'CONCRETE DECK', woodbeam:'2x WOOD MEMBER', steelbeam:'STEEL BEAM', barjoist:'STEEL BAR JOIST', steelbar:'STEEL BAR / ANGLE' };
+function computeTitle(){
+  const f = state.fastener && TITLE_FAST[state.fastener];
+  const s = state.structure && TITLE_STRUCT[state.structure];
+  if(f && s) return `PIPE HANGER DETAIL — ${f} TO ${s}`;
+  if(s)      return `PIPE HANGER DETAIL — ${s}`;
+  return 'PIPE HANGER DETAIL';
+}
+function refreshTitle(){ if(!state.titleManual) state.title = computeTitle(); }
+
 /* ---------- Title block + keynote legend ---------- */
 function drawTitleBlock(g){
   ink(g,2.0);
@@ -1391,6 +1408,7 @@ function openStructure(){
     state.structure=k;
     // reset fastener if not valid for this structure
     if(state.fastener && !STRUCTURES[k].fasteners.includes(state.fastener)) state.fastener=null;
+    refreshTitle();
     hideSheet(); updateUI(); draw(); commit(); flash("Structure set. Now choose a Fastener.");
   });
   sheet.querySelector('[data-act="close"]').onclick=hideSheet;
@@ -1419,7 +1437,7 @@ function openFastener(){
   sheet.querySelectorAll('.opt[data-k]').forEach(b=> b.onclick=()=>{
     if(b.disabled) return;
     const k=b.dataset.k;
-    state.fastener=k; updateUI(); draw(); commit();
+    state.fastener=k; refreshTitle(); updateUI(); draw(); commit();
     if(k==='woodside'){ openFastener(); return; }   // reveal the size chips, keep the sheet open
     hideSheet();
     flash("Fastener placed — rod auto-connected to the pipe. Tap ⤓ PNG to export.");
@@ -1451,7 +1469,7 @@ function openPipe(){
       const [yMin,yMax]=pipeYRange(i);
       state.pipe.y=clamp(state.pipe.y, yMin, yMax);
       // SAMMY hangers are 3/8"-rod only (4" pipe max) — drop if the new size is too big
-      if(SAMMY_FASTENERS.includes(state.fastener) && !pipeAllowsSammy()){ state.fastener=null; dropped=true; }
+      if(SAMMY_FASTENERS.includes(state.fastener) && !pipeAllowsSammy()){ state.fastener=null; dropped=true; refreshTitle(); }
     }
     hideSheet(); updateUI(); draw(); commit();
     if(dropped) flash('SAMMY hangers are for 4" pipe and smaller — fastener cleared. Pick another fastener.');
@@ -1487,6 +1505,7 @@ function resetDetail(){
   if(!confirm("Reset the whole detail?")) return;
   state.ring=false; state.rodToPipe=false; state.surge=false; state.structure=null; state.fastener=null;
   state.keynotePos={}; state.keynoteArrow={}; state.keynoteText={}; state.knOpt={}; state.customKeynotes=[]; state.customSeq=0; state.detailScale=1; state.pipeLocked=false;
+  state.titleManual=false; refreshTitle();
   pendingNps=DEFAULT_NPS;
   { const r=pipeYRange(DEFAULT_NPS); state.pipe={x:AXIS, y:clamp(600,r[0],r[1]), npsIndex:DEFAULT_NPS}; }
   setTool(null); updateUI(); draw(); commit();
@@ -1496,7 +1515,7 @@ document.getElementById('btnEdit').onclick=()=>{
   const shapes=[['bubble','● Bubble'],['square','■ Square'],['rectangle','▬ Rectangle'],['plain','№ No outline']];
   const chips=shapes.map(([k,lbl])=>`<button class="chip ${state.keynoteShape===k?'sel':''}" data-shape="${k}">${lbl}</button>`).join('');
   showSheet(`<h3>Detail Options</h3>
-    <div class="field"><label>Title</label><input id="tIn" value="${escapeAttr(state.title)}"></div>
+    <div class="field"><label>Title <span style="color:var(--muted);font-weight:normal;">(leave blank for auto)</span></label><input id="tIn" value="${escapeAttr(state.title)}"></div>
     <div class="field"><label>Detail number</label><input id="nIn" value="${escapeAttr(state.detailNo)}"></div>
     <div class="field"><label>Keynote style</label><div class="chips" id="shapeChips">${chips}</div></div>
     <button class="opt ${state.ortho?'sel':''}" data-act="ortho">
@@ -1533,7 +1552,9 @@ document.getElementById('btnEdit').onclick=()=>{
   sheet.querySelector('[data-act="reanchor"]').onclick=()=>{ hideSheet(); reanchorKeynotes(); };
   sheet.querySelector('[data-act="align"]').onclick=()=>{ hideSheet(); alignKeynotes(); };
   sheet.querySelector('[data-act="save"]').onclick=()=>{
-    state.title=(document.getElementById('tIn').value||state.title).toUpperCase();
+    const v=(document.getElementById('tIn').value||'').trim().toUpperCase();
+    if(!v || v===computeTitle().toUpperCase()){ state.titleManual=false; refreshTitle(); }   // blank or matches auto -> auto
+    else { state.titleManual=true; state.title=v; }                                          // custom -> manual
     state.detailNo=document.getElementById('nIn').value||state.detailNo;
     hideSheet(); draw(); commit();
   };
@@ -1705,6 +1726,7 @@ pendingNps = DEFAULT_NPS;
 state.ring = true;
 state.structure = 'woodbeam';
 state.fastener = 'woodside';
+refreshTitle();
 updateUI();
 fitCanvas();
 commit();   // baseline snapshot (4" pipe placed) — nothing to undo past this
