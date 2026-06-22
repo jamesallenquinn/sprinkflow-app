@@ -70,6 +70,11 @@
     Tip: add this to your home screen — in your browser menu, choose <strong>Add to Home Screen</strong>.
   </div>
 
+  <div style="text-align:center;margin:4px 0 10px">
+    <button id="updateAppBtn" style="border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.05);color:inherit;border-radius:10px;padding:7px 14px;font:700 .8rem Inter,sans-serif;cursor:pointer">↻ Update app</button>
+    <div id="appVer" style="font:600 .66rem Inter,sans-serif;opacity:.55;margin-top:5px"></div>
+  </div>
+
   <main>
     <section class="cat">
       <h2 class="cat-h">🧰 Field Tools</h2>
@@ -189,8 +194,20 @@
   <script src="./tools/sprinkflow-auth.js"></script>
   <script>
     if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
+      window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").then((reg) => { try { reg.update(); } catch (e) {} }).catch(() => {}));
+      let _swReloaded = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => { if (_swReloaded) return; _swReloaded = true; location.reload(); });   // new SW took control → reload once for the fresh build
     }
+    // hard refresh: clear every cache + unregister the SW, then reload fresh from network
+    function hardRefresh(btn) {
+      if (btn) { btn.disabled = true; btn.textContent = "↻ Updating…"; }
+      Promise.resolve()
+        .then(() => window.caches ? caches.keys().then((ks) => Promise.all(ks.map((k) => caches.delete(k)))) : null).catch(() => {})
+        .then(() => navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then((rs) => Promise.all(rs.map((r) => r.unregister()))) : null).catch(() => {})
+        .then(() => location.reload(true));
+    }
+    { const b = document.getElementById("updateAppBtn"); if (b) b.onclick = () => hardRefresh(b); }
+    try { if (window.caches) caches.keys().then((ks) => { const max = ks.reduce((a, k) => { const m = k.match(/v(\d+)/); return m ? Math.max(a, +m[1]) : a; }, 0); const v = document.getElementById("appVer"); if (max && v) v.textContent = "Installed build: v" + max; }); } catch (e) {}
     // show install tip only when not already installed (standalone)
     const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
     if (!standalone) document.getElementById("installTip").hidden = false;
