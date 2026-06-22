@@ -521,6 +521,9 @@ function rodSize(){
   if(!state.pipe) return '3/8"';
   return PIPES[state.pipe.npsIndex].od <= 4.5 ? '3/8"' : '1/2"';
 }
+// SAMMY screw hangers are 3/8"-rod only -> available for 4" pipe and smaller, NOT 6"
+const SAMMY_FASTENERS = ['concretesammy','woodvertical','woodside'];
+function pipeAllowsSammy(){ return !!state.pipe && PIPES[state.pipe.npsIndex].od <= 4.5; }
 
 function geom(){
   const p = state.pipe;
@@ -1359,10 +1362,13 @@ function openFastener(){
   if(!state.structure){ flash("Pick a Structure first — fasteners depend on it."); return; }
   const valid=STRUCTURES[state.structure].fasteners;
   const items=valid.map(k=>{
-    const f=FASTENERS[k]; const on=!!f.on; // v1: only the drop-in is fully drawn
+    const f=FASTENERS[k];
+    const sammyBlocked = SAMMY_FASTENERS.includes(k) && !pipeAllowsSammy(); // SAMMY = 3/8" rod, 4" pipe max
+    const on = !!f.on && !sammyBlocked;
+    const note = !f.on ? ' <small>coming soon</small>' : (sammyBlocked ? ' <small>max 4" pipe</small>' : '');
     return `<button class="opt ${state.fastener===k?'sel':''}" ${on?'':'disabled'} data-k="${k}">
       <span class="gico">⚓</span>
-      <span>${f.name}${on?'':' <small>coming soon</small>'}</span></button>`;
+      <span>${f.name}${note}</span></button>`;
   }).join('');
   // SWG side-mount has 3 screw sizes — show a chip row when it's the active fastener
   const swgSizes=[['10','SWG 10 · 1"'],['20','SWG 20 · 2"'],['25380','SWG 25-380 · 2½"']];
@@ -1401,12 +1407,16 @@ function openPipe(){
   sheet.querySelectorAll('.chip').forEach(c=> c.onclick=()=>{
     const i=+c.dataset.i;
     pendingNps=i;
+    let dropped=false;
     if(state.pipe){
       state.pipe.npsIndex=i;
       const [yMin,yMax]=pipeYRange(i);
       state.pipe.y=clamp(state.pipe.y, yMin, yMax);
+      // SAMMY hangers are 3/8"-rod only (4" pipe max) — drop if the new size is too big
+      if(SAMMY_FASTENERS.includes(state.fastener) && !pipeAllowsSammy()){ state.fastener=null; dropped=true; }
     }
     hideSheet(); updateUI(); draw(); commit();
+    if(dropped) flash('SAMMY hangers are for 4" pipe and smaller — fastener cleared. Pick another fastener.');
   });
 }
 
