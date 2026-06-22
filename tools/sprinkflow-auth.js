@@ -273,14 +273,21 @@
     if (b) b.textContent = opts.body || "Use the tool free as much as you like — saving and exporting are part of the SprinkFlow membership.";
     document.getElementById("sfUpsell").classList.add("show");
   }
-  function gateExport(onAllowed, opts) { isSubscriber().then(function (ok) { if (ok) { try { onAllowed(); } catch (e) {} } else upsell(opts); }); }
+  // MASTER PAYWALL SWITCH — keep false until the July 1 launch. While false, exports are free for everyone.
+  // To turn paywalls ON: set this to true (or call SFAuth.setPaywall(true)) and redeploy.
+  var PAYWALL_ACTIVE = false;
+  function gateExport(onAllowed, opts) {
+    if (!PAYWALL_ACTIVE) { try { onAllowed(); } catch (e) {} return; }   // paywall off (pre-launch) → everyone can export
+    isSubscriber().then(function (ok) { if (ok) { try { onAllowed(); } catch (e) {} } else upsell(opts); });
+  }
+  function setPaywall(on) { PAYWALL_ACTIVE = !!on; }   // optional runtime toggle (e.g. from a console) for testing
 
   window.SFAuth = {
     SB_URL: SB_URL, SB_ANON: SB_ANON,
     session: getSession, handle: getHandle, setHandle: setHandle, displayName: displayName,
     isSignedIn: isSignedIn, onChange: onChange, openSignIn: openSignIn, signOut: clearSession,
     rpc: rpc, read: read, ensureFresh: ensureFresh, freshToken: freshToken, refresh: refreshSession,
-    isSubscriber: isSubscriber, gateExport: gateExport, upsell: upsell
+    isSubscriber: isSubscriber, gateExport: gateExport, upsell: upsell, setPaywall: setPaywall
   };
 
   // keep the device signed in: refresh on load, on a timer, and when the app regains focus
