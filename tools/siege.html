@@ -114,9 +114,6 @@
     .sg-diff-desc { font:600 .78rem Inter, sans-serif; color:var(--ink-dim,#9fb0bd); min-height:1em; text-align:center; max-width:280px; }
     .sg-wallet { font:700 .9rem Inter, sans-serif; color:#ffd24a; background:rgba(255,210,74,.08); border:1px solid rgba(255,210,74,.3); border-radius:999px; padding:7px 16px; }
     .sg-wallet[hidden] { display:none; }
-    .sg-update-btn { margin-top:9px; width:100%; border:1px solid var(--line-strong); background:var(--surface); color:var(--ink); border-radius:10px; padding:9px 12px; font:700 .82rem Inter, sans-serif; cursor:pointer; }
-    .sg-update-btn:active { transform:scale(.97); }
-    .sg-ver { margin-top:5px; text-align:center; font:600 .68rem Inter, sans-serif; color:var(--muted); }
     .sg-reveal { width:100%; max-width:330px; margin:8px 0 6px; }
     .sg-reveal-lines { display:flex; flex-direction:column; gap:3px; margin-bottom:8px; }
     .sg-reveal-row { display:flex; justify-content:space-between; gap:10px; font:700 .84rem Inter, sans-serif; color:var(--ink); opacity:0; transform:translateY(7px); transition:opacity .25s ease, transform .25s ease; }
@@ -291,8 +288,6 @@
         <div class="sg-setpop-h">🔊 Audio</div>
         <label class="sg-toggle"><input type="checkbox" id="musicChk"><span><img class="btnico" src="../assets/icon-music.png" alt=""> Music</span></label>
         <label class="sg-toggle"><input type="checkbox" id="sfxChk"><span><img class="btnico" src="../assets/icon-sfx.png" alt=""> Sound effects</span></label>
-        <button id="updateBtn" class="sg-update-btn">↻ Update app (clear cache)</button>
-        <div class="sg-ver" id="appVer"></div>
       </div>
       <div id="soundNudge" class="sg-soundnudge" hidden>🔊 Tap for sound &amp; music!</div>
       <div class="sg-abar" id="abar" hidden>
@@ -1293,15 +1288,17 @@
     }
     // score an offered category by how much it raises output (Easy-Mode recommendation)
     function recommendScore(cat) {
-      var sumK = 0, bestGain = 0, i; for (i = 0; i < slots.length; i++) { var s = slots[i]; if (s.state !== "active") continue; sumK += KLADDER[s.kTier]; if (s.kTier < KLADDER.length - 1) { var g = KLADDER[s.kTier + 1] - KLADDER[s.kTier]; if (g > bestGain) bestGain = g; } }
+      var sumK = 0, bestGain = 0, maxTier = 0, i; for (i = 0; i < slots.length; i++) { var s = slots[i]; if (s.state !== "active") continue; sumK += KLADDER[s.kTier]; if (s.kTier > maxTier) maxTier = s.kTier; if (s.kTier < KLADDER.length - 1) { var g = KLADDER[s.kTier + 1] - KLADDER[s.kTier]; if (g > bestGain) bestGain = g; } }
       var P0 = supplyP(0);
       var pumpScore = pumpLevel >= PUMP_MAX ? 0 : (3 + (Math.sqrt(Math.min(300, pumpStatic(pumpLevel + 1))) - Math.sqrt(Math.min(175, P0))) * sumK * 0.10);
-      if (cat === "kfactor") return 6 + bestGain;
+      // Phase 1: rush K-factor until a head hits K11.2 (KLADDER[2]). Phase 2: build supply to 3000 gal. Phase 3: balanced best-choice.
+      var phase1 = maxTier < 2, phase2 = !phase1 && maxWater < 3000;
+      if (cat === "kfactor") return phase1 ? 100 : (6 + bestGain);
       if (cat === "unlock") return 8;
       if (cat === "pump") return pumpScore;
-      if (cat === "tank") return Math.max(8, pumpScore + 4);   // value supply/tank highly — always above a Fire Pump upgrade
-      if (cat === "buff") return 7;   // temporary buffs are punchy
-      return 3;   // special (EC / refill / etc) — utility
+      if (cat === "tank") return phase1 ? 1 : (phase2 ? 80 : 5);   // P1: avoid; P2: rush supply to 3000 gal; P3: modest
+      if (cat === "buff") return phase1 ? 1 : 7;   // temporary buffs are punchy (but not during the K11.2 rush)
+      return phase1 ? 1 : 3;   // special (EC / refill / etc) — utility
     }
     // pick-a-head modes: unlock (tap a plug) | ec | hp | kf (K-factor) | fr (Fast Response)
     var selectKind = null, pendingType = "standard";
@@ -2282,15 +2279,6 @@
       var c = $("sfxChk"); if (c) c.checked = on; syncSetBtn();
     }
     $("settingsBtn").onclick = function () { $("settingsPop").hidden = !$("settingsPop").hidden; hideSoundNudge(); };
-    function hardRefresh(btn) {   // nuke all caches + unregister the service worker, then reload fresh from network
-      if (btn) { btn.disabled = true; btn.textContent = "↻ Updating…"; }
-      Promise.resolve()
-        .then(function () { return window.caches ? caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }) : null; }).catch(function () {})
-        .then(function () { return navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }) : null; }).catch(function () {})
-        .then(function () { location.reload(true); });
-    }
-    if ($("updateBtn")) $("updateBtn").onclick = function () { hardRefresh(this); };
-    try { if (window.caches) caches.keys().then(function (ks) { var max = ks.reduce(function (a, k) { var m = k.match(/v(\d+)/); return m ? Math.max(a, +m[1]) : a; }, 0); if (max && $("appVer")) $("appVer").textContent = "Installed build: v" + max; }); } catch (e) {}
     $("soundNudge").onclick = function () { $("settingsPop").hidden = false; hideSoundNudge(); };
     $("musicChk").onchange = function () { setMusic(this.checked); };
     $("sfxChk").onchange = function () { setSfx(this.checked); };
