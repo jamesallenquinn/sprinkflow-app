@@ -860,7 +860,8 @@ function drawKeynotes(g){
     const showLeader = o.leader!==false;               // default: leader shown
     const showHead   = o.head!==false;                 // default: arrowhead shown
     const shape      = o.shape || state.keynoteShape || 'bubble';
-    const a = state.keynoteArrow[k.at] || keynoteSafe(k.at); // arrow tip (default = component anchor / "attached")
+    const locked     = o.lock!==false;                 // default: arrow tip locked to its element
+    const a = locked ? keynoteSafe(k.at) : (state.keynoteArrow[k.at] || keynoteSafe(k.at)); // live anchor when locked
     const def = {x:gutterX, y:250 + i*46};             // default gutter slot
     const pos = state.keynotePos[k.at] || def;
     const bx = pos.x, byy = pos.y;
@@ -871,7 +872,7 @@ function drawKeynotes(g){
       ink(g,1.0); g.beginPath(); g.moveTo(sx,sy); g.lineTo(a.x,a.y); g.stroke();
       if(showHead) arrow(g, sx, sy, a.x, a.y);          // arrowhead at the tip
       leaderHit.push({at:k.at, x1:sx, y1:sy, x2:a.x, y2:a.y});
-      keynoteHit.push({kind:'arrow', at:k.at, x:a.x, y:a.y, r:9});
+      if(!locked) keynoteHit.push({kind:'arrow', at:k.at, x:a.x, y:a.y, r:9}); // locked tips aren't free-draggable
     }
     // bubble / tag (shape: bubble | square | rectangle | plain)
     g.fillStyle="#ffffff";
@@ -890,7 +891,9 @@ function drawKeynotes(g){
 }
 // guard against undefined geom for anchors
 function keynoteSafe(at){ try{ return keynoteAnchor(at);}catch(e){ return {x:AXIS,y:400}; } }
-function keynoteArrowPos(at){ return state.keynoteArrow[at] || keynoteSafe(at); }
+// arrow tip locked to its element (default): follows the element/pipe live. Unlock to free-drag.
+function arrowLocked(at){ const o=state.knOpt[at]; return !o || o.lock!==false; }
+function keynoteArrowPos(at){ return arrowLocked(at) ? keynoteSafe(at) : (state.keynoteArrow[at] || keynoteSafe(at)); }
 function keynoteBubblePos(at){
   if(state.keynotePos[at]) return state.keynotePos[at];
   const i=activeKeynotes().findIndex(k=>k.at===at);
@@ -1128,7 +1131,7 @@ function onDown(e){
   for(const lh of leaderHit){
     if(distToSeg(d.x,d.y, lh.x1,lh.y1, lh.x2,lh.y2) < 12){
       drag={type:'keynote', kind:'leader', at:lh.at, gx:d.x, gy:d.y,
-            b0:{...keynoteBubblePos(lh.at)}, a0:{...keynoteArrowPos(lh.at)}};
+            b0:{...keynoteBubblePos(lh.at)}, a0:{...keynoteArrowPos(lh.at)}, lockedArrow:arrowLocked(lh.at)};
       return;
     }
   }
@@ -1152,12 +1155,19 @@ function onMove(e){
   if(!drag) return;
   const d=toDetail(e.clientX,e.clientY);
   if(drag.type==='keynote' && drag.kind==='leader'){
-    // translate bubble + arrow rigidly; clamp the shared delta so both stay in bounds
+    // translate the keynote; clamp the shared delta so both ends stay in bounds.
+    // a locked arrow stays pinned to its element, so only the bubble moves.
     let mdx=d.x-drag.gx, mdy=d.y-drag.gy;
-    mdx=clamp(mdx, Math.max(40-drag.b0.x, 32-drag.a0.x), Math.min((W-40)-drag.b0.x, (W-32)-drag.a0.x));
-    mdy=clamp(mdy, Math.max(40-drag.b0.y, 32-drag.a0.y), Math.min((TITLE_TOP-12)-drag.b0.y, (H-32)-drag.a0.y));
-    state.keynotePos[drag.at]={x:drag.b0.x+mdx, y:drag.b0.y+mdy};
-    state.keynoteArrow[drag.at]={x:drag.a0.x+mdx, y:drag.a0.y+mdy};
+    if(drag.lockedArrow){
+      mdx=clamp(mdx, 40-drag.b0.x, (W-40)-drag.b0.x);
+      mdy=clamp(mdy, 40-drag.b0.y, (TITLE_TOP-12)-drag.b0.y);
+      state.keynotePos[drag.at]={x:drag.b0.x+mdx, y:drag.b0.y+mdy};
+    } else {
+      mdx=clamp(mdx, Math.max(40-drag.b0.x, 32-drag.a0.x), Math.min((W-40)-drag.b0.x, (W-32)-drag.a0.x));
+      mdy=clamp(mdy, Math.max(40-drag.b0.y, 32-drag.a0.y), Math.min((TITLE_TOP-12)-drag.b0.y, (H-32)-drag.a0.y));
+      state.keynotePos[drag.at]={x:drag.b0.x+mdx, y:drag.b0.y+mdy};
+      state.keynoteArrow[drag.at]={x:drag.a0.x+mdx, y:drag.a0.y+mdy};
+    }
     draw(); return;
   }
   if(drag.type==='keynote'){
@@ -1251,7 +1261,7 @@ function openKeynoteEdit(at){
 function openLeaderMenu(at){
   const k=activeKeynotes().find(x=>x.at===at); if(!k) return;
   const o=state.knOpt[at]||{};
-  const leaderOn=o.leader!==false, headOn=o.head!==false, shape=o.shape||state.keynoteShape||'bubble';
+  const leaderOn=o.leader!==false, headOn=o.head!==false, lockOn=o.lock!==false, shape=o.shape||state.keynoteShape||'bubble';
   const sel=c=>c?'sel':'';
   showSheet(`
     <h3>Keynote ${k.n} <span class="sub">bubble &amp; leader</span></h3>
@@ -1272,6 +1282,11 @@ function openLeaderMenu(at){
       <button class="miniopt ${sel(headOn)}" data-head="1" title="Keep arrow head">➤</button>
       <button class="miniopt ${sel(!headOn)}" data-head="0" title="No arrow head">─</button>
     </div>
+    <div class="fieldlbl">Arrow tip</div>
+    <div class="iconrow">
+      <button class="miniopt ${sel(lockOn)}" data-lock="1" title="Locked to element (follows the pipe)">🔒</button>
+      <button class="miniopt ${sel(!lockOn)}" data-lock="0" title="Free — drag the tip anywhere">✛</button>
+    </div>
     <div class="row"><button class="ghost" data-act="close">Done</button></div>
   `);
   const setOpt=(patch,grp)=>{
@@ -1282,6 +1297,12 @@ function openLeaderMenu(at){
   sheet.querySelectorAll('[data-leader]').forEach(b=> b.onclick=()=>{ setOpt({leader:b.dataset.leader==='1'},'leader'); b.classList.add('sel'); });
   sheet.querySelectorAll('[data-shape]').forEach(b=> b.onclick=()=>{ setOpt({shape:b.dataset.shape},'shape'); b.classList.add('sel'); });
   sheet.querySelectorAll('[data-head]').forEach(b=> b.onclick=()=>{ setOpt({head:b.dataset.head==='1'},'head'); b.classList.add('sel'); });
+  sheet.querySelectorAll('[data-lock]').forEach(b=> b.onclick=()=>{
+    const lock=b.dataset.lock==='1';
+    if(lock) delete state.keynoteArrow[at];                       // re-pin to the live element anchor
+    else state.keynoteArrow[at]={...keynoteSafe(at)};             // freeze current spot, then free-drag
+    setOpt({lock}, 'lock'); b.classList.add('sel');
+  });
   sheet.querySelector('[data-act="close"]').onclick=hideSheet;
 }
 
