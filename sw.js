@@ -1,5 +1,5 @@
 // SprinkFlow Tools PWA service worker — offline-first for the static tools.
-const CACHE = "sprinkflow-tools-v139";
+const CACHE = "sprinkflow-tools-v140";
 const ASSETS = [
   "./",
   "./index.html",
@@ -45,6 +45,9 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
+  // Audio (and any Range request) must bypass the SW — a cache-first handler can return a full 200
+  // to a Range request, which makes browsers refuse to play the media. Let these hit the network directly.
+  if (request.headers.has("range") || /\.(mp3|m4a|ogg|wav)(\?|$)/i.test(request.url)) return;
   // Cache-first for same-origin; stale-while-revalidate for fonts/CDN.
   event.respondWith(
     caches.match(request).then((cached) => {
