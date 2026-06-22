@@ -119,6 +119,7 @@
     <button class="iconbtn" id="btnHistRedo" aria-label="Redo" title="Redo" disabled>↷</button>
     <button class="iconbtn" id="btnEdit" aria-label="Options">⚙</button>
     <button class="iconbtn" id="btnUndo">↺ Reset</button>
+    <button class="iconbtn" id="btnDxf">⤓ DXF</button>
     <button class="iconbtn primary" id="btnExport">⤓ PNG</button>
   </header>
 
@@ -1538,6 +1539,139 @@ document.getElementById('btnEdit').onclick=()=>{
   sheet.querySelector('[data-act="close"]').onclick=hideSheet;
 };
 function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
+
+/* ============================================================
+   Export DXF (full detail, R12 ASCII; hatches exploded to lines)
+   A recording "context" mimics the canvas 2D API so the SAME draw
+   code produces DXF entities. Hatch/grain lines are geometrically
+   clipped to their region (rect or pipe annulus). Y is flipped.
+   ============================================================ */
+function dxfIsWhite(c){ c=(c||'').toLowerCase(); return c==='#fff'||c==='#ffffff'||c==='white'; }
+// Liang-Barsky: clip segment to a rect -> [] or [[x1,y1,x2,y2]]
+function dxfClipRect(x1,y1,x2,y2,r){
+  let t0=0,t1=1; const dx=x2-x1,dy=y2-y1;
+  const p=[-dx,dx,-dy,dy], q=[x1-r.x0, r.x1-x1, y1-r.y0, r.y1-y1];
+  for(let i=0;i<4;i++){
+    if(p[i]===0){ if(q[i]<0) return []; }
+    else { const t=q[i]/p[i]; if(p[i]<0){ if(t>t1) return []; if(t>t0) t0=t; } else { if(t<t0) return []; if(t<t1) t1=t; } }
+  }
+  return [[x1+t0*dx, y1+t0*dy, x1+t1*dx, y1+t1*dy]];
+}
+// param range [tin,tout] (clamped to [0,1]) where segment lies INSIDE circle, or null
+function dxfSegInCircle(x1,y1,x2,y2,cx,cy,r){
+  const dx=x2-x1,dy=y2-y1, fx=x1-cx, fy=y1-cy;
+  const a=dx*dx+dy*dy; if(a<1e-9) return (fx*fx+fy*fy<=r*r)?[0,1]:null;
+  const b=2*(fx*dx+fy*dy), c=fx*fx+fy*fy-r*r;
+  let disc=b*b-4*a*c; if(disc<0) return null; disc=Math.sqrt(disc);
+  let ta=(-b-disc)/(2*a), tb=(-b+disc)/(2*a);
+  ta=Math.max(0,ta); tb=Math.min(1,tb);
+  return (tb>ta)?[ta,tb]:null;
+}
+// clip segment to an annulus (inside rOut, outside rIn) -> list of [x1,y1,x2,y2]
+function dxfClipAnnulus(x1,y1,x2,y2,c){
+  const inOut=dxfSegInCircle(x1,y1,x2,y2,c.cx,c.cy,c.rOut); if(!inOut) return [];
+  const dx=x2-x1,dy=y2-y1, mk=(a,b)=>[x1+a*dx,y1+a*dy,x1+b*dx,y1+b*dy];
+  const inIn=dxfSegInCircle(x1,y1,x2,y2,c.cx,c.cy,c.rIn);
+  if(!inIn) return [mk(inOut[0],inOut[1])];   // no inner overlap
+  const out=[];
+  if(inIn[0]>inOut[0]) out.push(mk(inOut[0], Math.min(inIn[0],inOut[1])));   // before inner disk
+  if(inIn[1]<inOut[1]) out.push(mk(Math.max(inIn[1],inOut[0]), inOut[1]));   // after inner disk
+  return out.filter(s=>Math.hypot(s[2]-s[0],s[3]-s[1])>0.05);
+}
+function dxfClip(x1,y1,x2,y2,clip){
+  if(!clip) return [[x1,y1,x2,y2]];
+  if(clip.type==='rect') return dxfClipRect(x1,y1,x2,y2,clip);
+  if(clip.type==='annulus') return dxfClipAnnulus(x1,y1,x2,y2,clip);
+  if(clip.type==='circle'){ const t=dxfSegInCircle(x1,y1,x2,y2,clip.cx,clip.cy,clip.r); return t?[[x1+t[0]*(x2-x1),y1+t[0]*(y2-y1),x1+t[1]*(x2-x1),y1+t[1]*(y2-y1)]]:[]; }
+  return [[x1,y1,x2,y2]];
+}
+function DxfRec(mctx){
+  this.mctx=mctx; this.layer='0';
+  this.s={fill:'#000',stroke:'#111418',lw:1,font:'10px Arial',align:'left',baseline:'alphabetic'};
+  this.stack=[]; this.clipStack=[]; this.clipRgn=null;
+  this.prims=[]; this.cur=null;
+  this.lines=[]; this.circles=[]; this.texts=[];
+}
+DxfRec.prototype = {
+  save(){ this.stack.push(Object.assign({},this.s)); this.clipStack.push(this.clipRgn); },
+  restore(){ if(this.stack.length){ this.s=this.stack.pop(); this.clipRgn=this.clipStack.pop(); } },
+  get fillStyle(){return this.s.fill;}, set fillStyle(v){this.s.fill=v;},
+  get strokeStyle(){return this.s.stroke;}, set strokeStyle(v){this.s.stroke=v;},
+  get lineWidth(){return this.s.lw;}, set lineWidth(v){this.s.lw=v;},
+  get font(){return this.s.font;}, set font(v){this.s.font=v;},
+  get textAlign(){return this.s.align;}, set textAlign(v){this.s.align=v;},
+  get textBaseline(){return this.s.baseline;}, set textBaseline(v){this.s.baseline=v;},
+  set lineJoin(v){}, set lineCap(v){}, setLineDash(){}, scale(){}, translate(){}, setTransform(){},
+  beginPath(){ this.prims=[]; this.cur=null; },
+  moveTo(x,y){ this.cur={kind:'poly',pts:[[x,y]]}; this.prims.push(this.cur); },
+  lineTo(x,y){ if(!this.cur||this.cur.kind!=='poly'){ this.cur={kind:'poly',pts:[[x,y]]}; this.prims.push(this.cur); } else this.cur.pts.push([x,y]); },
+  closePath(){ if(this.cur&&this.cur.kind==='poly'&&this.cur.pts.length>1) this.cur.pts.push(this.cur.pts[0].slice()); },
+  rect(x,y,w,h){ this.prims.push({kind:'poly',pts:[[x,y],[x+w,y],[x+w,y+h],[x,y+h],[x,y]]}); this.cur=null; },
+  arc(cx,cy,r){ this.prims.push({kind:'circle',cx,cy,r}); this.cur=null; },   // render path uses full circles
+  ellipse(cx,cy,rx,ry,rot){ const pts=[],n=44; for(let i=0;i<=n;i++){ const t=i/n*Math.PI*2,ex=Math.cos(t)*rx,ey=Math.sin(t)*ry; pts.push([cx+ex*Math.cos(rot)-ey*Math.sin(rot), cy+ex*Math.sin(rot)+ey*Math.cos(rot)]); } this.prims.push({kind:'poly',pts}); this.cur=null; },
+  measureText(t){ if(this.mctx){ this.mctx.font=this.s.font; return this.mctx.measureText(t); } return {width:(t||'').length*6}; },
+  stroke(){ for(const p of this.prims) this._emit(p); },
+  fill(){ if(dxfIsWhite(this.s.fill)) return; for(const p of this.prims){ if(p.kind==='poly'){ const pts=p.pts.slice(); if(pts.length>1 && (pts[0][0]!==pts[pts.length-1][0]||pts[0][1]!==pts[pts.length-1][1])) pts.push(pts[0]); this._poly(pts); } else this._emit(p); } },
+  fillRect(){},                          // white bases / masks -> nothing in DXF
+  strokeRect(x,y,w,h){ this._poly([[x,y],[x+w,y],[x+w,y+h],[x,y+h],[x,y]]); },
+  clip(){ this.clipRgn=this._clip(this.prims); },
+  fillText(t,x,y){ const h=parseFloat((this.s.font.match(/([\d.]+)px/)||[])[1]||10); this.texts.push({x,y,h,val:String(t),align:this.s.align,baseline:this.s.baseline,layer:this.layer}); },
+  _emit(p){ if(p.kind==='poly') this._poly(p.pts); else if(p.kind==='circle') this._circle(p.cx,p.cy,p.r); },
+  _poly(pts){ for(let i=0;i+1<pts.length;i++) this._line(pts[i][0],pts[i][1],pts[i+1][0],pts[i+1][1]); },
+  _line(x1,y1,x2,y2){ for(const s of dxfClip(x1,y1,x2,y2,this.clipRgn)) this.lines.push([s[0],s[1],s[2],s[3],this.layer]); },
+  _circle(cx,cy,r){ if(this.clipRgn&&this.clipRgn.type==='rect'&&(cx<this.clipRgn.x0||cx>this.clipRgn.x1||cy<this.clipRgn.y0||cy>this.clipRgn.y1)) return; this.circles.push([cx,cy,r,this.layer]); },
+  _clip(prims){
+    const polys=prims.filter(p=>p.kind==='poly'), circ=prims.filter(p=>p.kind==='circle');
+    if(circ.length>=2){ const rs=circ.map(c=>c.r).sort((a,b)=>a-b); return {type:'annulus',cx:circ[0].cx,cy:circ[0].cy,rIn:rs[0],rOut:rs[rs.length-1]}; }
+    if(circ.length===1) return {type:'circle',cx:circ[0].cx,cy:circ[0].cy,r:circ[0].r};
+    let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9; for(const p of polys) for(const pt of p.pts){ x0=Math.min(x0,pt[0]);y0=Math.min(y0,pt[1]);x1=Math.max(x1,pt[0]);y1=Math.max(y1,pt[1]); }
+    return {type:'rect',x0,y0,x1,y1};
+  },
+  toDXF(){
+    const FY=y=>(H-y).toFixed(3), X=x=>x.toFixed(3);
+    const layers=['BORDER','STRUCTURE','FASTENER','ROD','SURGE','HANGER','PIPE','KEYNOTES','LEADERS','TEXT','TITLE'];
+    const colors={BORDER:7,STRUCTURE:8,FASTENER:3,ROD:5,SURGE:6,HANGER:1,PIPE:1,KEYNOTES:2,LEADERS:7,TEXT:7,TITLE:7};
+    let o=[];
+    o.push('0','SECTION','2','TABLES','0','TABLE','2','LAYER','70',String(layers.length));
+    for(const L of layers){ o.push('0','LAYER','2',L,'70','0','62',String(colors[L]||7),'6','CONTINUOUS'); }
+    o.push('0','ENDTAB','0','ENDSEC','0','SECTION','2','ENTITIES');
+    for(const l of this.lines){ o.push('0','LINE','8',l[4],'10',X(l[0]),'20',FY(l[1]),'30','0','11',X(l[2]),'21',FY(l[3]),'31','0'); }
+    for(const c of this.circles){ o.push('0','CIRCLE','8',c[3],'10',X(c[0]),'20',FY(c[1]),'30','0','40',c[2].toFixed(3)); }
+    for(const t of this.texts){
+      const h=(t.h*0.72).toFixed(3);
+      const halign=t.align==='center'?1:(t.align==='right'?2:0);
+      const valign=t.baseline==='middle'?2:(t.baseline==='top'?3:(t.baseline==='bottom'?1:0));
+      o.push('0','TEXT','8','TEXT','10',X(t.x),'20',FY(t.y),'30','0','40',h,'1',t.val,'72',String(halign),'73',String(valign),'11',X(t.x),'21',FY(t.y),'31','0');
+    }
+    o.push('0','ENDSEC','0','EOF');
+    return o.join('\n');
+  }
+};
+function exportDXF(){
+  if(!state.pipe){ flash("Add a pipe before exporting."); return; }
+  const mctx=document.createElement('canvas').getContext('2d');
+  const r=new DxfRec(mctx);
+  const G=state.pipe?geom():null;
+  r.layer='BORDER';    drawBorder(r);
+  r.layer='STRUCTURE'; drawStructure(r);
+  r.layer='FASTENER';  drawFastener(r);
+  r.layer='ROD';       drawRod(r);
+  r.layer='SURGE';     drawSurge(r);
+  r.layer='HANGER';    if(state.ring && G && G.rd) drawRealRing(r, state.pipe.x, state.pipe.y, G.rd);
+  r.layer='PIPE';      if(G) drawPipeSection(r, state.pipe.x, state.pipe.y, G.pipeR);
+  r.layer='KEYNOTES';  drawKeynotes(r);
+  r.layer='TITLE';     drawTitleBlock(r);
+  const dxf=r.toDXF();
+  const blob=new Blob([dxf],{type:'application/dxf'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const name=(state.title.replace(/[^a-z0-9]+/gi,'_').slice(0,40)||'hanger_detail');
+  a.href=url; a.download=name+'.dxf';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),4000);
+  flash("DXF exported ✓");
+}
+document.getElementById('btnDxf').onclick=exportDXF;
 
 /* ============================================================
    Export PNG (hi-res, white paper)
