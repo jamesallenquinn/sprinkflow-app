@@ -22,7 +22,7 @@
   #app{display:flex; flex-direction:column; height:100%;}
 
   /* Top bar */
-  header{display:flex; align-items:center; gap:8px;
+  header{display:flex; align-items:center; gap:6px;
     padding:max(env(safe-area-inset-top,0px),8px) 10px 8px;
     background:var(--panel); border-bottom:1px solid var(--line); flex:0 0 auto;}
   header .title{font-family:"Space Grotesk","Inter",sans-serif; font-size:15px; font-weight:700; letter-spacing:.2px;
@@ -118,9 +118,8 @@
     <button class="iconbtn" id="btnHistUndo" aria-label="Undo" title="Undo" disabled>↶</button>
     <button class="iconbtn" id="btnHistRedo" aria-label="Redo" title="Redo" disabled>↷</button>
     <button class="iconbtn" id="btnEdit" aria-label="Options">⚙</button>
-    <button class="iconbtn" id="btnUndo">↺ Reset</button>
-    <button class="iconbtn" id="btnDxf">⤓ DXF</button>
-    <button class="iconbtn primary" id="btnExport">⤓ PNG</button>
+    <button class="iconbtn" id="btnDxf">DXF</button>
+    <button class="iconbtn primary" id="btnExport">PNG</button>
   </header>
 
   <div id="stage">
@@ -1484,7 +1483,7 @@ function flash(msg){
 /* ============================================================
    Header buttons
    ============================================================ */
-document.getElementById('btnUndo').onclick=()=>{
+function resetDetail(){
   if(!confirm("Reset the whole detail?")) return;
   state.ring=false; state.rodToPipe=false; state.surge=false; state.structure=null; state.fastener=null;
   state.keynotePos={}; state.keynoteArrow={}; state.keynoteText={}; state.knOpt={}; state.customKeynotes=[]; state.customSeq=0; state.detailScale=1; state.pipeLocked=false;
@@ -1492,7 +1491,7 @@ document.getElementById('btnUndo').onclick=()=>{
   { const r=pipeYRange(DEFAULT_NPS); state.pipe={x:AXIS, y:clamp(600,r[0],r[1]), npsIndex:DEFAULT_NPS}; }
   setTool(null); updateUI(); draw(); commit();
   flash('Reset — 4" pipe placed. Add a Ring, Structure, then Fastener.');
-};
+}
 document.getElementById('btnEdit').onclick=()=>{
   const shapes=[['bubble','● Bubble'],['square','■ Square'],['rectangle','▬ Rectangle'],['plain','№ No outline']];
   const chips=shapes.map(([k,lbl])=>`<button class="chip ${state.keynoteShape===k?'sel':''}" data-shape="${k}">${lbl}</button>`).join('');
@@ -1512,6 +1511,7 @@ document.getElementById('btnEdit').onclick=()=>{
     <button class="opt" style="justify-content:center;margin:0 0 8px;" data-act="reanchor">↺ Re-anchor keynotes to elements</button>
     <button class="opt" style="justify-content:center;margin:0 0 8px;" data-act="align">▤ Auto-align keynotes (column)</button>
     <div style="color:var(--muted);font-size:12px;margin:0 0 10px;">Tip: double-tap a leader (or its bubble) for line / shape / arrow-head options. Double-tap empty space for a magnifier to grab arrow tips.</div>
+    <button class="opt" style="justify-content:center;margin:0 0 8px;" data-act="reset">↺ Reset detail</button>
     <div class="row"><button class="ghost" data-act="close">Cancel</button>
     <button class="opt" style="justify-content:center;margin:0;" data-act="save">Save</button></div>`);
   sheet.querySelectorAll('#shapeChips .chip').forEach(c=> c.onclick=()=>{
@@ -1529,6 +1529,7 @@ document.getElementById('btnEdit').onclick=()=>{
     flash(state.pipeLocked ? "Pipe locked in place." : "Pipe unlocked.");
   };
   sheet.querySelector('[data-act="addkn"]').onclick=()=>{ addKeynote(); };   // opens the editor for the new keynote
+  sheet.querySelector('[data-act="reset"]').onclick=()=>{ hideSheet(); resetDetail(); };
   sheet.querySelector('[data-act="reanchor"]').onclick=()=>{ hideSheet(); reanchorKeynotes(); };
   sheet.querySelector('[data-act="align"]').onclick=()=>{ hideSheet(); alignKeynotes(); };
   sheet.querySelector('[data-act="save"]').onclick=()=>{
