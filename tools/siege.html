@@ -442,9 +442,9 @@
     var slots = [];
     for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) slots.push({ c: c, r: r, x: 0, y: 0, state: (c === 1 && r === 1) ? "active" : "locked", kTier: 0, q: 0, type: (c === 1 && r === 1) ? "standard" : null, ec: false, hp: false, fr: false, aim: 0 });
     var enemies = [], particles = [], foamPiles = [], laserShots = [], flowers = [], shatters = [];   // flowers = lawn decoys; shatters = ice-break fx
-    var FLOWER_SPAWN_INT = 2.6, FLOWER_MAX = 16;
+    var FLOWER_SPAWN_INT = 1.3, FLOWER_MAX = 32;   // 2x flowers: spawn twice as fast, double the global cap so multiple lawn heads aren't bottlenecked
     function enemyFlowerDPS() { return 8 + wave * 1.0 + loopN * 6; }                    // how fast one enemy drains a flower (scales with phase)
-    function flowerHP(s) { return enemyFlowerDPS() * (2 + (s.kTier / (KLADDER.length - 1)) * 3); }   // ~2s of attacks at K5.6 → ~5s fully upgraded
+    function flowerHP(s) { return enemyFlowerDPS() * (2 + (s.kTier / (KLADDER.length - 1)) * 3) * 1.5; }   // +50% HP; ~3s of attacks at K5.6 → ~7.5s fully upgraded
     var state = "start";  // start | playing | upgrade | over | win
     var wave = 1, score = 0, integrity = 100, water = 330, maxWater = 330, holding = false;
     var spawnQueue = 0, spawnT = 0, bossPending = false, bossAlive = false, waveSpawnTotal = 1;
@@ -518,7 +518,7 @@
     var UNLOCK_DESC = {
       foam: "Lays foam piles that smother grease (Class B) fires.",
       moon: "Heals your core instead of attacking — and buffs adjacent heads.",
-      lawn: "Oscillating cone that sweeps and hits up to 3 flames at once.",
+      lawn: "Oscillating cone that sweeps and hits up to 3 flames at once. Grows decoy flowers in its spray — flames peel off to attack the blooms instead of your core.",
       corridor: "Long two-way jet — perfect for straight approach lanes.",
       laser: "Infinite-range bolts — the only thing that stops electrical (Class C) fires."
     };
@@ -1221,7 +1221,7 @@
       { e: "🛡️", t: "Integrity shield", d: "+20% shield: soaks incoming damage", kid: "Shield", apply: function () { shield += 20; } },
       { e: "🎬", icon: "icon-hollywood", t: "Hollywood Scene", d: "Stored: all heads blast 5s, no water used", kid: "Blast", apply: function () { hollywoodCharges++; updateHollywoodBtn(); } }
     ];
-    function unlockDesc(t) { return { standard: "Radial spray — your bread & butter", laser: "Auto-blasts the nearest flame (single target)", foam: "Foam ring: damages + slows flames in radius", lawn: "Rotating cone — hits up to 3 flames", corridor: "Extreme reach along one axis only", moon: "No damage — heals integrity & buffs neighbors" }[t]; }
+    function unlockDesc(t) { return { standard: "Radial spray — your bread & butter", laser: "Auto-blasts the nearest flame (single target)", foam: "Foam ring: damages + slows flames in radius", lawn: "Rotating cone — hits 3 flames + grows decoy flowers that bait flames away", corridor: "Extreme reach along one axis only", moon: "No damage — heals integrity & buffs neighbors" }[t]; }
     // temporary wave-duration buffs (offered as upgrade cards, common in Endless)
     var BUFFS = [
       { e: "⚡", icon: "icon-buff-surge", t: "Power Surge", d: "All heads deal ×2 damage for 3 waves", kid: "×2 DMG", apply: function () { buffSurge = 3; showBanner("⚡ Power Surge — ×2 damage for 3 waves!", 4, "#ffb03a"); } },
