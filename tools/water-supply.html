@@ -218,7 +218,10 @@
     }
 
     document.querySelectorAll("input").forEach(function (el) { el.addEventListener("input", update); });
-    document.getElementById("exportBtn").addEventListener("click", exportPNG);
+    document.getElementById("exportBtn").addEventListener("click", function () {
+      if (window.SFAuth && SFAuth.gateExport) { SFAuth.gateExport(exportPNG, { feature: "PNG export", body: "Plot the water supply free as much as you like. Saving the curve image needs a free SprinkFlow account." }); return; }
+      exportPNG();
+    });
     update();
   </script>
   <script src="./sprinkflow-auth.js"></script>

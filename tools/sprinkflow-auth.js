@@ -277,7 +277,12 @@
   // To turn paywalls ON: set this to true (or call SFAuth.setPaywall(true)) and redeploy.
   var PAYWALL_ACTIVE = false;
   function gateExport(onAllowed, opts) {
-    if (!PAYWALL_ACTIVE) { try { onAllowed(); } catch (e) {} return; }   // paywall off (pre-launch) → everyone can export
+    // Guests can use the tools, but exporting always needs at least a free account.
+    if (!isSignedIn()) {
+      openSignIn({ onSuccess: function () { try { onAllowed(); } catch (e) {} } });
+      return;
+    }
+    if (!PAYWALL_ACTIVE) { try { onAllowed(); } catch (e) {} return; }   // signed in, paywall off (pre-launch) → export
     isSubscriber().then(function (ok) { if (ok) { try { onAllowed(); } catch (e) {} } else upsell(opts); });
   }
   function setPaywall(on) { PAYWALL_ACTIVE = !!on; }   // optional runtime toggle (e.g. from a console) for testing
@@ -295,8 +300,8 @@
   setInterval(function () { if (isSignedIn() && !tokenFresh()) refreshSession(); }, 4 * 60 * 1000);
   document.addEventListener("visibilitychange", function () { if (!document.hidden && isSignedIn() && !tokenFresh()) refreshSession(); });
 
-  // ---- app gate: require a free sign-in before the tools/games can be used ----
-  // Opt out on a page with: <body data-no-auth-gate> (none currently do).
+  // ---- app gate: GUEST mode by default — tools & games are open with no account. ----
+  // Opt IN to requiring a free sign-in on a page with: <body data-require-auth> (e.g. the Hanger Detail tool).
   var gateStyled = false;
   function gateStyles() {
     if (gateStyled) return; gateStyled = true;
@@ -316,13 +321,13 @@
     var w = document.createElement("div"); w.id = "sf-gate";
     w.innerHTML = '<div class="sf-gate-card"><div class="sf-gate-logo">💧</div>' +
       '<h2>SprinkFlow Tools</h2>' +
-      '<p>Create a free account or sign in to use the calculators, code references, and games.</p>' +
+      '<p>This one needs a free account. Sign up to try the beta — everything else (calculators, code refs, and games) is open with no account.</p>' +
       '<button type="button" id="sf-gate-btn">Sign in / Create account</button></div>';
     document.body.appendChild(w);
     document.getElementById("sf-gate-btn").onclick = function () { openSignIn({ onSuccess: removeGate }); };
   }
   function applyGate() {
-    if (document.body && document.body.hasAttribute("data-no-auth-gate")) return;
+    if (!document.body || !document.body.hasAttribute("data-require-auth")) return;   // guest-allowed unless the page opts in
     if (isSignedIn()) { removeGate(); return; }
     buildGate();
     openSignIn({ onSuccess: removeGate });   // auto-open the sign-in form over the wall
