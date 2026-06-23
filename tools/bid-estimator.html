@@ -104,6 +104,8 @@
         { id: "monitor", label: "Monitor / tamper / flow switch", cost: 800 },
       ],
       ratePerHead: 250,
+      designRateSqft: 0.2,   // design cost default: 20 cents / sq ft
+      designRateHr: 125,     // or bill design hourly
     };
 
     var KEY = "sf.bidwiz";
@@ -117,6 +119,11 @@
     S.addons = S.addons || {};
     S.ratePerHead = S.ratePerHead != null ? S.ratePerHead : CFG.ratePerHead;
     S.addonCosts = S.addonCosts || {};
+    S.designOn = S.designOn != null ? S.designOn : true;   // design cost is almost always needed → on by default
+    S.designMode = S.designMode || "sqft";                 // "sqft" (per sq ft) or "hourly"
+    S.designRateSqft = S.designRateSqft != null ? S.designRateSqft : CFG.designRateSqft;
+    S.designHours = S.designHours || 0;
+    S.designRateHr = S.designRateHr != null ? S.designRateHr : CFG.designRateHr;
     var step = 0;
 
     var money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -135,12 +142,17 @@
       var base = heads * rph * sys.mult;
       var addonTotal = 0, addonList = [];
       CFG.addons.forEach(function (a) { if (S.addons[a.id]) { var c = addonCost(a); addonTotal += c; addonList.push({ label: a.label, cost: c }); } });
-      var subtotal = base + addonTotal;
+      var design = 0;
+      if (S.designOn) {
+        if (S.designMode === "hourly") design = num(S.designHours) * (num(S.designRateHr) || CFG.designRateHr);
+        else design = area * (S.designRateSqft != null ? num(S.designRateSqft) : CFG.designRateSqft);
+      }
+      var subtotal = base + design + addonTotal;
       var total = subtotal > 0 ? Math.ceil(subtotal / 50) * 50 : 0;
-      return { area: area, cov: cov, layout: layout, heads: heads, sys: sys, rph: rph, base: base, addonTotal: addonTotal, addonList: addonList, total: total };
+      return { area: area, cov: cov, layout: layout, heads: heads, sys: sys, rph: rph, base: base, design: design, addonTotal: addonTotal, addonList: addonList, total: total };
     }
 
-    var TOTAL_STEPS = 6;
+    var TOTAL_STEPS = 7;
     function renderProgress() {
       var p = $("wizProgress"), html = "";
       for (var i = 0; i < TOTAL_STEPS; i++) html += '<i class="' + (i < step ? "done" : i === step ? "on" : "") + '"></i>';
@@ -226,6 +238,63 @@
       }
 
       if (step === 4) {
+        s.innerHTML = '<h2>Design cost</h2><p class="q-sub">You almost always need to factor this in. Default is $0.20 / sq ft — or bill it hourly.</p>';
+        var incl = document.createElement("button");
+        incl.type = "button";
+        incl.className = "addon" + (S.designOn ? " sel" : "");
+        incl.innerHTML = '<span>Include design cost</span><span class="chk">' + (S.designOn ? "✓" : "") + "</span>";
+        incl.onclick = function () { S.designOn = !S.designOn; save(); render(); };
+        s.appendChild(incl);
+
+        if (S.designOn) {
+          var modeWrap = document.createElement("div");
+          modeWrap.className = "opt-list two";
+          [["sqft", "Per sq ft"], ["hourly", "Hourly"]].forEach(function (m) {
+            var mb = document.createElement("button");
+            mb.type = "button";
+            mb.className = "opt" + (S.designMode === m[0] ? " sel" : "");
+            mb.innerHTML = "<span>" + m[1] + "</span>";
+            mb.onclick = function () { S.designMode = m[0]; save(); render(); };
+            modeWrap.appendChild(mb);
+          });
+          s.appendChild(modeWrap);
+
+          var fld = document.createElement("div");
+          if (S.designMode === "hourly") {
+            fld.innerHTML =
+              '<div class="rate-row"><label>Design hours</label><input type="number" inputmode="numeric" id="dHours" value="' + (num(S.designHours) || "") + '" placeholder="e.g. 16" /></div>' +
+              '<div class="rate-row"><label>Rate ($/hr)</label><input type="number" inputmode="numeric" id="dHr" value="' + (num(S.designRateHr) || CFG.designRateHr) + '" /></div>';
+          } else {
+            fld.innerHTML =
+              '<div class="rate-row"><label>Rate ($/sq ft)</label><input type="number" inputmode="decimal" step="0.01" id="dSqft" value="' + (S.designRateSqft != null ? S.designRateSqft : CFG.designRateSqft) + '" /></div>';
+          }
+          s.appendChild(fld);
+
+          var read = document.createElement("div");
+          read.className = "est-summary";
+          var paintDesign = function () {
+            var cd = compute();
+            read.innerHTML = '<span>Design cost: ' + money.format(cd.design) + '</span>' +
+              (S.designMode === "sqft" ? '<span>' + Number(cd.area).toLocaleString() + ' sq ft × $' + (S.designRateSqft != null ? S.designRateSqft : CFG.designRateSqft) + '/sq ft</span>' : '');
+          };
+          paintDesign();
+          s.appendChild(read);
+
+          fld.addEventListener("input", function (e) {
+            var t = e.target;
+            if (t.id === "dSqft") S.designRateSqft = num(t.value);
+            else if (t.id === "dHours") S.designHours = num(t.value);
+            else if (t.id === "dHr") S.designRateHr = num(t.value);
+            save();
+            paintDesign();
+          });
+        }
+        s.appendChild(nav("Back", "Next", function () { step = 5; render(); }));
+        root.appendChild(s);
+        return;
+      }
+
+      if (step === 5) {
         s.innerHTML = '<h2>Quick add-ons</h2><p class="q-sub">Tap anything this job includes. Adjust prices on the estimate screen.</p>';
         var list = document.createElement("div");
         list.className = "opt-list";
@@ -238,12 +307,12 @@
           list.appendChild(b);
         });
         s.appendChild(list);
-        s.appendChild(nav("Back", "See estimate", function () { step = 5; render(); }));
+        s.appendChild(nav("Back", "See estimate", function () { step = 6; render(); }));
         root.appendChild(s);
         return;
       }
 
-      // step 5 — result
+      // step 6 — result
       var c = compute();
       s.innerHTML =
         '<div class="est-total"><div class="lbl">Estimated bid</div><div class="big">' + (c.total > 0 ? money.format(c.total) : "—") + '</div>' +
@@ -256,12 +325,19 @@
         "<span>" + c.sys.label + "</span>" +
         "<span>" + CFG.occLabel[S.occupancy] + "</span>" +
         "<span>" + c.layout.label + "</span>" +
+        (c.design > 0 ? "<span>design</span>" : "") +
         c.addonList.map(function (a) { return "<span>" + a.label.replace(/\s*\(.*\)/, "") + "</span>"; }).join("");
       s.appendChild(sum);
 
       var rows = document.createElement("div");
       rows.className = "est-rows";
       var rowHtml = '<div class="r"><span>' + c.heads + " sprinklers × " + money.format(c.rph) + "/head" + (c.sys.mult !== 1 ? " × " + c.sys.mult + " (" + c.sys.label + ")" : "") + '</span><b>' + money.format(c.base) + "</b></div>";
+      if (c.design > 0) {
+        var dLabel = S.designMode === "hourly"
+          ? ("Design (" + num(S.designHours) + " hr × " + money.format(num(S.designRateHr) || CFG.designRateHr) + ")")
+          : ("Design ($" + (S.designRateSqft != null ? S.designRateSqft : CFG.designRateSqft) + "/sq ft)");
+        rowHtml += '<div class="r"><span>' + dLabel + '</span><b>' + money.format(c.design) + "</b></div>";
+      }
       c.addonList.forEach(function (a) { rowHtml += '<div class="r"><span>' + a.label + '</span><b>' + money.format(a.cost) + "</b></div>"; });
       rowHtml += '<div class="r"><span><b>Total (rounded up to $50)</b></span><b>' + money.format(c.total) + "</b></div>";
       rows.innerHTML = rowHtml;
@@ -271,11 +347,15 @@
       rates.className = "rates";
       var ratesHtml = "<summary>⚙ Your rates &amp; add-on prices</summary>";
       ratesHtml += '<div class="rate-row"><label>Installed price per sprinkler</label><input type="number" inputmode="numeric" data-rate="head" value="' + (num(S.ratePerHead) || CFG.ratePerHead) + '" /></div>';
+      ratesHtml += '<div class="rate-row"><label>Design — $/sq ft</label><input type="number" inputmode="decimal" step="0.01" data-design="sqft" value="' + (S.designRateSqft != null ? S.designRateSqft : CFG.designRateSqft) + '" /></div>';
+      ratesHtml += '<div class="rate-row"><label>Design — $/hr</label><input type="number" inputmode="numeric" data-design="hr" value="' + (num(S.designRateHr) || CFG.designRateHr) + '" /></div>';
       CFG.addons.forEach(function (a) { ratesHtml += '<div class="rate-row"><label>' + a.label + '</label><input type="number" inputmode="numeric" data-addon="' + a.id + '" value="' + addonCost(a) + '" /></div>'; });
       rates.innerHTML = ratesHtml;
       rates.addEventListener("input", function (e) {
         var t = e.target;
         if (t.dataset.rate === "head") { S.ratePerHead = num(t.value); save(); }
+        else if (t.dataset.design === "sqft") { S.designRateSqft = num(t.value); save(); }
+        else if (t.dataset.design === "hr") { S.designRateHr = num(t.value); save(); }
         else if (t.dataset.addon) { S.addonCosts[t.dataset.addon] = num(t.value); save(); }
         var c2 = compute();
         s.querySelector(".est-total .big").textContent = c2.total > 0 ? money.format(c2.total) : "—";
@@ -289,7 +369,7 @@
       edit.onclick = function () { step = 0; render(); };
       var again = document.createElement("button");
       again.className = "btn btn-primary"; again.type = "button"; again.textContent = "New estimate";
-      again.onclick = function () { S.area = ""; S.addons = {}; S.layout = 0; save(); step = 0; render(); };
+      again.onclick = function () { S.area = ""; S.addons = {}; S.layout = 0; S.designHours = 0; save(); step = 0; render(); };
       navWrap.appendChild(edit); navWrap.appendChild(again);
       s.appendChild(navWrap);
 
