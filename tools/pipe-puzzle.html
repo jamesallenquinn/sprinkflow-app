@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Pipe Dreams — SprinkFlow</title>
+  <meta name="description" content="Procedurally generated sprinkler routing puzzle — draw pipe from the riser to every head using as little pipe as possible." />
+  <meta name="theme-color" content="#0d1116" />
+  <link rel="manifest" href="../manifest.webmanifest" />
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="../assets/logo.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+  <style>
+    html, body { overscroll-behavior:none; }
+    body { -webkit-user-select:none; -moz-user-select:none; user-select:none; -webkit-touch-callout:none; }
+    .pp-wrap { max-width:520px; margin:0 auto; padding:0 12px calc(12px + env(safe-area-inset-bottom,0px)); display:flex; flex-direction:column; touch-action:manipulation; }
+
+    .pp-top { display:flex; align-items:center; gap:10px; margin:8px 0 8px; }
+    .pp-top a { color:var(--muted); text-decoration:none; font:600 .9rem Inter; }
+    .pp-top h1 { font:700 1.05rem 'Space Grotesk'; margin:0; flex:1; }
+    .pp-top h1 .grad { background:var(--grad-fw); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+
+    .pp-hud { display:flex; gap:8px; margin-bottom:8px; }
+    .pp-hud .pill { flex:1; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:7px 8px 8px; text-align:center; }
+    .pp-hud .k { font:600 .56rem/1 Inter; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); }
+    .pp-hud .v { font:700 1.15rem/1.1 'Space Grotesk'; margin-top:3px; }
+    .pp-hud .pipe .v { color:var(--water); } .pp-hud .heads .v { color:var(--accent); } .pp-hud .par .v { color:var(--muted); }
+
+    .pp-stage { position:relative; border-radius:16px; overflow:hidden; }
+    canvas#board { display:block; width:100%; height:auto; background:radial-gradient(circle at 50% 40%, #111922, #0a0f13); border:1px solid var(--line); border-radius:16px; touch-action:none; }
+
+    .pp-tools { display:flex; gap:8px; margin-top:10px; }
+    .pp-tools button { flex:1; border:1px solid var(--line); border-radius:12px; padding:11px 6px; background:var(--surface); color:var(--ink); font:600 .82rem Inter; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; }
+    .pp-tools button .e { font-size:1.15rem; line-height:1; }
+    .pp-tools button:active { transform:scale(.96); }
+    .pp-tools button.on { border-color:var(--accent); background:linear-gradient(180deg, rgba(255,176,58,.16), transparent), var(--surface); color:var(--accent); }
+    .pp-tools button.primary { background:var(--grad-fire); color:#1a0d06; border:0; }
+
+    .pp-hint { margin:10px 2px 0; color:var(--muted); font:500 .82rem/1.45 Inter; }
+    .pp-hint b { color:var(--ink); }
+
+    .pp-ov { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; text-align:center;
+      background:rgba(7,10,13,.86); backdrop-filter:blur(3px); border-radius:16px; padding:22px; z-index:5; }
+    .pp-ov.show { display:flex; }
+    .pp-ov .ic { font-size:46px; filter:drop-shadow(0 6px 18px rgba(55,183,228,.4)); }
+    .pp-ov h2 { font:700 1.6rem/1.05 'Space Grotesk'; margin:8px 0 4px; }
+    .pp-ov h2 .grad { background:var(--grad-fw); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+    .pp-ov p { color:var(--muted); margin:0 0 14px; max-width:34ch; font-size:.9rem; line-height:1.4; }
+    .pp-final { display:flex; gap:24px; margin:6px 0 16px; }
+    .pp-final .v { font:700 2rem 'Space Grotesk'; } .pp-final .v.gold { background:var(--grad-fw); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+    .pp-final .k { font:600 .56rem Inter; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+    .pp-stars { font-size:1.5rem; letter-spacing:4px; margin-bottom:14px; }
+    .pp-ovbtns { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+    .pp-btn { border:0; border-radius:14px; padding:14px 22px; font:700 1rem 'Space Grotesk'; cursor:pointer; background:var(--grad-fire); color:#1a0d06; }
+    .pp-btn.ghost { background:var(--surface); color:var(--ink); border:1px solid var(--line); font-weight:600; }
+  </style>
+</head>
+<body>
+  <main class="pp-wrap">
+    <div class="pp-top">
+      <a href="../index.html">‹ Tools</a>
+      <h1><span class="grad">Pipe Dreams</span></h1>
+    </div>
+
+    <div class="pp-hud">
+      <div class="pill pipe"><div class="k">Pipe used</div><div class="v"><span id="hPipe">0</span> ft</div></div>
+      <div class="pill heads"><div class="k">Supplied</div><div class="v"><span id="hHeads">0</span>/<span id="hTotal">0</span></div></div>
+      <div class="pill par"><div class="k">Par</div><div class="v"><span id="hPar">0</span> ft</div></div>
+    </div>
+
+    <div class="pp-stage">
+      <canvas id="board"></canvas>
+      <div class="pp-ov" id="ov">
+        <div class="ic">🎉</div>
+        <h2><span class="grad">System complete!</span></h2>
+        <p>Every sprinkler is supplied from the riser.</p>
+        <div class="pp-stars" id="ovStars">★★★</div>
+        <div class="pp-final">
+          <div><div class="v gold" id="ovPipe">0</div><div class="k">ft of pipe</div></div>
+          <div><div class="v" id="ovHeads">0</div><div class="k">sprinklers</div></div>
+        </div>
+        <div class="pp-ovbtns">
+          <button class="pp-btn ghost" id="ovKeep">Keep trimming</button>
+          <button class="pp-btn" id="ovNew">New level</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="pp-tools">
+      <button id="btnDraw" class="on"><span class="e">✏️</span>Draw</button>
+      <button id="btnErase"><span class="e">🧽</span>Erase</button>
+      <button id="btnUndo"><span class="e">↩️</span>Undo</button>
+      <button id="btnReset"><span class="e">🧹</span>Reset</button>
+      <button id="btnNew" class="primary"><span class="e">🎲</span>New</button>
+    </div>
+
+    <p class="pp-hint">
+      <b>Goal:</b> route pipe from the <b>riser</b> (blue) to every <b>sprinkler head</b> (brass) using the least pipe.
+      <b>Drag</b> to draw a snapped pipe run — pipe locks to horizontal/vertical and to the grid. Build a main, then branch off it;
+      runs connect wherever they touch. Connected pipe turns <b style="color:var(--water)">blue</b> as water reaches it.
+    </p>
+  </main>
+
+  <script>
+  (function () {
+    "use strict";
+    var cv = document.getElementById("board");
+    var ctx = cv.getContext("2d");
+
+    // ---- config ----------------------------------------------------------
+    var FT_PER_CELL = 2;          // each grid cell = 2 ft of pipe
+    var MIN = 3;                  // minimum room side (cells)
+    var HEAD_SPACING = 4;         // target head spacing in larger rooms (cells)
+    var dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
+
+    // ---- level state -----------------------------------------------------
+    var rooms = [];               // {x,y,w,h,size}
+    var heads = [];               // {x,y}  grid points
+    var riser = { x: 0, y: 0 };   // grid point on building wall
+    var riserRoom = null;         // {x,y,w,h}
+    var minX = 0, minY = 0, worldW = 1, worldH = 1, scale = 1;
+    var segs = [];                // committed pipe: {a:{x,y}, b:{x,y}}
+
+    // ---- interaction state ----------------------------------------------
+    var mode = "draw";            // "draw" | "erase"
+    var drawing = false;
+    var startPt = null;           // {x,y} grid
+    var previewSeg = null;        // {a,b}
+
+    // ---------------------------------------------------------------------
+    // LEVEL GENERATION  (binary space partition of one rectangle = tiled rooms)
+    // ---------------------------------------------------------------------
+    function rnd(a, b) { return a + Math.random() * (b - a); }
+    function ri(a, b) { return Math.floor(rnd(a, b + 1)); }
+
+    function classify(area) { return area <= 10 ? "S" : area >= 26 ? "L" : "M"; }
+
+    function bsp(rect, depth, out) {
+      var w = rect.w, h = rect.h, area = w * h;
+      var canH = w >= 2 * MIN + 1;             // splittable along x
+      var canV = h >= 2 * MIN + 1;             // splittable along y
+      var must = !canH && !canV;
+      var stop = must || depth <= 0 || (area < 22 && Math.random() < 0.4) || (area < 14);
+      if (stop) { out.push({ x: rect.x, y: rect.y, w: w, h: h, size: classify(area) }); return; }
+      var splitX;
+      if (canH && canV) splitX = (w > h) ? true : (h > w ? false : Math.random() < 0.5);
+      else splitX = canH;
+      if (splitX) {
+        var cx = ri(MIN, w - MIN);
+        bsp({ x: rect.x, y: rect.y, w: cx, h: h }, depth - 1, out);
+        bsp({ x: rect.x + cx, y: rect.y, w: w - cx, h: h }, depth - 1, out);
+      } else {
+        var cy = ri(MIN, h - MIN);
+        bsp({ x: rect.x, y: rect.y, w: w, h: cy }, depth - 1, out);
+        bsp({ x: rect.x, y: rect.y + cy, w: w, h: h - cy }, depth - 1, out);
+      }
+    }
+
+    function placeHeads(r) {
+      var pts = [];
+      if (r.size === "S") {
+        pts.push({ x: Math.round(r.x + r.w / 2), y: Math.round(r.y + r.h / 2) });
+      } else {
+        var cols = Math.max(1, Math.round(r.w / HEAD_SPACING));
+        var rowsN = Math.max(1, Math.round(r.h / HEAD_SPACING));
+        for (var i = 0; i < cols; i++) {
+          for (var j = 0; j < rowsN; j++) {
+            var hx = Math.round(r.x + r.w * (i + 0.5) / cols);
+            var hy = Math.round(r.y + r.h * (j + 0.5) / rowsN);
+            hx = Math.max(r.x + 1, Math.min(r.x + r.w - 1, hx));
+            hy = Math.max(r.y + 1, Math.min(r.y + r.h - 1, hy));
+            pts.push({ x: hx, y: hy });
+          }
+        }
+      }
+      return pts;
+    }
+
+    function generate() {
+      segs = []; previewSeg = null; drawing = false; startPt = null;
+      hideOverlay();
+
+      // building footprint
+      var BW = ri(15, 21), BH = ri(11, 15), BX = 4, BY = 4;
+      rooms = [];
+      bsp({ x: BX, y: BY, w: BW, h: BH }, 5, rooms);
+
+      // riser room on a random exterior edge
+      var edge = ri(0, 3); // 0 left, 1 right, 2 top, 3 bottom
+      var rr;
+      if (edge === 0) { var ry = ri(BY + 1, BY + BH - 4); rr = { x: BX - 3, y: ry, w: 3, h: 3 }; riser = { x: BX, y: ry + 1 }; }
+      else if (edge === 1) { var ry2 = ri(BY + 1, BY + BH - 4); rr = { x: BX + BW, y: ry2, w: 3, h: 3 }; riser = { x: BX + BW, y: ry2 + 1 }; }
+      else if (edge === 2) { var rx = ri(BX + 1, BX + BW - 4); rr = { x: rx, y: BY - 3, w: 3, h: 3 }; riser = { x: rx + 1, y: BY }; }
+      else { var rx2 = ri(BX + 1, BX + BW - 4); rr = { x: rx2, y: BY + BH, w: 3, h: 3 }; riser = { x: rx2 + 1, y: BY + BH }; }
+      riserRoom = rr;
+
+      // sprinkler heads (dedupe by grid key, skip riser cell)
+      var seen = {};
+      heads = [];
+      seen[key(riser.x, riser.y)] = 1;
+      for (var k = 0; k < rooms.length; k++) {
+        var hp = placeHeads(rooms[k]);
+        for (var m = 0; m < hp.length; m++) {
+          var kk = key(hp[m].x, hp[m].y);
+          if (!seen[kk]) { seen[kk] = 1; heads.push(hp[m]); }
+        }
+      }
+
+      // world bounds (building + riser room + 1 cell pad)
+      var x0 = Math.min(BX, rr.x), y0 = Math.min(BY, rr.y);
+      var x1 = Math.max(BX + BW, rr.x + rr.w), y1 = Math.max(BY + BH, rr.y + rr.h);
+      minX = x0 - 1; minY = y0 - 1; worldW = (x1 - x0) + 2; worldH = (y1 - y0) + 2;
+
+      computePar();
+      resize();
+      updateHUD();
+    }
+
+    // ---------------------------------------------------------------------
+    // PAR  —  rectilinear minimum spanning tree (Prim, manhattan distance)
+    // ---------------------------------------------------------------------
+    var parFt = 0;
+    function computePar() {
+      var nodes = [riser].concat(heads);
+      var n = nodes.length, inT = new Array(n).fill(false), best = new Array(n).fill(1e9);
+      best[0] = 0; var total = 0;
+      for (var it = 0; it < n; it++) {
+        var u = -1, bd = 1e9;
+        for (var i = 0; i < n; i++) if (!inT[i] && best[i] < bd) { bd = best[i]; u = i; }
+        if (u < 0) break;
+        inT[u] = true; total += bd;
+        for (var j = 0; j < n; j++) if (!inT[j]) {
+          var d = Math.abs(nodes[u].x - nodes[j].x) + Math.abs(nodes[u].y - nodes[j].y);
+          if (d < best[j]) best[j] = d;
+        }
+      }
+      parFt = Math.round(total * FT_PER_CELL);
+    }
+
+    // ---------------------------------------------------------------------
+    // CONNECTIVITY  —  union-find over grid points covered by pipe
+    // ---------------------------------------------------------------------
+    function key(x, y) { return x + "," + y; }
+
+    function segPoints(s) {                       // every integer grid point a straight seg covers
+      var pts = [], dx = Math.sign(s.b.x - s.a.x), dy = Math.sign(s.b.y - s.a.y);
+      var n = Math.abs(s.b.x - s.a.x) + Math.abs(s.b.y - s.a.y);
+      for (var i = 0; i <= n; i++) pts.push({ x: s.a.x + dx * i, y: s.a.y + dy * i });
+      return pts;
+    }
+
+    function buildNetwork() {
+      var parent = {};
+      function find(k) { while (parent[k] !== k) { parent[k] = parent[parent[k]]; k = parent[k]; } return k; }
+      function add(k) { if (parent[k] === undefined) parent[k] = k; }
+      function uni(a, b) { add(a); add(b); var ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; }
+
+      var covered = {};
+      for (var i = 0; i < segs.length; i++) {
+        var pts = segPoints(segs[i]);
+        for (var p = 0; p < pts.length; p++) {
+          var kk = key(pts[p].x, pts[p].y); covered[kk] = 1; add(kk);
+          if (p > 0) uni(key(pts[p - 1].x, pts[p - 1].y), kk);
+        }
+      }
+      return { find: find, covered: covered, has: function (k) { return parent[k] !== undefined; } };
+    }
+
+    function connectivity() {
+      var net = buildNetwork();
+      var rk = key(riser.x, riser.y);
+      var riserCharged = net.covered[rk] ? true : false;
+      var rroot = riserCharged ? net.find(rk) : null;
+      var supplied = 0;
+      for (var i = 0; i < heads.length; i++) {
+        var hk = key(heads[i].x, heads[i].y);
+        heads[i].on = riserCharged && net.covered[hk] && net.find(hk) === rroot;
+        if (heads[i].on) supplied++;
+      }
+      // mark each committed seg charged for rendering
+      for (var s = 0; s < segs.length; s++) {
+        var ak = key(segs[s].a.x, segs[s].a.y);
+        segs[s].charged = riserCharged && net.has(ak) && net.find(ak) === rroot;
+      }
+      return { supplied: supplied, riserCharged: riserCharged };
+    }
+
+    function totalPipeFt() {
+      var c = 0;
+      for (var i = 0; i < segs.length; i++) c += Math.abs(segs[i].b.x - segs[i].a.x) + Math.abs(segs[i].b.y - segs[i].a.y);
+      return Math.round(c * FT_PER_CELL);
+    }
+
+    // ---------------------------------------------------------------------
+    // RENDER
+    // ---------------------------------------------------------------------
+    function sx(wx) { return (wx - minX) * scale; }
+    function sy(wy) { return (wy - minY) * scale; }
+
+    function resize() {
+      var cssW = Math.min(cv.parentElement.clientWidth, 496);
+      scale = cssW / worldW;
+      var cssH = worldH * scale;
+      cv.style.width = cssW + "px"; cv.style.height = cssH + "px";
+      cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      draw();
+    }
+
+    function roomFill(size) {
+      return size === "S" ? "#19222c" : size === "L" ? "#141d26" : "#161f29";
+    }
+
+    function drawHead(x, y, r, on) {
+      // brass deflector head (vector port of Sprinkler Siege's fallback art)
+      if (on) {
+        ctx.save(); ctx.globalAlpha = 0.9; ctx.lineWidth = Math.max(2, r * 0.28); ctx.strokeStyle = "rgba(55,183,228,0.85)";
+        ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      }
+      var teeth = 16, step = Math.PI * 2 / teeth, rRoot = r * 0.84, body = ["#f6d68a", "#b6792a"];
+      ctx.beginPath();
+      for (var ti = 0; ti < teeth; ti++) {
+        var b = ti * step - Math.PI / 2, pa = [[b, rRoot], [b + step * 0.18, r], [b + step * 0.5, r], [b + step * 0.68, rRoot]];
+        for (var pi = 0; pi < 4; pi++) {
+          var px = x + Math.cos(pa[pi][0]) * pa[pi][1], py = y + Math.sin(pa[pi][0]) * pa[pi][1];
+          if (ti === 0 && pi === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+      }
+      ctx.closePath();
+      var g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
+      g.addColorStop(0, body[0]); g.addColorStop(1, body[1]);
+      ctx.fillStyle = on ? g : "#7a6a45"; ctx.fill();
+      ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = "#6a4514"; ctx.stroke();
+      ctx.fillStyle = on ? "#a86f23" : "#5a4d33"; ctx.beginPath(); ctx.arc(x, y, r * 0.34, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#0a0e12"; ctx.beginPath(); ctx.arc(x, y, r * 0.15, 0, Math.PI * 2); ctx.fill();
+    }
+
+    function drawRiser(x, y, r) {
+      ctx.save();
+      ctx.shadowColor = "rgba(55,183,228,0.55)"; ctx.shadowBlur = 14;
+      ctx.fillStyle = "#1c2c38"; ctx.beginPath(); ctx.arc(x, y, r + 2, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = Math.max(2, r * 0.3); ctx.strokeStyle = "#37b7e4"; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = "#37b7e4"; ctx.beginPath(); ctx.arc(x, y, r * 0.42, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = "#9fdcf2"; ctx.font = "700 " + Math.max(8, r * 0.85) + "px 'Space Grotesk', sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+      ctx.fillText("RISER", x, y - r - 3);
+    }
+
+    function drawPipe(s, lw) {
+      var charged = s.charged;
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      ctx.lineWidth = lw + 3; ctx.strokeStyle = "#05080b";
+      ctx.beginPath(); ctx.moveTo(sx(s.a.x), sy(s.a.y)); ctx.lineTo(sx(s.b.x), sy(s.b.y)); ctx.stroke();
+      ctx.lineWidth = lw; ctx.strokeStyle = charged ? "#37b7e4" : "#8a96a2";
+      ctx.beginPath(); ctx.moveTo(sx(s.a.x), sy(s.a.y)); ctx.lineTo(sx(s.b.x), sy(s.b.y)); ctx.stroke();
+      ctx.lineWidth = Math.max(1, lw * 0.34); ctx.strokeStyle = charged ? "rgba(180,235,255,0.8)" : "rgba(220,228,235,0.5)";
+      ctx.beginPath(); ctx.moveTo(sx(s.a.x), sy(s.a.y)); ctx.lineTo(sx(s.b.x), sy(s.b.y)); ctx.stroke();
+    }
+
+    function draw() {
+      var W = cv.width / dpr, H = cv.height / dpr;
+      ctx.clearRect(0, 0, W, H);
+
+      // rooms
+      for (var i = 0; i < rooms.length; i++) {
+        var r = rooms[i];
+        ctx.fillStyle = roomFill(r.size);
+        ctx.fillRect(sx(r.x), sy(r.y), r.w * scale, r.h * scale);
+        ctx.lineWidth = Math.max(1.5, scale * 0.14); ctx.strokeStyle = "#3a4856";
+        ctx.strokeRect(sx(r.x), sy(r.y), r.w * scale, r.h * scale);
+      }
+      // riser room
+      if (riserRoom) {
+        ctx.fillStyle = "#10222c";
+        ctx.fillRect(sx(riserRoom.x), sy(riserRoom.y), riserRoom.w * scale, riserRoom.h * scale);
+        ctx.lineWidth = Math.max(1.5, scale * 0.16); ctx.strokeStyle = "#2f6f86";
+        ctx.strokeRect(sx(riserRoom.x), sy(riserRoom.y), riserRoom.w * scale, riserRoom.h * scale);
+      }
+
+      // grid dots (the invisible snapping grid, shown faintly)
+      ctx.fillStyle = "rgba(150,170,190,0.16)";
+      for (var gx = minX; gx <= minX + worldW; gx++) {
+        for (var gy = minY; gy <= minY + worldH; gy++) {
+          ctx.beginPath(); ctx.arc(sx(gx), sy(gy), Math.max(0.7, scale * 0.05), 0, Math.PI * 2); ctx.fill();
+        }
+      }
+
+      // committed pipe
+      var lw = Math.max(3, scale * 0.32);
+      for (var p = 0; p < segs.length; p++) drawPipe(segs[p], lw);
+
+      // junction nodes (where pipe endpoints meet)
+      var nodeCount = {};
+      for (var s = 0; s < segs.length; s++) {
+        nodeCount[key(segs[s].a.x, segs[s].a.y)] = (nodeCount[key(segs[s].a.x, segs[s].a.y)] || 0) + 1;
+        nodeCount[key(segs[s].b.x, segs[s].b.y)] = (nodeCount[key(segs[s].b.x, segs[s].b.y)] || 0) + 1;
+      }
+      ctx.fillStyle = "#cdd6de";
+      for (var nk in nodeCount) {
+        if (nodeCount[nk] >= 2) { var pr = nk.split(","); ctx.beginPath(); ctx.arc(sx(+pr[0]), sy(+pr[1]), lw * 0.55, 0, Math.PI * 2); ctx.fill(); }
+      }
+
+      // preview seg
+      if (previewSeg) {
+        ctx.save(); ctx.setLineDash([6, 5]); ctx.lineCap = "round";
+        ctx.lineWidth = lw; ctx.strokeStyle = "rgba(255,176,58,0.9)";
+        ctx.beginPath(); ctx.moveTo(sx(previewSeg.a.x), sy(previewSeg.a.y)); ctx.lineTo(sx(previewSeg.b.x), sy(previewSeg.b.y)); ctx.stroke();
+        ctx.restore();
+        var len = (Math.abs(previewSeg.b.x - previewSeg.a.x) + Math.abs(previewSeg.b.y - previewSeg.a.y)) * FT_PER_CELL;
+        if (len > 0) {
+          var mx = sx((previewSeg.a.x + previewSeg.b.x) / 2), my = sy((previewSeg.a.y + previewSeg.b.y) / 2);
+          ctx.fillStyle = "#ffb03a"; ctx.font = "700 12px 'Space Grotesk', sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText(len + " ft", mx, my - 10);
+        }
+        // endpoint markers
+        ctx.fillStyle = "#ffb03a";
+        ctx.beginPath(); ctx.arc(sx(previewSeg.a.x), sy(previewSeg.a.y), lw * 0.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(sx(previewSeg.b.x), sy(previewSeg.b.y), lw * 0.5, 0, Math.PI * 2); ctx.fill();
+      }
+
+      // heads
+      var hr = Math.max(5, scale * 0.42);
+      for (var h = 0; h < heads.length; h++) drawHead(sx(heads[h].x), sy(heads[h].y), hr, heads[h].on);
+
+      // riser
+      drawRiser(sx(riser.x), sy(riser.y), Math.max(6, scale * 0.5));
+    }
+
+    // ---------------------------------------------------------------------
+    // POINTER  (draw / erase)
+    // ---------------------------------------------------------------------
+    function evToWorld(e) {
+      var rect = cv.getBoundingClientRect();
+      var px = (e.clientX - rect.left), py = (e.clientY - rect.top);
+      return { x: px / scale + minX, y: py / scale + minY };
+    }
+    function snap(w) { return { x: Math.round(w.x), y: Math.round(w.y) }; }
+
+    function orthoEnd(a, w) {                      // constrain to H or V from a
+      var dx = w.x - a.x, dy = w.y - a.y;
+      if (Math.abs(dx) >= Math.abs(dy)) return { x: Math.round(w.x), y: a.y };
+      return { x: a.x, y: Math.round(w.y) };
+    }
+
+    function segDistPx(s, w) {                      // world-space point to segment, then *scale
+      var ax = s.a.x, ay = s.a.y, bx = s.b.x, by = s.b.y;
+      var dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+      var t = L2 ? Math.max(0, Math.min(1, ((w.x - ax) * dx + (w.y - ay) * dy) / L2)) : 0;
+      var cx = ax + t * dx, cy = ay + t * dy;
+      return Math.hypot(w.x - cx, w.y - cy) * scale;
+    }
+
+    function onDown(e) {
+      e.preventDefault();
+      try { cv.setPointerCapture && cv.setPointerCapture(e.pointerId); } catch (err) {}
+      var w = evToWorld(e);
+      if (mode === "erase") { eraseAt(w); return; }
+      startPt = snap(w); drawing = true; previewSeg = { a: startPt, b: startPt };
+      draw();
+    }
+    function onMove(e) {
+      if (!drawing) return;
+      e.preventDefault();
+      var w = evToWorld(e);
+      previewSeg = { a: startPt, b: orthoEnd(startPt, w) };
+      draw();
+    }
+    function onUp(e) {
+      if (!drawing) return;
+      drawing = false;
+      if (previewSeg && (previewSeg.a.x !== previewSeg.b.x || previewSeg.a.y !== previewSeg.b.y)) {
+        segs.push({ a: previewSeg.a, b: previewSeg.b });
+      }
+      previewSeg = null;
+      afterChange();
+    }
+
+    function eraseAt(w) {
+      var bi = -1, bd = 14;
+      for (var i = 0; i < segs.length; i++) { var d = segDistPx(segs[i], w); if (d < bd) { bd = d; bi = i; } }
+      if (bi >= 0) { segs.splice(bi, 1); afterChange(); }
+    }
+
+    function afterChange() {
+      updateHUD();
+      draw();
+    }
+
+    // ---------------------------------------------------------------------
+    // HUD / completion
+    // ---------------------------------------------------------------------
+    function updateHUD() {
+      var c = connectivity();
+      var pipe = totalPipeFt();
+      document.getElementById("hPipe").textContent = pipe;
+      document.getElementById("hHeads").textContent = c.supplied;
+      document.getElementById("hTotal").textContent = heads.length;
+      document.getElementById("hPar").textContent = parFt;
+      draw();
+      if (heads.length > 0 && c.supplied === heads.length) showComplete(pipe);
+    }
+
+    function showComplete(pipe) {
+      document.getElementById("ovPipe").textContent = pipe;
+      document.getElementById("ovHeads").textContent = heads.length;
+      var ratio = parFt > 0 ? pipe / parFt : 1;
+      var stars = ratio <= 1.05 ? 3 : ratio <= 1.25 ? 2 : 1;
+      document.getElementById("ovStars").textContent = "★★★☆☆☆".substr(3 - stars, 3);
+      var ovStars = document.getElementById("ovStars");
+      ovStars.style.color = stars === 3 ? "#ffb03a" : "#cdd6de";
+      var msg = pipe <= parFt ? "You matched the optimal route — perfect efficiency!" :
+        stars === 3 ? "Excellent routing — within 5% of optimal." :
+        stars === 2 ? "Solid. Trim a few runs to hit 3 stars." :
+        "It works, but there's a lot of slack. Try sharing more pipe.";
+      document.querySelector("#ov p").textContent = msg;
+      document.getElementById("ov").classList.add("show");
+    }
+    function hideOverlay() { document.getElementById("ov").classList.remove("show"); }
+
+    // ---------------------------------------------------------------------
+    // UI wiring
+    // ---------------------------------------------------------------------
+    function setMode(m) {
+      mode = m;
+      document.getElementById("btnDraw").classList.toggle("on", m === "draw");
+      document.getElementById("btnErase").classList.toggle("on", m === "erase");
+    }
+    document.getElementById("btnDraw").onclick = function () { setMode("draw"); };
+    document.getElementById("btnErase").onclick = function () { setMode("erase"); };
+    document.getElementById("btnUndo").onclick = function () { if (segs.length) { segs.pop(); afterChange(); } };
+    document.getElementById("btnReset").onclick = function () { segs = []; previewSeg = null; afterChange(); };
+    document.getElementById("btnNew").onclick = generate;
+    document.getElementById("ovNew").onclick = generate;
+    document.getElementById("ovKeep").onclick = hideOverlay;
+
+    cv.addEventListener("pointerdown", onDown);
+    // move/up on window so a release anywhere ends the drag (no stuck preview if the pointer leaves the canvas)
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    window.addEventListener("resize", resize);
+
+    // go
+    generate();
+  })();
+  </script>
+</body>
+</html>
