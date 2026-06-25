@@ -64,6 +64,10 @@
       <div class="field" id="secPipeWrap" hidden><label>Secondary main size</label><select id="secPipe"></select></div>
     </div>
     <div class="field"><label>Max branchline pipe size</label><select id="branchPipe"></select></div>
+    <div class="row2">
+      <div class="field"><label>Underground main (ductile iron)</label><select id="ugPipe"></select></div>
+      <div class="field"><label>Underground length (ft or ft-in)</label><input id="ugLength" type="text" inputmode="decimal" placeholder="optional, e.g. 150" /></div>
+    </div>
 
     <div class="sub-h">Backflow preventer</div>
     <div class="row2">
@@ -144,6 +148,10 @@
         PIPE_SIZES.forEach(function (p) { s.add(new Option(p[1], p[0])); });
         s.value = pair[1];
       });
+      var ug = el("ugPipe");
+      ug.add(new Option("— none —", ""));
+      (PrelimCalc.UNDERGROUND_SIZES || ["4", "6", "8", "10", "12"]).forEach(function (s) { ug.add(new Option(sizeLabel(s), String(s))); });
+      ug.value = "";
       var bt = el("bfType");
       PrelimCalc.BACKFLOW_TYPES.forEach(function (t) { bt.add(new Option(t.label, t.id)); });
       bt.value = "none";
@@ -188,6 +196,8 @@
         mainNominal: val("mainPipe"),
         secondaryNominal: val("sysType") === "grid" ? val("secPipe") : null,
         branchNominal: val("branchPipe"),
+        undergroundNominal: val("ugPipe"),
+        undergroundLengthFt: val("ugLength"),
         cFactor: val("cFactor"), kFactor: val("kFactor"),
         backflowType: val("bfType"),
         backflowSizeIn: el("bfSizeWrap").hidden ? null : val("bfSize"),
@@ -235,6 +245,8 @@
       b += row("Elevation loss", r.elevationPsi.toFixed(1) + " psi", fmt(r.inputs.heightFt) + " ft × 0.433");
       b += row("Main friction (Hazen-Williams)", r.mainFrictionPsi.toFixed(1) + " psi", mainDesc);
       b += row("Branch friction (Hazen-Williams)", r.branchFrictionPsi.toFixed(1) + " psi", sizeLabel(r.inputs.branchNominal) + " (ID " + r.inputs.branchId + '") × ' + fmt(r.branchLengthFt) + " ft @ " + fmt(r.branchFlowGpm) + " gpm" + (r.systemType === "grid" ? ", fed both ends" : " tributary"));
+      b += row("Riser friction (vertical)", r.riserFrictionPsi.toFixed(1) + " psi", sizeLabel(r.inputs.mainNominal) + " × " + fmt(r.riserLengthFt) + " ft (building height)");
+      if (r.hasUnderground) b += row("Underground friction", r.undergroundFrictionPsi.toFixed(1) + " psi", sizeLabel(r.undergroundNominal) + " DI (C=" + r.undergroundCFactor + ") × " + fmt(r.undergroundLengthFt) + " ft");
       if (r.backflow) {
         b += row("Backflow loss", r.backflowPsi.toFixed(1) + " psi", r.backflow.label + " @ " + r.backflow.sizeUsed + '" / ' + fmt(r.physicalGpm) + " gpm");
       }

@@ -80,6 +80,17 @@
     return Object.prototype.hasOwnProperty.call(PIPE_ID_SCH40, key) ? PIPE_ID_SCH40[key] : null;
   }
 
+  // Cement-lined ductile iron actual internal diameters (in.) for the underground
+  // supply lateral (AWWA C151/C104, representative). C = 140 (cement-lined cast/
+  // ductile iron, NFPA 13 Table 23.4.4.7.1).
+  var PIPE_ID_DUCTILE = { "4": 4.28, "6": 6.40, "8": 8.51, "10": 10.62, "12": 12.72 };
+  var UNDERGROUND_SIZES = ["4", "6", "8", "10", "12"];
+  var DEFAULT_C_UNDERGROUND = 140;
+  function actualIdUnderground(nominalIn) {
+    var key = String(nominalIn);
+    return Object.prototype.hasOwnProperty.call(PIPE_ID_DUCTILE, key) ? PIPE_ID_DUCTILE[key] : null;
+  }
+
   /* --- Hazen-Williams friction loss ------------------------------------------
    * psi/ft = 4.52 * Q^1.85 / (C^1.85 * d^4.87)   (sprinkler form, d = actual ID in.)
    */
@@ -370,8 +381,23 @@
       }
     }
 
+    // 7b) Riser friction: vertical run of the primary main carrying the full system
+    //     flow up to the sprinklers (length = building height). This is friction loss,
+    //     in addition to the static elevation loss counted above.
+    var riserPsi = hazenWilliamsLoss(physicalGpm, C, mainId, H);
+
+    // 7c) Underground supply lateral (optional): ductile iron, C = 140, over its length,
+    //     carrying the full system flow from the source to the building.
+    var ugId = actualIdUnderground(inputs.undergroundNominal);
+    var ugLen = parseFeetInches(inputs.undergroundLengthFt);
+    var undergroundPsi = 0, hasUnderground = false;
+    if (ugId && ugLen != null && ugLen > 0) {
+      undergroundPsi = hazenWilliamsLoss(physicalGpm, DEFAULT_C_UNDERGROUND, ugId, ugLen);
+      hasUnderground = true;
+    }
+
     // 8) Total pressure: estimated (physical) then + PSI safety margin.
-    var totalPsiPre = headPressure + elevPsi + mainPsi + branchPsi + backflowPsi;
+    var totalPsiPre = headPressure + elevPsi + mainPsi + branchPsi + riserPsi + backflowPsi + undergroundPsi;
     var totalPsi = totalPsiPre * (1 + psiMargin / 100);
 
     // 9) Rough take-off quantities (for the Bid Estimator hand-off). Whole-building
@@ -418,8 +444,17 @@
       elevationPsi: elevPsi,
       mainFrictionPsi: mainPsi,
       branchFrictionPsi: branchPsi,
+      riserFrictionPsi: riserPsi,
+      riserLengthFt: H,
       backflowPsi: backflowPsi,
       backflow: bf,
+      // underground supply lateral (ductile iron, C=140)
+      hasUnderground: hasUnderground,
+      undergroundFrictionPsi: undergroundPsi,
+      undergroundNominal: hasUnderground ? String(inputs.undergroundNominal) : null,
+      undergroundId: hasUnderground ? ugId : null,
+      undergroundLengthFt: hasUnderground ? ugLen : null,
+      undergroundCFactor: DEFAULT_C_UNDERGROUND,
       totalPsiPreMargin: totalPsiPre,
       totalPsi: totalPsi,
       durationMin: hazard.durationMin,
@@ -514,6 +549,8 @@
   var PrelimCalc = {
     HAZARDS: HAZARDS, hazardById: hazardById,
     PIPE_ID_SCH40: PIPE_ID_SCH40, actualIdForNominal: actualIdForNominal,
+    PIPE_ID_DUCTILE: PIPE_ID_DUCTILE, UNDERGROUND_SIZES: UNDERGROUND_SIZES,
+    DEFAULT_C_UNDERGROUND: DEFAULT_C_UNDERGROUND, actualIdUnderground: actualIdUnderground,
     PIPE_ORDER: PIPE_ORDER, twoSizesBelow: twoSizesBelow,
     OVERAGE: OVERAGE, MAIN_TAPER: MAIN_TAPER, BRANCH_TAPER: BRANCH_TAPER, GRID_BRANCH_FACTOR: GRID_BRANCH_FACTOR,
     DEFAULT_C: DEFAULT_C, DEFAULT_K: DEFAULT_K, ELEV_PSI_PER_FT: ELEV_PSI_PER_FT,
