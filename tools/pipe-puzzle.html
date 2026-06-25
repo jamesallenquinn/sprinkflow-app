@@ -38,6 +38,8 @@
     .pp-tools button .e { font-size:1.15rem; line-height:1; }
     .pp-tools button:active { transform:scale(.96); }
     .pp-tools button.on { border-color:var(--accent); background:linear-gradient(180deg, rgba(255,176,58,.16), transparent), var(--surface); color:var(--accent); }
+    .pp-tools button:disabled { opacity:.4; cursor:default; }
+    #btnOpt.on { border-color:var(--ok); background:linear-gradient(180deg, rgba(61,220,151,.16), transparent), var(--surface); color:var(--ok); }
     .pp-tools button.primary { background:var(--grad-fire); color:#1a0d06; border:0; }
 
     .pp-hint { margin:10px 2px 0; color:var(--muted); font:500 .82rem/1.45 Inter; }
@@ -84,6 +86,7 @@
           <div><div class="v" id="ovHeads">0</div><div class="k">sprinklers</div></div>
         </div>
         <div class="pp-ovbtns">
+          <button class="pp-btn ghost" id="ovOpt">Show optimal route</button>
           <button class="pp-btn ghost" id="ovKeep">Keep trimming</button>
           <button class="pp-btn" id="ovNew">New level</button>
         </div>
@@ -95,6 +98,7 @@
       <button id="btnErase"><span class="e">🧽</span>Erase</button>
       <button id="btnUndo"><span class="e">↩️</span>Undo</button>
       <button id="btnReset"><span class="e">🧹</span>Reset</button>
+      <button id="btnOpt" disabled title="Solve the level once to unlock"><span class="e">🧭</span>Optimal</button>
       <button id="btnNew" class="primary"><span class="e">🎲</span>New</button>
     </div>
 
@@ -130,6 +134,8 @@
     var drawing = false;
     var startPt = null;           // {x,y} grid
     var previewSeg = null;        // {a,b}
+    var solvedOnce = false;       // level completed at least once (unlocks the optimal-route view)
+    var showOptimal = false;      // overlay the par/MST route
 
     // ---------------------------------------------------------------------
     // LEVEL GENERATION  (binary space partition of one rectangle = tiled rooms)
@@ -182,6 +188,7 @@
 
     function generate() {
       segs = []; previewSeg = null; drawing = false; startPt = null;
+      solvedOnce = false; showOptimal = false;
       hideOverlay();
 
       // building footprint
@@ -218,15 +225,16 @@
       computePar();
       resize();
       updateHUD();
+      refreshOptBtn();
     }
 
     // ---------------------------------------------------------------------
     // PAR  —  rectilinear minimum spanning tree (Prim, manhattan distance)
     // ---------------------------------------------------------------------
-    var parFt = 0;
+    var parFt = 0, parSegs = [];
     function computePar() {
       var nodes = [riser].concat(heads);
-      var n = nodes.length, inT = new Array(n).fill(false), best = new Array(n).fill(1e9);
+      var n = nodes.length, inT = new Array(n).fill(false), best = new Array(n).fill(1e9), par = new Array(n).fill(-1);
       best[0] = 0; var total = 0;
       for (var it = 0; it < n; it++) {
         var u = -1, bd = 1e9;
@@ -235,10 +243,18 @@
         inT[u] = true; total += bd;
         for (var j = 0; j < n; j++) if (!inT[j]) {
           var d = Math.abs(nodes[u].x - nodes[j].x) + Math.abs(nodes[u].y - nodes[j].y);
-          if (d < best[j]) best[j] = d;
+          if (d < best[j]) { best[j] = d; par[j] = u; }
         }
       }
       parFt = Math.round(total * FT_PER_CELL);
+      // route geometry: connect each node to its MST parent as a horizontal-then-vertical L
+      parSegs = [];
+      for (var k = 1; k < n; k++) {
+        if (par[k] < 0) continue;
+        var a = nodes[par[k]], b = nodes[k], corner = { x: b.x, y: a.y };
+        if (a.x !== corner.x) parSegs.push({ a: { x: a.x, y: a.y }, b: { x: corner.x, y: corner.y } });
+        if (corner.y !== b.y) parSegs.push({ a: { x: corner.x, y: corner.y }, b: { x: b.x, y: b.y } });
+      }
     }
 
     // ---------------------------------------------------------------------
@@ -391,6 +407,20 @@
         }
       }
 
+      // optimal (par) route — drawn under the player's pipe so deviations stand out
+      if (showOptimal && parSegs.length) {
+        var olw = Math.max(2.5, scale * 0.30);
+        ctx.save();
+        ctx.setLineDash([7, 6]); ctx.lineCap = "round"; ctx.lineJoin = "round";
+        ctx.lineWidth = olw; ctx.strokeStyle = "rgba(61,220,151,0.85)";
+        for (var oi = 0; oi < parSegs.length; oi++) {
+          ctx.beginPath(); ctx.moveTo(sx(parSegs[oi].a.x), sy(parSegs[oi].a.y)); ctx.lineTo(sx(parSegs[oi].b.x), sy(parSegs[oi].b.y)); ctx.stroke();
+        }
+        ctx.restore();
+        ctx.fillStyle = "rgba(61,220,151,0.95)"; ctx.font = "700 11px 'Space Grotesk', sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "top";
+        ctx.fillText("Optimal route · " + parFt + " ft", 8, 8);
+      }
+
       // committed pipe
       var lw = Math.max(3, scale * 0.32);
       for (var p = 0; p < segs.length; p++) drawPipe(segs[p], lw);
@@ -507,6 +537,7 @@
     }
 
     function showComplete(pipe) {
+      solvedOnce = true; refreshOptBtn();
       document.getElementById("ovPipe").textContent = pipe;
       document.getElementById("ovHeads").textContent = heads.length;
       var ratio = parFt > 0 ? pipe / parFt : 1;
@@ -538,6 +569,19 @@
     document.getElementById("btnNew").onclick = generate;
     document.getElementById("ovNew").onclick = generate;
     document.getElementById("ovKeep").onclick = hideOverlay;
+
+    function refreshOptBtn() {
+      var b = document.getElementById("btnOpt");
+      b.disabled = !solvedOnce;
+      b.classList.toggle("on", showOptimal && solvedOnce);
+    }
+    document.getElementById("btnOpt").onclick = function () {
+      if (!solvedOnce) return;
+      showOptimal = !showOptimal; refreshOptBtn(); draw();
+    };
+    document.getElementById("ovOpt").onclick = function () {
+      showOptimal = true; refreshOptBtn(); hideOverlay(); draw();
+    };
 
     cv.addEventListener("pointerdown", onDown);
     // move/up on window so a release anywhere ends the drag (no stuck preview if the pointer leaves the canvas)
