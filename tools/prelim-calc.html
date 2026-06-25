@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Preliminary Calculation — SprinkFlow</title>
+  <meta name="theme-color" content="#0d1116" />
+  <link rel="manifest" href="../manifest.webmanifest" />
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+  <style>
+    .sub-h { font:600 .72rem Inter; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:18px 0 8px; }
+    .pc-summary { font:600 1rem/1.5 Inter; color:var(--ink); margin:2px 0 4px; }
+    .pc-summary b { color:var(--accent, #ff7a3c); }
+    .pc-takeoff { display:block; margin-top:7px; color:var(--muted); font:500 .9rem Inter; }
+    .pc-takeoff b { color:var(--ink); }
+    .pc-status { display:flex; align-items:center; gap:8px; font:700 .95rem Inter; margin:10px 0 2px; }
+    .pc-status.ok { color:var(--ok,#3ddc97); } .pc-status.bad { color:#ff5a4f; } .pc-status.idle { color:var(--muted); font-weight:500; }
+    .pc-break { margin-top:6px; }
+    .pc-break .result-row .sub { display:block; font:500 .7rem Inter; color:var(--muted); }
+    .pc-total { border-top:1px solid var(--line); margin-top:6px; padding-top:8px; }
+    .pc-total .v { font:700 1rem Inter; }
+    .pc-warn { color:#ffb03a; font:500 .8rem/1.4 Inter; margin-top:8px; }
+    .pc-disclaimer { font:500 .76rem/1.45 Inter; color:var(--muted); border:1px dashed var(--line); border-radius:10px; padding:10px 12px; margin-top:14px; }
+    .pc-actions { display:flex; gap:10px; margin-top:14px; }
+    .pc-btn { flex:1; border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:12px; padding:13px; font:600 .95rem Inter; cursor:pointer; }
+    .pc-btn.primary { background:var(--grad-fire); color:#1a0d06; border:0; }
+    .pc-src { font:500 .7rem Inter; color:var(--muted); margin-top:4px; }
+    details.pc-adv { margin-top:14px; } details.pc-adv > summary { cursor:pointer; font:600 .8rem Inter; color:var(--muted); }
+  </style>
+</head>
+<body>
+  <header class="app-bar">
+    <a class="back" href="../index.html" aria-label="Back">‹</a>
+    <div><div class="title">Preliminary Calculation</div><div class="sub">Early sprinkler demand &amp; feasibility estimate</div></div>
+  </header>
+
+  <main class="tool-page">
+    <div class="sub-h">Building</div>
+    <div class="row2">
+      <div class="field"><label>Length (ft or ft-in)</label><input id="len" type="text" inputmode="decimal" placeholder="e.g. 200 or 200-6" /></div>
+      <div class="field"><label>Width (ft or ft-in)</label><input id="wid" type="text" inputmode="decimal" placeholder="e.g. 100 or 100-6" /></div>
+    </div>
+    <div class="field"><label>Height (ft or ft-in)</label><input id="hgt" type="text" inputmode="decimal" placeholder="e.g. 16 or 15-2 to highest sprinkler" /></div>
+    <div class="field"><label>Occupancy hazard classification</label>
+      <select id="hazard"></select>
+    </div>
+
+    <div class="sub-h">System</div>
+    <div class="row2">
+      <div class="field"><label>System type</label>
+        <select id="sysType"><option value="tree">Tree</option><option value="grid">Grid</option></select>
+      </div>
+      <div class="field"><label>Mains run along the…</label>
+        <select id="mainOrient"><option value="length">Length</option><option value="width">Width</option></select>
+      </div>
+    </div>
+
+    <div class="sub-h">Piping</div>
+    <div class="row2">
+      <div class="field"><label id="mainPipeLbl">Max main pipe size</label><select id="mainPipe"></select></div>
+      <div class="field" id="secPipeWrap" hidden><label>Secondary main size</label><select id="secPipe"></select></div>
+    </div>
+    <div class="field"><label>Max branchline pipe size</label><select id="branchPipe"></select></div>
+
+    <div class="sub-h">Backflow preventer</div>
+    <div class="row2">
+      <div class="field"><label>Assembly type</label><select id="bfType"></select></div>
+      <div class="field" id="bfSizeWrap" hidden><label>Backflow line size</label><select id="bfSize"></select></div>
+    </div>
+
+    <div class="sub-h">Safety margin</div>
+    <div class="row2">
+      <div class="field"><label>Flow (GPM) margin %</label><input id="gpmMargin" type="number" inputmode="decimal" value="15" /></div>
+      <div class="field"><label>Pressure (PSI) margin %</label><input id="psiMargin" type="number" inputmode="decimal" value="15" /></div>
+    </div>
+
+    <div class="sub-h">Known water supply (optional)</div>
+    <div class="row2">
+      <div class="field"><label>Static (psi)</label><input id="sStatic" type="number" inputmode="decimal" placeholder="psi" /></div>
+      <div class="field"><label>Residual (psi)</label><input id="sResid" type="number" inputmode="decimal" placeholder="psi" /></div>
+    </div>
+    <div class="field"><label>Flow at residual (gpm)</label><input id="sFlow" type="number" inputmode="decimal" placeholder="gpm" /></div>
+
+    <details class="pc-adv">
+      <summary>Advanced assumptions</summary>
+      <div class="row2" style="margin-top:10px">
+        <div class="field"><label>Hazen-Williams C</label><input id="cFactor" type="number" inputmode="decimal" value="120" /></div>
+        <div class="field"><label>Sprinkler K-factor</label><input id="kFactor" type="number" inputmode="decimal" value="5.6" /></div>
+      </div>
+      <p class="hint">Defaults: C=120 (black steel), K=5.6 (Sch 40 actual IDs). Friction coefficients are calibrated to reference hydraulic results for OH2 — a tree main runs length + ½ width; grid mains feed from both ends (primary + secondary in parallel) and over-discharge less than trees.</p>
+    </details>
+
+    <div class="result-card" id="resultCard" hidden>
+      <p class="pc-summary" id="summary"></p>
+      <div class="pc-status idle" id="supplyStatus" hidden></div>
+      <svg id="chart" viewBox="0 0 340 220" style="width:100%;height:auto;margin-top:6px" hidden></svg>
+
+      <div class="pc-break" id="breakdown"></div>
+      <p class="pc-warn" id="warn" hidden></p>
+      <p class="pc-src" id="srcline"></p>
+
+      <div class="pc-actions">
+        <button class="pc-btn primary" id="exportBtn">⬇ Export estimate (PNG)</button>
+      </div>
+    </div>
+
+    <p class="hint" id="err" data-tone="error"></p>
+
+    <p class="pc-disclaimer">
+      <b>Preliminary estimating / feasibility tool only.</b> This produces an early theoretical
+      demand estimate from simplified, calibrated assumptions (idealized tree/grid geometry,
+      density/area design point, chart-derived backflow loss). It does <b>not</b> replace a full
+      NFPA 13 hydraulic calculation or engineering review. Verify all values against current code
+      and manufacturer data.
+    </p>
+  </main>
+
+  <script src="./prelim-calc-engine.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("../sw.js").catch(function () {});
+
+    var PIPE_SIZES = [
+      ["1", '1"'], ["1.25", '1-1/4"'], ["1.5", '1-1/2"'], ["2", '2"'], ["2.5", '2-1/2"'],
+      ["3", '3"'], ["4", '4"'], ["6", '6"'], ["8", '8"'], ["10", '10"']
+    ];
+    function sizeLabel(v) {
+      for (var i = 0; i < PIPE_SIZES.length; i++) if (PIPE_SIZES[i][0] === String(v)) return PIPE_SIZES[i][1];
+      return v + '"';
+    }
+    function fmt(n, d) { return Number(n).toLocaleString(undefined, { maximumFractionDigits: d == null ? 0 : d, minimumFractionDigits: 0 }); }
+    function el(id) { return document.getElementById(id); }
+    function val(id) { return el(id).value; }
+
+    // ---- populate selects ----
+    (function init() {
+      var hz = el("hazard");
+      PrelimCalc.HAZARDS.forEach(function (h) { hz.add(new Option(h.label, h.id)); });
+      hz.value = "oh2";
+      [["mainPipe", "4"], ["secPipe", "2.5"], ["branchPipe", "2"]].forEach(function (pair) {
+        var s = el(pair[0]);
+        PIPE_SIZES.forEach(function (p) { s.add(new Option(p[1], p[0])); });
+        s.value = pair[1];
+      });
+      var bt = el("bfType");
+      PrelimCalc.BACKFLOW_TYPES.forEach(function (t) { bt.add(new Option(t.label, t.id)); });
+      bt.value = "none";
+      refreshBackflowSizes();
+      refreshSystem();
+    })();
+
+    // Show/hide the secondary main (grid only), relabel the primary main, and default
+    // the secondary to two sizes below the primary when the system or primary changes.
+    function refreshSystem() {
+      var grid = val("sysType") === "grid";
+      el("secPipeWrap").hidden = !grid;
+      el("mainPipeLbl").textContent = grid ? "Primary main size" : "Max main pipe size";
+      if (grid) {
+        var sec = el("secPipe"), def = PrelimCalc.twoSizesBelow(val("mainPipe"));
+        if (def && !sec.dataset.touched) sec.value = def;
+      }
+    }
+
+    function refreshBackflowSizes() {
+      var type = val("bfType");
+      var wrap = el("bfSizeWrap"), sel = el("bfSize");
+      if (type === "none") { wrap.hidden = true; return; }
+      wrap.hidden = false;
+      var prev = sel.value;
+      sel.innerHTML = "";
+      PrelimCalc.backflowSizesFor(type).forEach(function (s) { sel.add(new Option(sizeLabel(s), String(s))); });
+      // default the backflow size to the main pipe size if available, else keep/last
+      var target = prev || val("mainPipe");
+      if ([].some.call(sel.options, function (o) { return o.value === target; })) sel.value = target;
+    }
+
+    function gatherInputs() {
+      var supply = null;
+      if (val("sStatic") !== "" || val("sResid") !== "" || val("sFlow") !== "") {
+        supply = { static: val("sStatic"), residual: val("sResid"), flow: val("sFlow") };
+      }
+      return {
+        lengthFt: val("len"), widthFt: val("wid"), heightFt: val("hgt"),
+        hazardId: val("hazard"),
+        systemType: val("sysType"), mainOrientation: val("mainOrient"),
+        mainNominal: val("mainPipe"),
+        secondaryNominal: val("sysType") === "grid" ? val("secPipe") : null,
+        branchNominal: val("branchPipe"),
+        cFactor: val("cFactor"), kFactor: val("kFactor"),
+        backflowType: val("bfType"),
+        backflowSizeIn: el("bfSizeWrap").hidden ? null : val("bfSize"),
+        gpmMarginPct: val("gpmMargin"), psiMarginPct: val("psiMargin"),
+        supply: supply
+      };
+    }
+
+    function row(label, value, sub) {
+      return '<div class="result-row"><span>' + label + (sub ? '<span class="sub">' + sub + '</span>' : '') +
+        '</span><span class="v">' + value + '</span></div>';
+    }
+
+    function render() {
+      var r = PrelimCalc.calculate(gatherInputs());
+      var err = el("err"), card = el("resultCard");
+      if (r.errors && r.errors.length) {
+        card.hidden = true; err.textContent = r.errors[0]; return;
+      }
+      err.textContent = ""; card.hidden = false;
+
+      // written summary
+      var sysLabel = (r.systemType === "grid" ? "grid" : "tree") + " system, mains along the " + r.orientation;
+      var summary = "This <b>" + fmt(r.areaFt2) + " sq ft</b>, <b>" + fmt(r.inputs.heightFt) +
+        " ft tall</b> " + r.hazard.label + " building (" + sysLabel + ") is estimated to require <b>" +
+        fmt(r.totalPsi) + " PSI</b> available while flowing <b>" + fmt(r.totalGpm) +
+        " GPM</b>, plus <b>" + fmt(r.hoseGpm) + " GPM</b> hose stream allowance." +
+        '<span class="pc-takeoff">Rough take-off: ~<b>' + fmt(r.sprinklerCount) + "</b> sprinklers and ~<b>" +
+        fmt(r.estPipeLengthFt) + "</b> ft of pipe.</span>";
+      el("summary").innerHTML = summary;
+
+      // breakdown
+      var overPct = Math.round((r.overageFactor - 1) * 100);
+      var mainDesc = (r.systemType === "grid"
+        ? "primary " + sizeLabel(r.inputs.mainNominal) + " + secondary " + sizeLabel(r.inputs.secondaryNominal) + " (parallel)"
+        : sizeLabel(r.inputs.mainNominal) + " (ID " + r.inputs.mainId + '")') +
+        " × " + fmt(r.mainLengthFt) + " ft @ " + fmt(r.physicalGpm) + " gpm";
+      var b = "";
+      b += row("Design basis", r.density.toFixed(2) + " gpm/ft² over " + fmt(r.designArea) + " ft²", r.hazard.ref);
+      b += row("Sprinkler demand (theoretical min)", fmt(r.sprinklerBaseGpm) + " gpm", "density × design area");
+      b += row("Estimated demand (+" + overPct + "% " + r.systemType + " overflow)", fmt(r.physicalGpm) + " gpm", "grids run nearer the minimum than trees");
+      b += row("Design flow (after +" + r.inputs.gpmMarginPct + "% margin)", fmt(r.sprinklerDesignGpm) + " gpm");
+      b += row("Hose stream allowance", fmt(r.hoseGpm) + " gpm", "duration " + r.durationMin + " min");
+      b += row("Start sprinkler pressure", r.headPressurePsi.toFixed(1) + " psi", "K=" + r.inputs.kFactor + ", " + r.hazard.coverageFt2 + " ft²/head");
+      b += row("Elevation loss", r.elevationPsi.toFixed(1) + " psi", fmt(r.inputs.heightFt) + " ft × 0.433");
+      b += row("Main friction (Hazen-Williams)", r.mainFrictionPsi.toFixed(1) + " psi", mainDesc);
+      b += row("Branch friction (Hazen-Williams)", r.branchFrictionPsi.toFixed(1) + " psi", sizeLabel(r.inputs.branchNominal) + " (ID " + r.inputs.branchId + '") × ' + fmt(r.branchLengthFt) + " ft @ " + fmt(r.branchFlowGpm) + " gpm" + (r.systemType === "grid" ? ", fed both ends" : " tributary"));
+      if (r.backflow) {
+        b += row("Backflow loss", r.backflowPsi.toFixed(1) + " psi", r.backflow.label + " @ " + r.backflow.sizeUsed + '" / ' + fmt(r.physicalGpm) + " gpm");
+      }
+      b += '<div class="pc-total">' + row("Total pressure required", "<b>" + fmt(r.totalPsi) + " psi</b>", "incl. +" + r.inputs.psiMarginPct + "% margin (before: " + r.totalPsiPreMargin.toFixed(1) + " psi)") + '</div>';
+      b += row("Total flow required", "<b>" + fmt(r.totalGpm) + " gpm</b>", "+ " + fmt(r.hoseGpm) + " gpm hose = " + fmt(r.totalGpmWithHose) + " gpm");
+      el("breakdown").innerHTML = b;
+
+      // warnings
+      var warn = el("warn");
+      if (r.warnings && r.warnings.length) { warn.hidden = false; warn.textContent = "⚠ " + r.warnings.join(" "); }
+      else { warn.hidden = true; }
+
+      // source line
+      el("srcline").textContent = "Density/area & hose: NFPA 13 (2025) Tables 19.2.3.1.1 / 19.2.3.1.2." +
+        (r.backflow ? "  Backflow: " + r.backflow.label + " — " + r.backflow.source + " (chart-derived, " + r.backflow.confidence + " confidence)." : "");
+
+      // supply + pump
+      renderSupply(r);
+      window.__lastResult = r;
+    }
+
+    function renderSupply(r) {
+      var st = el("supplyStatus"), chart = el("chart");
+      // <svg> is an SVGElement and does not reflect the .hidden IDL property, so
+      // toggle the hidden ATTRIBUTE explicitly (UA/app hides [hidden]).
+      if (!r.supply) { st.hidden = true; chart.setAttribute("hidden", ""); return; }
+      st.hidden = false;
+      if (!r.supply.provided) { st.className = "pc-status idle"; st.textContent = r.supply.error; chart.setAttribute("hidden", ""); return; }
+      var s = r.supply;
+      if (s.adequate) {
+        st.className = "pc-status ok";
+        st.textContent = "✓ Supply appears adequate — " + s.marginPsi.toFixed(1) + " psi to spare at " + fmt(s.demandFlow) + " gpm (incl. hose).";
+      } else {
+        st.className = "pc-status bad";
+        var msg = "✗ Supply appears inadequate at " + fmt(s.demandFlow) + " gpm.";
+        if (s.pump) msg += " Preliminary fire pump: ~" + fmt(s.pump.flowGpm) + " gpm @ +" + fmt(s.pump.boostPsi) + " psi boost.";
+        st.textContent = msg;
+      }
+      chart.removeAttribute("hidden");
+      chart.innerHTML = supplyChart(340, 220, s, r.totalGpm, r.totalPsi);
+    }
+
+    // Supply curve + demand point (demand-point uses sprinkler flow; hose added horizontally)
+    function supplyChart(W, H, s, demandGpm, demandPsi) {
+      var pad = [38, 12, 12, 26], padL = pad[0], padR = pad[1], padT = pad[2], padB = pad[3];
+      var maxX = Math.max(s.qMax, s.demandFlow, s.testFlow) * 1.08;
+      var maxY = Math.max(s.static, demandPsi) * 1.12;
+      var X = function (q) { return padL + (q / maxX) * (W - padL - padR); };
+      var Y = function (p) { return H - padB - (p / maxY) * (H - padT - padB); };
+      var ok = s.adequate, okc = "#3ddc97", badc = "#ff5a4f", c = ok ? okc : badc;
+      var sgrid = "#222a33", saxis = "#2d3742", stext = "#aab4bd";
+      var out = "";
+      out += '<line x1="' + padL + '" y1="' + padT + '" x2="' + padL + '" y2="' + (H - padB) + '" stroke="' + saxis + '" stroke-width="1.5"/>';
+      out += '<line x1="' + padL + '" y1="' + (H - padB) + '" x2="' + (W - padR) + '" y2="' + (H - padB) + '" stroke="' + saxis + '" stroke-width="1.5"/>';
+      var pts = [], n = 60;
+      for (var k = 0; k <= n; k++) { var q = maxX * k / n; var p = Math.max(0, PrelimCalc.pressureAtFlow(q, s.static, s.residual, s.testFlow)); pts.push(X(q).toFixed(1) + "," + Y(p).toFixed(1)); }
+      out += '<polyline points="' + pts.join(" ") + '" fill="none" stroke="#37b7e4" stroke-width="2.5"/>';
+      var dot = function (q, p, col, r) { return '<circle cx="' + X(q).toFixed(1) + '" cy="' + Y(p).toFixed(1) + '" r="' + (r || 4.5) + '" fill="' + col + '"/>'; };
+      var drop = function (q, p, col) { return '<line x1="' + X(q).toFixed(1) + '" y1="' + Y(p).toFixed(1) + '" x2="' + X(q).toFixed(1) + '" y2="' + (H - padB) + '" stroke="' + col + '" stroke-dasharray="3 3" opacity="0.55"/>'; };
+      out += dot(0, s.static, "#ffb03a") + dot(s.testFlow, s.residual, "#ff5a2f");
+      // demand point (sprinkler) + horizontal hose extension to total flow
+      out += drop(s.demandFlow, demandPsi, c);
+      if (s.demandFlow > demandGpm) {
+        out += '<line x1="' + X(demandGpm).toFixed(1) + '" y1="' + Y(demandPsi).toFixed(1) + '" x2="' + X(s.demandFlow).toFixed(1) + '" y2="' + Y(demandPsi).toFixed(1) + '" stroke="#aab4bd" stroke-width="2" stroke-dasharray="6 4"/>';
+        out += dot(demandGpm, demandPsi, c, 3.8);
+      }
+      out += dot(s.demandFlow, demandPsi, c);
+      out += '<text x="' + padL + '" y="' + (padT + 8) + '" fill="' + stext + '" font-size="9">' + fmt(maxY) + ' psi</text>';
+      out += '<text x="' + (W - padR) + '" y="' + (H - padB + 16) + '" fill="' + stext + '" font-size="9" text-anchor="end">' + fmt(maxX) + ' gpm</text>';
+      return out;
+    }
+
+    // ---- PNG export (white background, letter-style summary) ----
+    function exportPNG() {
+      var r = window.__lastResult;
+      if (!r) return;
+      var W = 720, H = 540, lines = [];
+      lines.push(["Preliminary Sprinkler Demand Estimate", 20, true, "#111"]);
+      lines.push([r.hazard.label + "  ·  " + fmt(r.areaFt2) + " sq ft  ·  " + fmt(r.inputs.heightFt) + " ft tall  ·  " + r.systemType + " system, mains along " + r.orientation, 12, false, "#555"]);
+      lines.push(["", 6, false, "#000"]);
+      var rows = [
+        ["Design basis", r.density.toFixed(2) + " gpm/ft² over " + fmt(r.designArea) + " ft²"],
+        ["Sprinkler demand (theoretical min)", fmt(r.sprinklerBaseGpm) + " gpm"],
+        ["Estimated demand (+" + Math.round((r.overageFactor - 1) * 100) + "% " + r.systemType + " overflow)", fmt(r.physicalGpm) + " gpm"],
+        ["Design flow (after +" + r.inputs.gpmMarginPct + "% margin)", fmt(r.sprinklerDesignGpm) + " gpm"],
+        ["Hose stream allowance", fmt(r.hoseGpm) + " gpm (" + r.durationMin + " min)"],
+        ["Start sprinkler pressure", r.headPressurePsi.toFixed(1) + " psi"],
+        ["Elevation loss", r.elevationPsi.toFixed(1) + " psi"],
+        ["Main friction (Hazen-Williams)", r.mainFrictionPsi.toFixed(1) + " psi"],
+        ["Branch friction (Hazen-Williams)", r.branchFrictionPsi.toFixed(1) + " psi"]
+      ];
+      if (r.backflow) rows.push(["Backflow loss (" + r.backflow.model + ")", r.backflowPsi.toFixed(1) + " psi"]);
+      rows.push(["TOTAL pressure required (+" + r.inputs.psiMarginPct + "%)", fmt(r.totalPsi) + " psi"]);
+      rows.push(["TOTAL flow required", fmt(r.totalGpm) + " gpm  + " + fmt(r.hoseGpm) + " gpm hose"]);
+
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" font-family="Arial,sans-serif">';
+      svg += '<rect width="' + W + '" height="' + H + '" fill="#fff"/>';
+      var y = 34;
+      lines.forEach(function (l) { if (l[0]) svg += '<text x="36" y="' + y + '" font-size="' + l[1] + '" font-weight="' + (l[2] ? 700 : 400) + '" fill="' + l[3] + '">' + l[0] + '</text>'; y += l[1] + 8; });
+      y += 4;
+      rows.forEach(function (rw, i) {
+        var isTotal = rw[0].indexOf("TOTAL") === 0;
+        if (isTotal) { svg += '<line x1="36" y1="' + (y - 12) + '" x2="' + (W - 36) + '" y2="' + (y - 12) + '" stroke="#ccc"/>'; }
+        svg += '<text x="36" y="' + y + '" font-size="13" font-weight="' + (isTotal ? 700 : 400) + '" fill="#222">' + rw[0] + '</text>';
+        svg += '<text x="' + (W - 36) + '" y="' + y + '" font-size="13" font-weight="' + (isTotal ? 700 : 400) + '" text-anchor="end" fill="#222">' + rw[1] + '</text>';
+        y += 26;
+      });
+      if (r.supply && r.supply.provided) {
+        y += 6;
+        var verdict = r.supply.adequate ? "Supply appears ADEQUATE (" + r.supply.marginPsi.toFixed(1) + " psi margin)" :
+          "Supply appears INADEQUATE" + (r.supply.pump ? " — preliminary pump ~" + fmt(r.supply.pump.flowGpm) + " gpm @ +" + fmt(r.supply.pump.boostPsi) + " psi" : "");
+        svg += '<text x="36" y="' + y + '" font-size="13" font-weight="700" fill="' + (r.supply.adequate ? "#1aa06a" : "#cf2f2f") + '">' + verdict + '</text>';
+        y += 24;
+      }
+      y += 4;
+      svg += '<text x="36" y="' + y + '" font-size="10" fill="#888">Preliminary estimate only — not a substitute for a full NFPA 13 hydraulic calculation. Density/area &amp; hose: NFPA 13 (2025) Tables 19.2.3.1.1 / 19.2.3.1.2.</text>';
+      svg += '</svg>';
+
+      var blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var img = new Image();
+      img.onload = function () {
+        var scale = 2, canvas = document.createElement("canvas");
+        canvas.width = W * scale; canvas.height = H * scale;
+        var ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        var done = function (href) { var a = document.createElement("a"); a.href = href; a.download = "preliminary-calculation.png"; document.body.appendChild(a); a.click(); a.remove(); };
+        if (canvas.toBlob) { canvas.toBlob(function (bb) { var h = URL.createObjectURL(bb); done(h); setTimeout(function () { URL.revokeObjectURL(h); }, 2000); }, "image/png"); }
+        else { done(canvas.toDataURL("image/png")); }
+      };
+      img.onerror = function () { el("err").textContent = "Could not export the image on this browser."; URL.revokeObjectURL(url); };
+      img.src = url;
+    }
+
+    document.querySelectorAll("input, select").forEach(function (n) {
+      n.addEventListener("input", render);
+      n.addEventListener("change", render);
+    });
+    el("bfType").addEventListener("change", function () { refreshBackflowSizes(); render(); });
+    el("sysType").addEventListener("change", function () { refreshSystem(); render(); });
+    el("mainPipe").addEventListener("change", function () { refreshSystem(); });
+    el("secPipe").addEventListener("change", function () { el("secPipe").dataset.touched = "1"; });
+    el("exportBtn").addEventListener("click", function () {
+      if (window.SFAuth && SFAuth.gateExport) { SFAuth.gateExport(exportPNG, { feature: "PNG export", body: "Run the preliminary estimate free as much as you like. Saving the report image needs a free SprinkFlow account." }); return; }
+      exportPNG();
+    });
+    render();
+  </script>
+  <script src="./sprinkflow-auth.js"></script>
+</body>
+</html>
