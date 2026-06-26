@@ -78,12 +78,12 @@
 
   // Friction calibration coefficients (see docs/prelim-calc-grid-plan.md). Mains and tree
   // branches carry distributed (tapering) flow, so raw full-flow Hazen-Williams loss is
-  // scaled by MAIN_TAPER / BRANCH_TAPER. Grid branches use the bounded both-end parallel
-  // model (parallelBranchLoss) with a small calibration multiplier GRID_BRANCH_CAL. Tuned
-  // to four OH2 200x100 reference configs (K5.6, 100 ft2/head 20 gpm, 16 ft to sprinklers).
+  // scaled by MAIN_TAPER / BRANCH_TAPER. GRID_BRANCH_FACTOR is the both-end-feed reduction
+  // applied to a grid branch (vs a dead-end tree branch). Tuned to four OH2 200x100 owner
+  // reference configs (K5.6, 100 ft2/head 20 gpm, 16 ft to sprinklers).
   var MAIN_TAPER = 0.50;
   var BRANCH_TAPER = 0.50;
-  var GRID_BRANCH_CAL = 1.14;
+  var GRID_BRANCH_FACTOR = 0.38;
 
   function actualIdForNominal(nominalIn) {
     var key = String(nominalIn);
@@ -131,18 +131,6 @@
     var ratio = Math.pow(Math.pow(dPrimary, 4.87) / Math.pow(dSecondary, 4.87), 1 / 1.85);
     var q2 = qGpm / (1 + ratio), q1 = qGpm - q2;
     return hazenWilliamsLoss(q1, cFactor, dPrimary, lengthFt); // equals loss across secondary
-  }
-
-  // Grid branch line fed from BOTH cross mains: the branch flow splits into two parallel
-  // paths (length La to the near main, Lb to the far main, same diameter). Flow divides so
-  // head loss is equal across both; the loss is BOUNDED by the shorter (near) path, so it
-  // does NOT grow without limit as the building gets wider — unlike a dead-end (tree) branch.
-  function parallelBranchLoss(qGpm, cFactor, dInches, nearLen, farLen) {
-    if (!(nearLen > 0)) return 0;
-    if (!(farLen > nearLen)) farLen = nearLen;            // both mains equidistant
-    var ratio = Math.pow(farLen / nearLen, 1 / 1.85);     // qNear/qFar
-    var qNear = qGpm * ratio / (1 + ratio);
-    return hazenWilliamsLoss(qNear, cFactor, dInches, nearLen); // equals loss across far path
   }
 
   /* --- Backflow friction-loss index ------------------------------------------
@@ -416,6 +404,9 @@
     var flowSpan = Math.min(branchRunDim, designAreaBranchLen);
     var branchFlowGpm = Math.min(density * flowSpan * hazard.branchSpacingFt, physicalGpm);
     var branchLen = Math.max(designAreaBranchLen, branchRunDim);
+    // Number of branch lines feeding the design area (= design-area width along the main /
+    // branch spacing). The demand is split across them, so each line carries demand / count.
+    var branchCount = Math.max(1, Math.round(physicalGpm / Math.max(branchFlowGpm, 1)));
 
     // 5) Main friction. Tree = single main; grid = primary + secondary mains in parallel
     //    (both-end feed shares the flow, lowering loss; secondary size matters). Raw
@@ -427,19 +418,14 @@
     var mainVel = velocityFps(physicalGpm, mainId);
     if (mainVel > 30) warnings.push("Primary main velocity is high (" + mainVel.toFixed(0) + " ft/s) for " + primaryNominal + " in. — main friction is a conservative upper bound for this flow.");
 
-    // 6) Branch friction. TREE branches are dead-end: the tributary flow runs the full
-    //    branch length back to the main (BRANCH_TAPER for the distributed takeoff). GRID
-    //    branches are fed from BOTH cross mains, so the flow splits into two parallel paths
-    //    (near main = design-area span, far main = full run); the loss is bounded by the
-    //    near path and does NOT grow without limit with the building width.
-    var branchPsi, branchRawPsi;
-    if (systemType === "grid") {
-      branchPsi = parallelBranchLoss(branchFlowGpm, C, branchId, designAreaBranchLen, branchLen) * GRID_BRANCH_CAL;
-      branchRawPsi = branchPsi;
-    } else {
-      branchRawPsi = hazenWilliamsLoss(branchFlowGpm, C, branchId, branchLen);
-      branchPsi = branchRawPsi * BRANCH_TAPER;
-    }
+    // 6) Branch friction along the path to the MOST REMOTE area. The demand is split across
+    //    `branchCount` branch lines, so each line carries branchFlowGpm = demand / count.
+    //    That per-line flow runs the branch length out to the remote area. Tree branches are
+    //    dead-end; grid branches are fed from both cross mains (GRID_BRANCH_FACTOR), which
+    //    reduces—but does not eliminate—the loss, since the most-remote run still reaches the
+    //    far/supply main. Scales with the run length (a deeper building = a more remote area).
+    var branchRawPsi = hazenWilliamsLoss(branchFlowGpm, C, branchId, branchLen);
+    var branchPsi = branchRawPsi * BRANCH_TAPER * (systemType === "grid" ? GRID_BRANCH_FACTOR : 1);
     var branchVel = velocityFps(branchFlowGpm, branchId);
     if (branchVel > 30) warnings.push("Branch velocity is high (" + branchVel.toFixed(0) + " ft/s) for " + inputs.branchNominal + " in. — branch friction is a conservative upper bound for this flow.");
 
@@ -513,6 +499,7 @@
       sprinklerDesignGpm: sprinklerDesignGpm,
       hoseGpm: hoseGpm,
       branchFlowGpm: branchFlowGpm,
+      branchCount: branchCount,
       branchLengthFt: branchLen,
       mainLengthFt: mainLen,
       mainVelocityFps: mainVel,
@@ -633,8 +620,7 @@
     PIPE_ID_DUCTILE: PIPE_ID_DUCTILE, UNDERGROUND_SIZES: UNDERGROUND_SIZES,
     DEFAULT_C_UNDERGROUND: DEFAULT_C_UNDERGROUND, actualIdUnderground: actualIdUnderground,
     PIPE_ORDER: PIPE_ORDER, twoSizesBelow: twoSizesBelow,
-    OVERAGE: OVERAGE, MAIN_TAPER: MAIN_TAPER, BRANCH_TAPER: BRANCH_TAPER, GRID_BRANCH_CAL: GRID_BRANCH_CAL,
-    parallelBranchLoss: parallelBranchLoss,
+    OVERAGE: OVERAGE, MAIN_TAPER: MAIN_TAPER, BRANCH_TAPER: BRANCH_TAPER, GRID_BRANCH_FACTOR: GRID_BRANCH_FACTOR,
     DEFAULT_C: DEFAULT_C, DEFAULT_K: DEFAULT_K, ELEV_PSI_PER_FT: ELEV_PSI_PER_FT,
     hazenWilliamsPsiPerFt: hazenWilliamsPsiPerFt, hazenWilliamsLoss: hazenWilliamsLoss,
     elevationLoss: elevationLoss, velocityFps: velocityFps, parallelMainLoss: parallelMainLoss,

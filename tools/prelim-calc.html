@@ -318,7 +318,7 @@
       b += row("Start sprinkler pressure", r.headPressurePsi.toFixed(1) + " psi", "K=" + r.headKFactor + ", max " + r.maxCoverageFt2 + " ft²/head (worst case)");
       b += row("Elevation loss", r.elevationPsi.toFixed(1) + " psi", fmt(r.inputs.heightFt) + " ft × 0.433");
       b += row("Main friction (Hazen-Williams)", r.mainFrictionPsi.toFixed(1) + " psi", mainDesc);
-      b += row("Branch friction (Hazen-Williams)", r.branchFrictionPsi.toFixed(1) + " psi", sizeLabel(r.inputs.branchNominal) + " (ID " + r.inputs.branchId + '") × ' + fmt(r.branchLengthFt) + " ft @ " + fmt(r.branchFlowGpm) + " gpm" + (r.systemType === "grid" ? ", fed both ends" : " tributary"));
+      b += row("Branch friction (Hazen-Williams)", r.branchFrictionPsi.toFixed(1) + " psi", sizeLabel(r.inputs.branchNominal) + " × " + fmt(r.branchLengthFt) + " ft @ " + fmt(r.branchFlowGpm) + " gpm/line (≈" + r.branchCount + " lines split the demand" + (r.systemType === "grid" ? ", fed both ends" : "") + ")");
       b += row("Riser friction (vertical)", r.riserFrictionPsi.toFixed(1) + " psi", sizeLabel(r.inputs.mainNominal) + " × " + fmt(r.riserLengthFt) + " ft (building height)");
       if (r.hasUnderground) b += row("Underground friction", r.undergroundFrictionPsi.toFixed(1) + " psi", sizeLabel(r.undergroundNominal) + " DI (C=" + r.undergroundCFactor + ") × " + fmt(r.undergroundLengthFt) + " ft");
       if (r.backflow) {
