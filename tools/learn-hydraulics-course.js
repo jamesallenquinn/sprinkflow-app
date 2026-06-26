@@ -2,7 +2,8 @@
  * SprinkFlow — Learn Hydraulic Calcs: course content + quiz engine
  * Ported from the Codex TypeScript module (hydraulicCalcCourse.ts +
  * hydraulicQuizEngine.ts). Content is the single source of truth; scoring and
- * unlock logic are preserved exactly. UMD global `HydraulicCourse`.
+ * unlock logic are preserved exactly. Each lesson has teaching `sections`
+ * (lesson-first flow) plus its quiz `questions`. UMD global `HydraulicCourse`.
  * ========================================================================== */
 (function (global) {
   "use strict";
@@ -15,6 +16,44 @@
       unlockScore: 70,
       concept:
         "A tree system has one hydraulic path from each flowing sprinkler back to the supply. Pipe flow accumulates as branches combine. The calculation can be walked from the most remote outlets toward the riser because there are no parallel paths that require loop balancing.",
+      sections: [
+        {
+          id: "tree-what-it-is",
+          title: "What the computer is modeling",
+          body:
+            "A tree system is a directed network with no closed hydraulic loops. Each operating sprinkler has exactly one route back to the source. The program can start at the remote sprinklers and move upstream, adding each outlet flow to the pipe segments that feed it.",
+          keyPoints: [
+            "Each active sprinkler contributes discharge at one node.",
+            "Each upstream pipe carries the sum of all downstream outlets.",
+            "There is no need to decide how water splits between parallel feed paths.",
+          ],
+        },
+        {
+          id: "tree-node-rule",
+          title: "The node rule",
+          body:
+            "Every junction still has to balance. The total flow entering a node must equal the flow leaving the node plus any sprinkler, hose, or other outlet discharge at that same node.",
+          formula: "flow in = flow out + local discharge",
+          example:
+            "If 150 gpm enters a tee and a sprinkler at that tee discharges 42 gpm, the remaining pipe leaving the tee carries 108 gpm.",
+          keyPoints: [
+            "This is conservation of mass.",
+            "A junction with no outlet has equal total inflow and outflow.",
+            "A sprinkler node removes flow from the pipe network.",
+          ],
+        },
+        {
+          id: "tree-calculation-order",
+          title: "Calculation order",
+          body:
+            "A tree calculation can be solved in a stable order: determine active sprinkler flows, add flows into branch segments, combine branches into mains, then calculate pressure loss from the remote area back to the supply.",
+          keyPoints: [
+            "The farthest active outlets are usually calculated first.",
+            "Pipe flow increases as branches combine toward the source.",
+            "The supply must provide the total accumulated demand plus required pressure.",
+          ],
+        },
+      ],
       questions: [
         {
           id: "tree-001",
@@ -98,6 +137,50 @@
       unlockScore: 75,
       concept:
         "A density-area design establishes minimum required sprinkler flow. A sprinkler's actual discharge is pressure-driven by Q = K sqrt(P). Final calculated flow may exceed the density minimum when node pressure is higher than the minimum pressure.",
+      sections: [
+        {
+          id: "sprinkler-minimum-demand",
+          title: "Minimum demand comes from density",
+          body:
+            "The design density and sprinkler coverage area set the minimum required flow for each operating sprinkler. This is a design floor, not necessarily the exact final flow.",
+          formula: "minimum sprinkler flow = density x coverage area",
+          example:
+            "At 0.20 gpm/ft2 over 130 ft2, minimum flow is 0.20 x 130 = 26 gpm.",
+          keyPoints: [
+            "Density is usually in gpm per square foot.",
+            "Coverage area is the floor area assigned to that sprinkler.",
+            "The result is the minimum acceptable sprinkler discharge.",
+          ],
+        },
+        {
+          id: "sprinkler-pressure-driven",
+          title: "Actual discharge comes from pressure",
+          body:
+            "Once the network pressure at a sprinkler node is known, the actual sprinkler flow is calculated from its K-factor. Higher pressure produces higher flow, but the relationship uses the square root of pressure.",
+          formula: "Q = K x sqrt(P)",
+          example:
+            "A K8.0 sprinkler at 25 psi flows 8.0 x sqrt(25) = 40 gpm.",
+          keyPoints: [
+            "Two sprinklers with the same K-factor can flow differently if node pressures differ.",
+            "Actual flow must be at least the density-based minimum.",
+            "Large K sprinklers can produce significant flow at relatively low pressure.",
+          ],
+        },
+        {
+          id: "sprinkler-invert-formula",
+          title: "Finding minimum pressure",
+          body:
+            "The program can invert the discharge equation to find the pressure needed to produce a required minimum flow.",
+          formula: "P = (Q / K)^2",
+          example:
+            "A K22.4 sprinkler needing 26 gpm requires (26 / 22.4)^2 = 1.35 psi minimum theoretical pressure.",
+          keyPoints: [
+            "This pressure only proves the individual sprinkler can meet minimum flow.",
+            "The full system may require more pressure because of pipe friction and elevation.",
+            "Final actual flow may be much higher than the minimum.",
+          ],
+        },
+      ],
       questions: [
         {
           id: "sprinkler-001",
@@ -193,6 +276,47 @@
       unlockScore: 75,
       concept:
         "Pipe friction is nonlinear. In Hazen-Williams form, loss grows approximately with Q^1.85 and decreases strongly as inside diameter increases. Elevation and fittings add additional pressure requirements.",
+      sections: [
+        {
+          id: "friction-why-it-matters",
+          title: "Why resistance controls flow",
+          body:
+            "Water follows pressure differences, but the amount of flow through a pipe is limited by resistance. Resistance is created by pipe length, actual inside diameter, roughness, fittings, and elevation change.",
+          keyPoints: [
+            "Longer pipe creates more friction loss.",
+            "Smaller inside diameter creates much more friction loss.",
+            "Fittings are usually converted to equivalent pipe length.",
+          ],
+        },
+        {
+          id: "friction-hazen-williams",
+          title: "Hazen-Williams behavior",
+          body:
+            "For sprinkler calculations, Hazen-Williams is commonly used. The important learning point is not just the formula, but how strongly friction responds to flow and diameter.",
+          formula: "friction loss = 4.52 x L x Q^1.85 / (C^1.85 x d^4.87)",
+          example:
+            "If flow doubles in the same pipe, friction increases by about 2^1.85 = 3.6 times.",
+          keyPoints: [
+            "Friction increases faster than flow.",
+            "Diameter has a very strong effect because it is raised to about the 4.87 power.",
+            "C-factor represents pipe roughness or internal condition.",
+          ],
+        },
+        {
+          id: "friction-elevation",
+          title: "Elevation pressure",
+          body:
+            "Elevation is separate from pipe friction. Moving water upward consumes pressure. Moving water downward adds available pressure.",
+          formula: "elevation pressure = 0.433 psi x vertical feet",
+          example:
+            "A 12 ft rise consumes 12 x 0.433 = 5.2 psi before friction is even considered.",
+          keyPoints: [
+            "Elevation loss is based only on vertical height difference.",
+            "Friction loss depends on flow, length, diameter, and roughness.",
+            "Both effects are included in total pressure required.",
+          ],
+        },
+      ],
       questions: [
         {
           id: "friction-001",
@@ -288,6 +412,44 @@
       unlockScore: 80,
       concept:
         "A looped system has more than one route between nodes. The same node cannot have two different pressures, so parallel paths feeding that node must settle into a flow split where energy losses are compatible.",
+      sections: [
+        {
+          id: "loop-multiple-routes",
+          title: "Multiple routes change the problem",
+          body:
+            "In a loop, water can reach the same node through more than one path. The program can no longer simply add flows backward, because the flow in each route depends on how much pressure is lost through the alternate routes.",
+          keyPoints: [
+            "A tied branch line creates a closed hydraulic loop.",
+            "Parallel paths do not automatically split flow equally.",
+            "The lower-resistance route carries more flow until friction balances the system.",
+          ],
+        },
+        {
+          id: "loop-energy-rule",
+          title: "The loop energy rule",
+          body:
+            "If a calculation starts at a node, travels around a closed loop, and returns to the same node, the final pressure must equal the starting pressure. Therefore the signed sum of pressure losses and gains around the loop must be zero.",
+          formula: "sum of signed pressure changes around a closed loop = 0",
+          example:
+            "If one path predicts a node pressure of 18 psi and another predicts 15 psi at the same node, the assumed flow split is not balanced.",
+          keyPoints: [
+            "A node can have only one pressure.",
+            "Different routes to that node must be pressure-compatible.",
+            "Loop imbalance tells the solver how to shift flow.",
+          ],
+        },
+        {
+          id: "loop-flow-correction",
+          title: "How flow shifts",
+          body:
+            "When one path carries too much flow, its friction loss rises faster than the flow itself. The solver reduces flow in that path and increases flow in an alternate path until the loop energy error becomes acceptably small.",
+          keyPoints: [
+            "The Q^1.85 friction relationship helps prevent one path from taking all flow.",
+            "A pipe may calculate with negative flow if actual flow is opposite the model's arbitrary pipe direction.",
+            "Balanced loop flow is a result of pressure compatibility, not equal division.",
+          ],
+        },
+      ],
       questions: [
         {
           id: "loop-001",
@@ -400,6 +562,43 @@
       unlockScore: 80,
       concept:
         "A computer calculates a grid as a simultaneous nonlinear network. It guesses pressures and flows, computes sprinkler discharge and pipe friction, checks residuals, corrects the guess, and repeats until node and loop errors are acceptably small.",
+      sections: [
+        {
+          id: "solver-network",
+          title: "The network model",
+          body:
+            "A computer stores the system as nodes and pipes. Nodes have elevations, pressures, and possible outlet demand. Pipes connect two nodes and have size, length, equivalent length, C-factor, and calculated flow.",
+          keyPoints: [
+            "Sprinklers are pressure-driven outlets at nodes.",
+            "Pipes calculate resistance between nodes.",
+            "The source node supplies whatever flow and pressure the solved network requires.",
+          ],
+        },
+        {
+          id: "solver-iteration",
+          title: "The iterative cycle",
+          body:
+            "The solver starts with a reasonable guess, calculates flows from pressures, calculates sprinkler discharge from node pressures, checks the remaining imbalance, and then corrects the pressures or flows. It repeats this cycle until the residuals are small.",
+          formula:
+            "guess pressures -> calculate flows -> calculate residuals -> correct pressures -> repeat",
+          keyPoints: [
+            "A residual is the remaining error in node continuity or loop balance.",
+            "Convergence means the errors are within tolerance.",
+            "The final pipe flows are the balanced result, not manually assigned route flows.",
+          ],
+        },
+        {
+          id: "solver-reporting",
+          title: "Reports are a view of the solution",
+          body:
+            "Calculation reports often present route tables because they are readable. The actual grid solution is still simultaneous. Route tables show the solved pressures, flows, friction losses, elevations, and added flows in a human-checkable sequence.",
+          keyPoints: [
+            "Do not confuse report route order with solver order.",
+            "Flow added from another route means a connected path contributes at that node.",
+            "Negative or low flow in a grid pipe may be valid if the network balances.",
+          ],
+        },
+      ],
       questions: [
         {
           id: "solver-001",
@@ -513,6 +712,49 @@
       unlockScore: 80,
       concept:
         "After the network converges, the program sums sprinkler and allowance flows, determines required source pressure, compares that demand to the water supply curve, and reports safety margin.",
+      sections: [
+        {
+          id: "demand-total-flow",
+          title: "Total demand flow",
+          body:
+            "After the hydraulic network converges, the program sums the actual calculated discharge from active sprinklers. It then adds hose allowance or other external demand at the required location.",
+          formula: "total demand = sum(actual sprinkler flows) + hose allowance + other demand",
+          example:
+            "Twelve sprinklers at 60 gpm each plus 250 gpm hose demand equals 970 gpm total.",
+          keyPoints: [
+            "Use actual calculated sprinkler flow, not only minimum density flow.",
+            "Hose demand may be added at the source or another specified node.",
+            "The final demand point is flow at required source pressure.",
+          ],
+        },
+        {
+          id: "demand-supply-curve",
+          title: "Available supply pressure",
+          body:
+            "The water supply curve estimates available pressure at the calculated system flow using static pressure, residual pressure, and test flow. The pressure drop from static is scaled using the Hazen-Williams exponent.",
+          formula:
+            "P_available = P_static - (P_static - P_residual) x (Q_demand / Q_test)^1.85",
+          keyPoints: [
+            "At zero flow, available pressure is static pressure.",
+            "At the test flow, available pressure is residual pressure.",
+            "At smaller demand than test flow, available pressure is between static and residual.",
+          ],
+        },
+        {
+          id: "demand-margin",
+          title: "Safety margin",
+          body:
+            "The calculation passes the water supply comparison when available pressure at the system demand exceeds required source pressure. The difference is the safety margin.",
+          formula: "safety margin = available pressure - required pressure",
+          example:
+            "If available pressure is 82 psi and required pressure is 64 psi, safety margin is 18 psi.",
+          keyPoints: [
+            "Positive margin means available supply exceeds demand.",
+            "Negative margin means the system is short on pressure at the calculated flow.",
+            "A converged network can still fail if sprinkler minimums or supply margin are not satisfied.",
+          ],
+        },
+      ],
       questions: [
         {
           id: "demand-001",
