@@ -64,7 +64,8 @@
       <div class="field"><label>Occupancy hazard classification</label>
         <select id="hazard"></select>
       </div>
-      <p class="hint">Building footprint, height to the highest sprinkler, and the occupancy hazard.</p>
+      <div class="field"><label>Sprinkler coverage (ft²/head)</label><input id="coverage" type="number" inputmode="decimal" /></div>
+      <p class="hint">Coverage is the typical (design) spacing — used for the <b>sprinkler count</b>. Required <b>pressure</b> is always sized for a max-spaced head (the worst case). Adjust coverage to match your layout.</p>
     </section>
 
     <section class="pc-step" data-step="2" hidden>
@@ -177,6 +178,7 @@
       var hz = el("hazard");
       PrelimCalc.HAZARDS.forEach(function (h) { hz.add(new Option(h.label, h.id)); });
       hz.value = "oh2";
+      syncCoverage();
       [["mainPipe", "4"], ["secPipe", "2.5"], ["branchPipe", "2"]].forEach(function (pair) {
         var s = el(pair[0]);
         PIPE_SIZES.forEach(function (p) { s.add(new Option(p[1], p[0])); });
@@ -192,6 +194,13 @@
       refreshBackflowSizes();
       refreshSystem();
     })();
+
+    // Default the coverage input to the selected hazard's typical (design) spacing,
+    // unless the user has manually overridden it.
+    function syncCoverage() {
+      var hzObj = PrelimCalc.hazardById(val("hazard")), cov = el("coverage");
+      if (hzObj && !cov.dataset.touched) cov.value = hzObj.coverageFt2;
+    }
 
     // Show/hide the secondary main (grid only), relabel the primary main, and default
     // the secondary to two sizes below the primary when the system or primary changes.
@@ -225,7 +234,7 @@
       }
       return {
         lengthFt: val("len"), widthFt: val("wid"), heightFt: val("hgt"),
-        hazardId: val("hazard"),
+        hazardId: val("hazard"), coverageFt2: val("coverage"),
         systemType: val("sysType"), mainOrientation: val("mainOrient"),
         mainNominal: val("mainPipe"),
         secondaryNominal: val("sysType") === "grid" ? val("secPipe") : null,
@@ -275,7 +284,7 @@
       b += row("Estimated demand (+" + overPct + "% " + r.systemType + " overflow)", fmt(r.physicalGpm) + " gpm", "grids run nearer the minimum than trees");
       b += row("Design flow (after +" + r.inputs.gpmMarginPct + "% margin)", fmt(r.sprinklerDesignGpm) + " gpm");
       b += row("Hose stream allowance", fmt(r.hoseGpm) + " gpm", "duration " + r.durationMin + " min");
-      b += row("Start sprinkler pressure", r.headPressurePsi.toFixed(1) + " psi", "K=" + r.inputs.kFactor + ", " + r.hazard.coverageFt2 + " ft²/head");
+      b += row("Start sprinkler pressure", r.headPressurePsi.toFixed(1) + " psi", "K=" + r.inputs.kFactor + ", max " + r.maxCoverageFt2 + " ft²/head (worst case)");
       b += row("Elevation loss", r.elevationPsi.toFixed(1) + " psi", fmt(r.inputs.heightFt) + " ft × 0.433");
       b += row("Main friction (Hazen-Williams)", r.mainFrictionPsi.toFixed(1) + " psi", mainDesc);
       b += row("Branch friction (Hazen-Williams)", r.branchFrictionPsi.toFixed(1) + " psi", sizeLabel(r.inputs.branchNominal) + " (ID " + r.inputs.branchId + '") × ' + fmt(r.branchLengthFt) + " ft @ " + fmt(r.branchFlowGpm) + " gpm" + (r.systemType === "grid" ? ", fed both ends" : " tributary"));
@@ -425,6 +434,8 @@
     el("sysType").addEventListener("change", function () { refreshSystem(); render(); });
     el("mainPipe").addEventListener("change", function () { refreshSystem(); });
     el("secPipe").addEventListener("change", function () { el("secPipe").dataset.touched = "1"; });
+    el("hazard").addEventListener("change", function () { syncCoverage(); render(); });
+    el("coverage").addEventListener("input", function () { el("coverage").dataset.touched = "1"; });
     el("exportBtn").addEventListener("click", function () {
       if (window.SFAuth && SFAuth.gateExport) { SFAuth.gateExport(exportPNG, { feature: "PNG export", body: "Run the preliminary estimate free as much as you like. Saving the report image needs a free SprinkFlow account." }); return; }
       exportPNG();

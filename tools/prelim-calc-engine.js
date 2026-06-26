@@ -30,12 +30,16 @@
    * coverageFt2 = assumed max protection area per sprinkler (for head-pressure est.)
    * branchSpacingFt = assumed branch line spacing (for branch tributary flow est.)
    */
+  //  maxCoverageFt2 = NFPA max protection area per sprinkler — used for the START HEAD
+  //    PRESSURE (worst case: a max-spaced head must flow density over the largest area).
+  //  coverageFt2 = typical/design coverage (~80% of max — real layouts aren't max-spaced)
+  //    used only for the SPRINKLER COUNT take-off; user-adjustable.
   var HAZARDS = [
-    { id: "light", label: "Light Hazard",        density: 0.10, designArea: 1500, hoseGpm: 100, durationMin: 30,  coverageFt2: 200, branchSpacingFt: 14, ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" },
-    { id: "oh1",   label: "Ordinary Hazard 1",   density: 0.15, designArea: 1500, hoseGpm: 250, durationMin: 90,  coverageFt2: 100, branchSpacingFt: 10, ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" },
-    { id: "oh2",   label: "Ordinary Hazard 2",   density: 0.20, designArea: 1500, hoseGpm: 250, durationMin: 90,  coverageFt2: 100, branchSpacingFt: 10, ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" },
-    { id: "eh1",   label: "Extra Hazard 1",      density: 0.30, designArea: 2500, hoseGpm: 500, durationMin: 120, coverageFt2: 100, branchSpacingFt: 10, ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" },
-    { id: "eh2",   label: "Extra Hazard 2",      density: 0.40, designArea: 2500, hoseGpm: 500, durationMin: 120, coverageFt2: 100, branchSpacingFt: 10, ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" }
+    { id: "light", label: "Light Hazard",        density: 0.10, designArea: 1500, hoseGpm: 100, durationMin: 30,  coverageFt2: 180, maxCoverageFt2: 225, branchSpacingFt: 14, ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" },
+    { id: "oh1",   label: "Ordinary Hazard 1",   density: 0.15, designArea: 1500, hoseGpm: 250, durationMin: 90,  coverageFt2: 100, maxCoverageFt2: 130, branchSpacingFt: 10, ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" },
+    { id: "oh2",   label: "Ordinary Hazard 2",   density: 0.20, designArea: 1500, hoseGpm: 250, durationMin: 90,  coverageFt2: 100, maxCoverageFt2: 130, branchSpacingFt: 10, ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" },
+    { id: "eh1",   label: "Extra Hazard 1",      density: 0.30, designArea: 2500, hoseGpm: 500, durationMin: 120, coverageFt2: 80,  maxCoverageFt2: 100, branchSpacingFt: 10, ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" },
+    { id: "eh2",   label: "Extra Hazard 2",      density: 0.40, designArea: 2500, hoseGpm: 500, durationMin: 120, coverageFt2: 80,  maxCoverageFt2: 100, branchSpacingFt: 10, ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" }
   ];
 
   function hazardById(id) {
@@ -326,8 +330,15 @@
     // 2) Hose stream allowance (added outside the building demand point).
     var hoseGpm = hazard.hoseGpm;
 
-    // 3) Starting (most-remote) sprinkler operating pressure to make density.
-    var headFlow = hazard.density * hazard.coverageFt2;                 // gpm at one head
+    // Sprinkler coverage. maxCoverage (NFPA max) drives head PRESSURE — worst case, a
+    // max-spaced head must flow density over the largest area. coverage (actual/design,
+    // user-adjustable, ~80% of max by default) drives the sprinkler COUNT only.
+    var maxCoverage = num(inputs.maxCoverageFt2) || hazard.maxCoverageFt2;
+    var coverage = num(inputs.coverageFt2) || hazard.coverageFt2;
+
+    // 3) Starting (most-remote) sprinkler operating pressure to make density, sized for a
+    //    MAX-spaced sprinkler (conservative for a preliminary estimate).
+    var headFlow = hazard.density * maxCoverage;                        // gpm at one head
     var headPressure = Math.pow(headFlow / K, 2);                       // P = (Q/K)^2
 
     // 4) Elevation loss over building height.
@@ -405,7 +416,7 @@
     //    spacing (heads on a grid, branch lines one spacing apart); mains add the feed
     //    run (one tree main, or two grid cross mains).
     var buildingArea = L * W;
-    var sprinklerCount = Math.ceil(buildingArea / hazard.coverageFt2);
+    var sprinklerCount = Math.ceil(buildingArea / coverage);
     var estBranchPipeFt = buildingArea / hazard.branchSpacingFt;
     var estMainPipeFt = (systemType === "grid") ? (2 * mainRunDim + 0.5 * branchRunDim) : mainLen;
     var estPipeLengthFt = estBranchPipeFt + estMainPipeFt;
@@ -441,6 +452,8 @@
       totalGpmWithHose: sprinklerDesignGpm + hoseGpm,
       // pressure components
       headPressurePsi: headPressure,
+      coverageFt2: coverage,
+      maxCoverageFt2: maxCoverage,
       elevationPsi: elevPsi,
       mainFrictionPsi: mainPsi,
       branchFrictionPsi: branchPsi,
