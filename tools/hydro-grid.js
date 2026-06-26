@@ -160,20 +160,26 @@
     var hose = inp.hoseGpm || 0;
     var demand = res ? res.totalDemand : 0;
     var totalFlow = demand + hose;
-    var requiredP = res ? res.sourcePressure : 0;
+    var solvedP = res ? res.sourcePressure : 0;       // pressure at the source from the pipe network
+    var fixedLoss = inp.fixedLossPsi || 0;            // backflow etc. (a fixed device loss, not piped)
+    var marginPct = inp.psiMarginPct || 0;
+    var requiredP = solvedP + fixedLoss;              // hydraulic requirement, pre-margin
+    var requiredTotal = requiredP * (1 + marginPct / 100);
 
-    // supply comparison (same 1.85 curve as the parametric tool)
+    // supply comparison (same 1.85 curve as the parametric tool), vs the FINAL required pressure
     var avail = null, margin = null;
     if (inp.supplyStatic != null && inp.supplyResidual != null && inp.supplyTestFlow > 0) {
       var s = inp.supplyStatic, rr = inp.supplyResidual, q1 = inp.supplyTestFlow;
       var qMax = q1 * Math.pow((s - 0) / (s - rr), 0.54);
       avail = totalFlow <= qMax ? s - (s - rr) * Math.pow(totalFlow / q1, 1.85) : 0;
-      margin = avail - requiredP;
+      margin = avail - requiredTotal;
     }
 
     return {
       converged: res && res.converged, anchorHead: anchor, iterations: res ? res.iterations : 0,
-      requiredPressure: requiredP, sprinklerDemand: demand, hoseGpm: hose, totalDemand: totalFlow,
+      sourcePressure: solvedP, fixedLossPsi: fixedLoss, marginPct: marginPct,
+      requiredPressure: requiredP, requiredTotal: requiredTotal,
+      sprinklerDemand: demand, hoseGpm: hose, totalDemand: totalFlow,
       availablePressure: avail, safetyMargin: margin,
       meta: net.meta, network: net, solution: res
     };

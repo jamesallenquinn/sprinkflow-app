@@ -176,8 +176,8 @@
         <p class="pc-warn" id="warn" hidden></p>
 
         <div class="pc-netsolve" id="netSolveWrap" hidden>
-          <button class="pc-btn" id="netSolveBtn" type="button">⚙ Run full network solve</button>
-          <p class="pc-netnote">Builds the actual pipe network (cross mains, branch lines, every operating head) and balances it with a Newton-Raphson nodal solve — like a real hydraulic engine. Validated against AutoSPRINK reference calcs (±4%).</p>
+          <button class="pc-btn" id="netSolveBtn" type="button">↻ Re-run network solve</button>
+          <p class="pc-netnote">Full pipe-network solve (Newton-Raphson nodal balance) — builds every cross main, branch line and operating head and disperses the flow across the whole grid, like a real hydraulic engine. Runs automatically; validated against AutoSPRINK reference calcs (±4%).</p>
           <div class="pc-net" id="netResult" hidden></div>
         </div>
         <p class="pc-src" id="srcline"></p>
@@ -339,7 +339,7 @@
       b += row("Start sprinkler pressure", r.headPressurePsi.toFixed(1) + " psi", "K=" + r.headKFactor + ", max " + r.maxCoverageFt2 + " ft²/head (worst case)");
       b += row("Elevation loss", r.elevationPsi.toFixed(1) + " psi", fmt(r.inputs.heightFt) + " ft × 0.433");
       b += row("Main friction (Hazen-Williams)", r.mainFrictionPsi.toFixed(1) + " psi", mainDesc);
-      b += row("Branch friction (Hazen-Williams)", r.branchFrictionPsi.toFixed(1) + " psi", sizeLabel(r.inputs.branchNominal) + " × " + fmt(r.branchLengthFt) + " ft @ " + fmt(r.branchFlowGpm) + " gpm/line (≈" + r.branchCount + " lines split the demand" + (r.systemType === "grid" ? ", fed both ends" : "") + ")");
+      b += row("Branch friction (Hazen-Williams)", r.branchFrictionPsi.toFixed(1) + " psi", sizeLabel(r.inputs.branchNominal) + " × " + fmt(r.branchLengthFt) + " ft @ " + fmt(r.branchFlowGpm) + " gpm/line, " + r.branchCount + " head lines" + (r.systemType === "grid" ? " — conservative; a grid disperses flow through all lines (see network solve below)" : ""));
       b += row("Riser friction (vertical)", r.riserFrictionPsi.toFixed(1) + " psi", sizeLabel(r.inputs.mainNominal) + " × " + fmt(r.riserLengthFt) + " ft (building height)");
       if (r.hasUnderground) b += row("Underground friction", r.undergroundFrictionPsi.toFixed(1) + " psi", sizeLabel(r.undergroundNominal) + " DI (C=" + r.undergroundCFactor + ") × " + fmt(r.undergroundLengthFt) + " ft");
       if (r.backflow) {
@@ -366,6 +366,9 @@
       var canSolve = r.density > 0 && r.designArea > 0 && r.headKFactor > 0 && window.HydroGrid;
       el("netSolveWrap").hidden = !canSolve;
       el("netResult").hidden = true;
+      // auto-run the full solve (debounced) so grids show the dispersed result by default
+      clearTimeout(window.__netTimer);
+      if (canSolve) window.__netTimer = setTimeout(runNetworkSolve, 350);
     }
 
     function numv(id) { var v = parseFloat(val(id)); return isFinite(v) ? v : null; }
@@ -378,7 +381,8 @@
         kFactor: r.headKFactor, minHeadPressure: r.headPressurePsi,
         branchSpacingFt: r.hazard.branchSpacingFt,
         mainId: r.inputs.mainId, secondaryId: r.inputs.secondaryId, branchId: r.inputs.branchId, riserId: r.inputs.mainId,
-        C: r.inputs.cFactor, hoseGpm: r.hoseGpm, includeFittings: true
+        C: r.inputs.cFactor, hoseGpm: r.hoseGpm, includeFittings: true,
+        fixedLossPsi: r.backflowPsi || 0, psiMarginPct: parseFloat(r.inputs.psiMarginPct) || 0
       };
       if (r.hasUnderground) { inp.hasUnderground = true; inp.undergroundId = r.undergroundId; inp.undergroundLengthFt = r.undergroundLengthFt; inp.undergroundC = r.undergroundCFactor; }
       var ss = numv("sStatic"), sr = numv("sResid"), sf = numv("sFlow");
@@ -414,22 +418,26 @@
         if (p.id === "armBU" + remoteRung) fromBot = Math.abs(p.flow);
       });
 
-      var dPsi = out.requiredPressure - r.totalPsiPreMargin; // vs parametric (pre-margin, comparable basis)
+      // dispersion: how much of the demand travels through NON-operating branch lines
+      var dispersed = 0, returnLines = 0;
+      sol.pipeFlows.forEach(function (p) { if (/^rung\d+$/.test(p.id)) { dispersed += Math.abs(p.flow); returnLines++; } });
+      var headlineP = out.requiredTotal;
       var b = "";
       b += '<div class="pc-netgrid">';
-      b += netCell("Required pressure", out.requiredPressure.toFixed(1) + " psi", "at the source (solved)");
+      b += netCell("Required pressure", headlineP.toFixed(1) + " psi", "solved " + out.sourcePressure.toFixed(1) + (out.fixedLossPsi ? " + " + out.fixedLossPsi.toFixed(1) + " backflow" : "") + (out.marginPct ? " + " + out.marginPct + "% margin" : ""));
       b += netCell("System demand", fmt(out.totalDemand) + " gpm", fmt(out.sprinklerDemand) + " sprinkler + " + fmt(out.hoseGpm) + " hose");
       b += netCell("Operating heads", m.operatingHeads + "", m.nOpBranches + " branch lines × " + m.kHeads + " heads");
       b += netCell("Head discharge", qMin.toFixed(1) + "–" + qMax.toFixed(1) + " gpm", "remote head at minimum; near heads over-discharge");
-      if (m.grid && (fromTop + fromBot) > 0) b += netCell("Remote branch feed", fromBot.toFixed(0) + " + " + fromTop.toFixed(0) + " gpm", "fed from BOTH cross mains (bottom + top)");
+      if (m.grid && returnLines > 0) b += netCell("Flow dispersion", fmt(dispersed) + " gpm", "through " + returnLines + " non-operating lines (not just the " + m.nOpBranches + " with heads)");
+      if (m.grid && (fromTop + fromBot) > 0) b += netCell("Remote branch feed", fromBot.toFixed(0) + " + " + fromTop.toFixed(0) + " gpm", "fed from BOTH cross mains");
       b += netCell("Network size", sol.pipeFlows.length + " pipes", out.iterations + " Newton iterations");
       b += '</div>';
 
-      b += '<p class="pc-netcompare">Parametric estimate was <b>' + fmt(r.totalPsiPreMargin) + ' psi</b> / <b>' + fmt(r.physicalGpm) + ' gpm</b> (pre-margin). Network solve: <b>' + out.requiredPressure.toFixed(1) + ' psi</b> / <b>' + fmt(out.sprinklerDemand) + ' gpm</b> — Δ ' + (dPsi >= 0 ? "+" : "") + dPsi.toFixed(1) + ' psi.</p>';
+      b += '<p class="pc-netcompare">Quick parametric estimate: <b>' + fmt(r.totalPsi) + ' psi</b> (forces all flow through the ' + m.nOpBranches + ' head lines). Full network solve: <b>' + headlineP.toFixed(1) + ' psi</b> — the grid disperses ' + fmt(dispersed) + ' gpm through the other lines, so this is the realistic figure.</p>';
 
       if (out.availablePressure != null) {
         var ok = out.safetyMargin >= 0;
-        b += '<p class="pc-netsupply ' + (ok ? "ok" : "bad") + '">' + (ok ? "✓" : "✗") + ' Supply at ' + fmt(out.totalDemand) + ' gpm: <b>' + out.availablePressure.toFixed(1) + ' psi</b> available vs <b>' + out.requiredPressure.toFixed(1) + ' psi</b> required — margin <b>' + (out.safetyMargin >= 0 ? "+" : "") + out.safetyMargin.toFixed(1) + ' psi</b>.</p>';
+        b += '<p class="pc-netsupply ' + (ok ? "ok" : "bad") + '">' + (ok ? "✓" : "✗") + ' Supply at ' + fmt(out.totalDemand) + ' gpm: <b>' + out.availablePressure.toFixed(1) + ' psi</b> available vs <b>' + headlineP.toFixed(1) + ' psi</b> required — margin <b>' + (out.safetyMargin >= 0 ? "+" : "") + out.safetyMargin.toFixed(1) + ' psi</b>.</p>';
       }
       box.innerHTML = b;
     }
