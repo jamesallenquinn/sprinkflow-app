@@ -428,29 +428,40 @@
       }
       msg.className = "pc-optmsg"; msg.textContent = "Optimizing…";
       var orig = { main: val("mainPipe"), branch: val("branchPipe"), sec: val("secPipe"), secT: el("secPipe").dataset.touched };
-      var mains = ["2", "2.5", "3", "4", "6", "8", "10"], branches = ["1", "1.25", "1.5", "2", "2.5", "3", "4"];
+      // Priority: SMALLEST main first (mains drive cost + the secondary tracks them), then the
+      // smallest branch — but keep branch lines ≤ 2" if at all possible (only step past 2" when
+      // no main can pass with a ≤2" branch).
+      var mains = ["2", "2.5", "3", "4", "6", "8", "10"];
+      var smallBranch = ["1", "1.25", "1.5", "2"], bigBranch = ["2.5", "3", "4"];
       setTimeout(function () {
-        var best = null;
-        for (var bi = 0; bi < branches.length; bi++) {
-          for (var mi = 0; mi < mains.length; mi++) {
-            el("mainPipe").value = mains[mi]; el("branchPipe").value = branches[bi];
-            el("secPipe").dataset.touched = ""; refreshSystem();   // auto secondary (two sizes below main)
-            var r = PrelimCalc.calculate(gatherInputs());
-            if (r.errors && r.errors.length) continue;
-            var reqP = null, avail = null, pass = false;
-            if (window.HydroGrid && r.density > 0 && r.designArea > 0 && r.headKFactor > 0) {
-              var out = window.HydroGrid.analyze(solverInputsFrom(r));
-              if (out && out.converged && out.availablePressure != null) { reqP = out.requiredTotal; avail = out.availablePressure; pass = out.safetyMargin >= 0; }
+        function tryCombo(main, branch) {
+          el("mainPipe").value = main; el("branchPipe").value = branch;
+          el("secPipe").dataset.touched = ""; refreshSystem();   // auto secondary (two sizes below main)
+          var r = PrelimCalc.calculate(gatherInputs());
+          if (r.errors && r.errors.length) return null;
+          var reqP = null, avail = null, pass = false;
+          if (window.HydroGrid && r.density > 0 && r.designArea > 0 && r.headKFactor > 0) {
+            var out = window.HydroGrid.analyze(solverInputsFrom(r));
+            if (out && out.converged && out.availablePressure != null) { reqP = out.requiredTotal; avail = out.availablePressure; pass = out.safetyMargin >= 0; }
+          }
+          if (reqP == null && r.supply && r.supply.provided && r.supply.available != null) { reqP = r.totalPsi; avail = r.supply.available; pass = avail >= reqP; }
+          return pass ? { reqP: reqP, avail: avail } : null;
+        }
+        var best = null, overBranch = false;
+        for (var attempt = 0; attempt < 2 && !best; attempt++) {
+          var pool = attempt === 0 ? smallBranch : smallBranch.concat(bigBranch);
+          for (var mi = 0; mi < mains.length && !best; mi++) {        // smallest MAIN that can pass…
+            for (var bi = 0; bi < pool.length; bi++) {                // …with its smallest branch
+              var res = tryCombo(mains[mi], pool[bi]);
+              if (res) { best = { main: mains[mi], branch: pool[bi], reqP: res.reqP, avail: res.avail }; overBranch = attempt === 1; break; }
             }
-            if (reqP == null && r.supply && r.supply.provided && r.supply.available != null) { reqP = r.totalPsi; avail = r.supply.available; pass = avail >= reqP; }
-            if (pass) { var cost = bi + mi; if (!best || cost < best.cost) best = { main: mains[mi], branch: branches[bi], cost: cost, reqP: reqP, avail: avail }; break; }
           }
         }
         if (best) {
           el("mainPipe").value = best.main; el("branchPipe").value = best.branch; el("secPipe").dataset.touched = ""; refreshSystem();
           syncSizingEditor(); render();
           msg.className = "pc-optmsg ok";
-          msg.textContent = "Smallest sizing that passes: main " + sizeLabel(best.main) + (val("sysType") === "grid" ? " / secondary " + sizeLabel(val("secPipe")) : "") + ", branch " + sizeLabel(best.branch) + " — required " + best.reqP.toFixed(1) + " psi vs " + best.avail.toFixed(1) + " psi available.";
+          msg.textContent = "Smallest main that passes: " + sizeLabel(best.main) + (val("sysType") === "grid" ? " / secondary " + sizeLabel(val("secPipe")) : "") + ", branch " + sizeLabel(best.branch) + (overBranch ? " (a branch over 2\" was needed)" : "") + " — required " + best.reqP.toFixed(1) + " psi vs " + best.avail.toFixed(1) + " psi available.";
         } else {
           el("mainPipe").value = orig.main; el("branchPipe").value = orig.branch; el("secPipe").value = orig.sec; el("secPipe").dataset.touched = orig.secT || ""; refreshSystem();
           syncSizingEditor(); render();
