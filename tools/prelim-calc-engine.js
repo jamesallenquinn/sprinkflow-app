@@ -63,6 +63,22 @@
   var ELEV_PSI_PER_FT = 0.433;      // standard water column, ~0.433 psi/ft
   var DEFAULT_K = 5.6;              // most common K-factor for a starting head
 
+  // Standard sprinkler K-factors. Auto-selection picks the one whose starting head
+  // pressure (Q/K)² is closest to a ~7 psi target (a practical minimum operating pressure),
+  // so a higher per-head flow steps up to a larger orifice instead of demanding more pressure.
+  var STANDARD_K = [2.8, 4.2, 5.6, 8.0, 11.2, 14.0, 16.8, 19.6, 22.4, 25.2, 28.0];
+  var K_TARGET_PSI = 7;
+  function autoKFactor(qGpm) {
+    if (!(qGpm > 0)) return DEFAULT_K;
+    var best = STANDARD_K[0], bestErr = Infinity;
+    for (var i = 0; i < STANDARD_K.length; i++) {
+      var p = Math.pow(qGpm / STANDARD_K[i], 2);
+      var err = Math.abs(p - K_TARGET_PSI);
+      if (err < bestErr) { bestErr = err; best = STANDARD_K[i]; }
+    }
+    return best;
+  }
+
   // Ordered nominal pipe sizes (for "two sizes below" secondary-main defaults).
   var PIPE_ORDER = ["1", "1.25", "1.5", "2", "2.5", "3", "4", "6", "8", "10"];
   function twoSizesBelow(nominal) {
@@ -331,6 +347,7 @@
     var maxCoverage = num(inputs.maxCoverageFt2) || hazard.maxCoverageFt2;
     var headFlow, headPressure, headK = K, density, designArea, sprinklerBaseGpm, effDesignArea, overageFactor, hoseGpm, basisText, basisSub;
     var resHeads = null, resK = null, resFlowPerHead = null, esfrHeads = null, esfrK = null, esfrPsi = null;
+    var autoKVal = null, kIsAuto = false;
     var hoseOverride = num(inputs.hoseGpm);
 
     if (basisType === "residential") {
@@ -367,14 +384,22 @@
       if (basisType === "da-custom") {
         density = num(inputs.densityGpm) || hazard.density;
         designArea = num(inputs.designAreaFt2) || hazard.designArea;
-        headK = num(inputs.daK) || hazard.kFactor;
       } else {
         density = hazard.density;
         designArea = hazard.designArea;
-        headK = K;
       }
       sprinklerBaseGpm = density * designArea;
       headFlow = density * maxCoverage;
+      autoKVal = autoKFactor(headFlow);                 // K closest to a ~7 psi starting head
+      if (basisType === "da-custom") {
+        headK = num(inputs.daK) || hazard.kFactor;       // storage DA: K is part of the criteria
+      } else {
+        // occupancy: explicit override > auto-select (opt-in) > legacy fixed K (default 5.6)
+        var kOverride = num(inputs.kFactorOverride);
+        if (kOverride && kOverride > 0) { headK = kOverride; kIsAuto = false; }
+        else if (inputs.autoSelectK) { headK = autoKVal; kIsAuto = true; }
+        else { headK = K; kIsAuto = false; }
+      }
       headPressure = Math.pow(headFlow / headK, 2);
       effDesignArea = designArea;
       overageFactor = OVERAGE[systemType];
@@ -490,6 +515,8 @@
       density: density,
       designArea: designArea,
       headKFactor: headK,
+      autoKFactor: autoKVal,
+      kFactorIsAuto: kIsAuto,
       residential: (basisType === "residential") ? { heads: resHeads, kFactor: resK, flowPerHead: resFlowPerHead } : null,
       esfr: (basisType === "esfr") ? { heads: esfrHeads, kFactor: esfrK, psi: esfrPsi, gpmPerHead: headFlow } : null,
       // flows
@@ -629,6 +656,7 @@
     nearestSize: nearestSize, interpCurve: interpCurve, backflowLoss: backflowLoss,
     pressureAtFlow: pressureAtFlow, flowAtPressure: flowAtPressure,
     parseFeetInches: parseFeetInches,
+    autoKFactor: autoKFactor, STANDARD_K: STANDARD_K,
     calculate: calculate
   };
 

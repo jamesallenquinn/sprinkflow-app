@@ -41,6 +41,16 @@
     .pc-netsupply { font:600 .82rem/1.45 Inter; margin:10px 0 0; padding:9px 11px; border-radius:10px; }
     .pc-netsupply.ok { color:#3ad07a; background:rgba(58,208,122,.08); border:1px solid rgba(58,208,122,.3); }
     .pc-netsupply.bad { color:#ff6a5a; background:rgba(255,106,90,.08); border:1px solid rgba(255,106,90,.3); }
+    .pc-locked { opacity:.6; cursor:not-allowed; }
+    .pc-sizing { border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:12px; }
+    .pc-sizing-head { font:700 .8rem Inter; color:var(--ink); margin-bottom:8px; }
+    .pc-sizing-head span { color:var(--muted); font-weight:500; }
+    .pc-sizing-row { display:flex; gap:8px; }
+    .pc-sizing-row .field { flex:1; }
+    .pc-sizing .pc-btn { width:100%; margin-top:10px; }
+    .pc-optmsg { font:600 .78rem/1.4 Inter; margin:8px 0 0; }
+    .pc-optmsg.ok { color:#3ad07a; }
+    .pc-optmsg.bad { color:#ff6a5a; }
     details.pc-adv { margin-top:14px; } details.pc-adv > summary { cursor:pointer; font:600 .8rem Inter; color:var(--muted); }
     /* wizard */
     .pc-progress { margin:2px 0 16px; }
@@ -149,9 +159,9 @@
         <summary>Advanced assumptions</summary>
         <div class="row2" style="margin-top:10px">
           <div class="field"><label>Hazen-Williams C</label><input id="cFactor" type="number" inputmode="decimal" value="120" /></div>
-          <div class="field"><label>Sprinkler K-factor</label><input id="kFactor" type="number" inputmode="decimal" value="5.6" /></div>
+          <div class="field"><label id="kFactorLbl">Sprinkler K-factor</label><input id="kFactor" type="number" inputmode="decimal" value="5.6" /></div>
         </div>
-        <p class="hint">Defaults: C=120 (black steel), K=5.6 (Sch 40 actual IDs). Coefficients are calibrated to reference hydraulics for OH2.</p>
+        <p class="hint" id="kFactorHint">C=120 (black steel). K-factor is auto-selected so the starting head pressure lands near 7 psi — edit to override.</p>
       </details>
     </section>
 
@@ -167,6 +177,16 @@
 
     <section class="pc-step" data-step="6" hidden>
       <div class="pc-step-title">Estimate</div>
+      <div class="pc-sizing" id="sizingEditor">
+        <div class="pc-sizing-head">Pipe sizing <span>— tweak on the fly</span></div>
+        <div class="pc-sizing-row">
+          <div class="field"><label>Main</label><select id="optMain"></select></div>
+          <div class="field" id="optSecWrap" hidden><label>Secondary</label><select id="optSec"></select></div>
+          <div class="field"><label>Branch</label><select id="optBranch"></select></div>
+        </div>
+        <button class="pc-btn" id="optimizeBtn" type="button">⚡ Optimize sizing (smallest that passes)</button>
+        <p class="pc-optmsg" id="optMsg"></p>
+      </div>
       <div class="result-card" id="resultCard" hidden>
         <p class="pc-summary" id="summary"></p>
         <div class="pc-status idle" id="supplyStatus" hidden></div>
@@ -227,7 +247,7 @@
       PrelimCalc.HAZARDS.forEach(function (h) { hz.add(new Option(h.label, h.id)); });
       hz.value = "oh2";
       showBasisGroups();
-      [["mainPipe", "4"], ["secPipe", "2.5"], ["branchPipe", "2"]].forEach(function (pair) {
+      [["mainPipe", "4"], ["secPipe", "2.5"], ["branchPipe", "2"], ["optMain", "4"], ["optSec", "2.5"], ["optBranch", "2"]].forEach(function (pair) {
         var s = el(pair[0]);
         PIPE_SIZES.forEach(function (p) { s.add(new Option(p[1], p[0])); });
         s.value = pair[1];
@@ -293,7 +313,9 @@
         branchNominal: val("branchPipe"),
         undergroundNominal: val("ugPipe"),
         undergroundLengthFt: val("ugLength"),
-        cFactor: val("cFactor"), kFactor: val("kFactor"),
+        cFactor: val("cFactor"),
+        autoSelectK: true,
+        kFactorOverride: el("kFactor").dataset.touched ? val("kFactor") : null,
         backflowType: val("bfType"),
         backflowSizeIn: el("bfSizeWrap").hidden ? null : val("bfSize"),
         gpmMarginPct: val("gpmMargin"), psiMarginPct: val("psiMargin"),
@@ -361,6 +383,22 @@
       // supply + pump
       renderSupply(r);
       window.__lastResult = r;
+      syncSizingEditor();
+
+      // step-4 K-factor field: auto-selected & editable for occupancy (da); read-only for the
+      // bases whose K is set in the design-basis step (ESFR / residential / storage density-area).
+      var kf = el("kFactor");
+      if (r.basisType === "da") {
+        kf.readOnly = false; kf.classList.remove("pc-locked");
+        if (!kf.dataset.touched) kf.value = r.autoKFactor;
+        el("kFactorLbl").textContent = "Sprinkler K-factor" + (r.kFactorIsAuto ? " (auto)" : " (override)");
+        el("kFactorHint").textContent = "C=120 (black steel). K auto-selected for a ~7 psi starting head" + (r.kFactorIsAuto ? " (now K" + r.autoKFactor + ", head " + r.headPressurePsi.toFixed(1) + " psi)." : "") + " Edit to override; clear to re-auto.";
+      } else {
+        kf.readOnly = true; kf.classList.add("pc-locked"); kf.dataset.touched = "";
+        kf.value = r.headKFactor;
+        el("kFactorLbl").textContent = "Sprinkler K-factor (locked)";
+        el("kFactorHint").textContent = "C=120. K = " + r.headKFactor + ", set in the design-basis step — not editable here.";
+      }
 
       // network-solve availability (any K-factor basis with a valid design area)
       var canSolve = r.density > 0 && r.designArea > 0 && r.headKFactor > 0 && window.HydroGrid;
@@ -372,6 +410,54 @@
     }
 
     function numv(id) { var v = parseFloat(val(id)); return isFinite(v) ? v : null; }
+
+    function syncSizingEditor() {
+      el("optMain").value = val("mainPipe");
+      el("optBranch").value = val("branchPipe");
+      var grid = val("sysType") === "grid";
+      el("optSecWrap").hidden = !grid;
+      if (grid) el("optSec").value = val("secPipe");
+    }
+
+    // Find the smallest main + branch sizes that still meet the entered supply.
+    function optimizeSizing() {
+      var msg = el("optMsg");
+      var ss = numv("sStatic"), sr = numv("sResid"), sf = numv("sFlow");
+      if (!(ss != null && sr != null && sf != null && ss > sr && sf > 0)) {
+        msg.className = "pc-optmsg bad"; msg.textContent = "Enter a water supply (static, residual, flow) on the Water supply step first — optimization needs something to size against."; return;
+      }
+      msg.className = "pc-optmsg"; msg.textContent = "Optimizing…";
+      var orig = { main: val("mainPipe"), branch: val("branchPipe"), sec: val("secPipe"), secT: el("secPipe").dataset.touched };
+      var mains = ["2", "2.5", "3", "4", "6", "8", "10"], branches = ["1", "1.25", "1.5", "2", "2.5", "3", "4"];
+      setTimeout(function () {
+        var best = null;
+        for (var bi = 0; bi < branches.length; bi++) {
+          for (var mi = 0; mi < mains.length; mi++) {
+            el("mainPipe").value = mains[mi]; el("branchPipe").value = branches[bi];
+            el("secPipe").dataset.touched = ""; refreshSystem();   // auto secondary (two sizes below main)
+            var r = PrelimCalc.calculate(gatherInputs());
+            if (r.errors && r.errors.length) continue;
+            var reqP = null, avail = null, pass = false;
+            if (window.HydroGrid && r.density > 0 && r.designArea > 0 && r.headKFactor > 0) {
+              var out = window.HydroGrid.analyze(solverInputsFrom(r));
+              if (out && out.converged && out.availablePressure != null) { reqP = out.requiredTotal; avail = out.availablePressure; pass = out.safetyMargin >= 0; }
+            }
+            if (reqP == null && r.supply && r.supply.provided && r.supply.available != null) { reqP = r.totalPsi; avail = r.supply.available; pass = avail >= reqP; }
+            if (pass) { var cost = bi + mi; if (!best || cost < best.cost) best = { main: mains[mi], branch: branches[bi], cost: cost, reqP: reqP, avail: avail }; break; }
+          }
+        }
+        if (best) {
+          el("mainPipe").value = best.main; el("branchPipe").value = best.branch; el("secPipe").dataset.touched = ""; refreshSystem();
+          syncSizingEditor(); render();
+          msg.className = "pc-optmsg ok";
+          msg.textContent = "Smallest sizing that passes: main " + sizeLabel(best.main) + (val("sysType") === "grid" ? " / secondary " + sizeLabel(val("secPipe")) : "") + ", branch " + sizeLabel(best.branch) + " — required " + best.reqP.toFixed(1) + " psi vs " + best.avail.toFixed(1) + " psi available.";
+        } else {
+          el("mainPipe").value = orig.main; el("branchPipe").value = orig.branch; el("secPipe").value = orig.sec; el("secPipe").dataset.touched = orig.secT || ""; refreshSystem();
+          syncSizingEditor(); render();
+          msg.className = "pc-optmsg bad"; msg.textContent = "Even at the largest pipe sizes the supply can't meet the demand — a fire pump is likely required.";
+        }
+      }, 30);
+    }
 
     function solverInputsFrom(r) {
       var inp = {
@@ -569,12 +655,17 @@
     el("sysType").addEventListener("change", function () { refreshSystem(); render(); });
     el("mainPipe").addEventListener("change", function () { refreshSystem(); });
     el("secPipe").addEventListener("change", function () { el("secPipe").dataset.touched = "1"; });
-    el("hazard").addEventListener("change", function () { showBasisGroups(); render(); });
+    el("hazard").addEventListener("change", function () { el("kFactor").dataset.touched = ""; showBasisGroups(); render(); });
+    el("kFactor").addEventListener("input", function () { el("kFactor").dataset.touched = el("kFactor").value === "" ? "" : "1"; render(); });
     el("exportBtn").addEventListener("click", function () {
       if (window.SFAuth && SFAuth.gateExport) { SFAuth.gateExport(exportPNG, { feature: "PNG export", body: "Run the preliminary estimate free as much as you like. Saving the report image needs a free SprinkFlow account." }); return; }
       exportPNG();
     });
     el("netSolveBtn").addEventListener("click", runNetworkSolve);
+    el("optMain").addEventListener("change", function () { el("mainPipe").value = val("optMain"); el("secPipe").dataset.touched = ""; refreshSystem(); render(); });
+    el("optBranch").addEventListener("change", function () { el("branchPipe").value = val("optBranch"); render(); });
+    el("optSec").addEventListener("change", function () { el("secPipe").value = val("optSec"); el("secPipe").dataset.touched = "1"; render(); });
+    el("optimizeBtn").addEventListener("click", optimizeSizing);
     render();
 
     // ---- wizard navigation ----
@@ -624,6 +715,12 @@
       showStep(curStep + 1);
     });
     el("pcBack").addEventListener("click", function () { showStep(curStep - 1); });
+    // The top-left app-bar back steps BACK through the wizard (so a stray tap doesn't exit
+    // the tool and wipe every input); it only leaves to the main app from step 1.
+    var appBack = document.querySelector(".app-bar .back");
+    if (appBack) appBack.addEventListener("click", function (ev) {
+      if (curStep > 1) { ev.preventDefault(); showStep(curStep - 1); }
+    });
     showStep(1);
   </script>
   <script src="./sprinkflow-auth.js"></script>
