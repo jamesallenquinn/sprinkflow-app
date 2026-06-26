@@ -362,8 +362,8 @@
       renderSupply(r);
       window.__lastResult = r;
 
-      // network-solve availability (density/area bases on a tree/grid)
-      var canSolve = (r.basisType === "da" || r.basisType === "da-custom") && window.HydroGrid;
+      // network-solve availability (any K-factor basis with a valid design area)
+      var canSolve = r.density > 0 && r.designArea > 0 && r.headKFactor > 0 && window.HydroGrid;
       el("netSolveWrap").hidden = !canSolve;
       el("netResult").hidden = true;
     }

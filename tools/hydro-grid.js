@@ -139,9 +139,13 @@
   /* Build + solve, re-anchoring so the P_min head is the true hydraulic minimum. */
   function analyze(inp) {
     var net = buildNetwork(inp);
+    // continuity tolerance scaled to the system flow (an absolute 5e-4 gpm is needlessly
+    // strict for a multi-thousand-gpm system and stalls on near-frictionless large pipe).
+    var demandEst = inp.kFactor * Math.sqrt(Math.max(net.Pmin, 1)) * net.meta.operatingHeads;
+    var tol = Math.max(5e-4, demandEst * 1e-5);
     var anchor = net.remoteId, res = null, tries = 0;
     while (tries++ < 6) {
-      res = Solver.solveNetwork(net.nodes, net.pipes, { remoteNodeId: anchor, remotePressure: net.Pmin, sourceNodeId: net.sourceId, tol: 5e-4, maxIter: 300 });
+      res = Solver.solveNetwork(net.nodes, net.pipes, { remoteNodeId: anchor, remotePressure: net.Pmin, sourceNodeId: net.sourceId, tol: tol, maxIter: 400 });
       if (!res.converged) break;
       // find the true minimum-pressure operating head
       var minId = anchor, minP = Infinity;
