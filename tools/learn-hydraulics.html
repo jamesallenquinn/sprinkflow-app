@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Learn Hydraulic Calcs — SprinkFlow</title>
+  <meta name="description" content="A progressive course on how fire sprinkler hydraulic calculations actually work — tree accumulation, sprinkler discharge, friction, loop balancing, solver behavior, and water supply." />
+  <meta name="theme-color" content="#0d1116" />
+  <link rel="manifest" href="../manifest.webmanifest" />
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="../assets/logo.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+  <style>
+    :root { --good:#3ddc97; --bad:#ff5a4f; --learn:#8b7cf6; }
+    body { overflow-x:hidden; }
+    .l-wrap { max-width:600px; margin:0 auto; padding:0 14px calc(28px + env(safe-area-inset-bottom,0px)); }
+    .src-badge { display:inline-flex; align-items:center; gap:7px; font:600 .74rem/1 Inter; letter-spacing:.02em;
+      color:var(--learn); background:rgba(139,124,246,.10); border:1px solid rgba(139,124,246,.35); border-radius:999px; padding:7px 12px; }
+
+    /* hero */
+    .hero { text-align:center; padding:24px 6px 4px; }
+    .hero .ic { font-size:48px; line-height:1; }
+    .hero h1 { font:700 1.8rem/1.1 'Space Grotesk'; margin:12px 0 6px; }
+    .hero h1 .grad { background:linear-gradient(120deg,#8b7cf6,#37b7e4); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+    .hero p { color:var(--muted); margin:0 auto 16px; max-width:46ch; }
+
+    /* overall progress */
+    .prog { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:16px; margin:18px 0 6px; }
+    .prog .top { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
+    .prog .lbl { font:600 .72rem/1 Inter; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); }
+    .prog .val { font:700 1rem 'Space Grotesk'; color:var(--ink); }
+    .prog .bar { height:9px; border-radius:999px; background:var(--surface-soft); overflow:hidden; border:1px solid var(--line); }
+    .prog .fill { height:100%; background:linear-gradient(120deg,#8b7cf6,#37b7e4); border-radius:999px; transition:width .4s ease; width:0; }
+
+    /* lesson list */
+    .lessons { display:grid; gap:12px; margin-top:14px; }
+    .lcard { width:100%; text-align:left; background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:16px; color:var(--ink);
+      cursor:pointer; display:flex; gap:14px; align-items:flex-start; transition:transform .08s, border-color .15s; font-family:Inter; }
+    .lcard:not([disabled]):active { transform:scale(.99); }
+    .lcard[disabled] { cursor:default; opacity:.62; }
+    .lcard .n { flex:none; width:38px; height:38px; border-radius:11px; display:grid; place-items:center; font:700 1.05rem 'Space Grotesk';
+      background:var(--surface-soft); border:1px solid var(--line-strong); color:var(--muted); }
+    .lcard.done .n { background:var(--good); color:#06281b; border-color:var(--good); }
+    .lcard.open .n { background:rgba(139,124,246,.16); border-color:var(--learn); color:var(--learn); }
+    .lcard .mid { flex:1; min-width:0; }
+    .lcard .t { font:700 1.04rem/1.25 'Space Grotesk'; }
+    .lcard .o { font:500 .86rem/1.4 Inter; color:var(--muted); margin-top:4px; }
+    .lcard .meta { font:600 .76rem Inter; color:var(--muted); margin-top:9px; display:flex; flex-wrap:wrap; gap:6px 12px; }
+    .lcard .state { flex:none; align-self:center; font:700 .8rem 'Space Grotesk'; padding:7px 11px; border-radius:999px; white-space:nowrap; }
+    .lcard .state.go { background:rgba(139,124,246,.16); color:var(--learn); border:1px solid rgba(139,124,246,.4); }
+    .lcard .state.ok { background:rgba(61,220,151,.14); color:var(--good); border:1px solid rgba(61,220,151,.4); }
+    .lcard .state.lock { background:var(--surface-soft); color:var(--muted); border:1px solid var(--line); }
+
+    .btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; border:0; border-radius:14px; padding:16px; font:700 1.05rem 'Space Grotesk'; cursor:pointer; }
+    .btn.primary { background:linear-gradient(120deg,#8b7cf6,#37b7e4); color:#0a0723; }
+    .btn.ghost { background:var(--surface); color:var(--ink); border:1px solid var(--line); font-weight:600; }
+    .btn + .btn { margin-top:10px; }
+    .btn-row { display:flex; gap:10px; margin-top:16px; }
+    .btn-row .btn { margin-top:0; }
+
+    /* lesson screen */
+    .crumb { display:flex; align-items:center; gap:10px; margin:8px 0 6px; }
+    .crumb button { background:none; border:0; color:var(--learn); font:600 .9rem Inter; cursor:pointer; padding:0; display:inline-flex; align-items:center; gap:4px; }
+    .crumb .pos { margin-left:auto; font:600 .8rem Inter; color:var(--muted); }
+    .qbar { height:7px; border-radius:999px; background:var(--surface-soft); border:1px solid var(--line); overflow:hidden; margin:4px 0 16px; }
+    .qbar .fill { height:100%; background:var(--learn); width:0; transition:width .3s ease; }
+
+    .concept { background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--learn); border-radius:16px; padding:18px; margin-bottom:16px; }
+    .concept .eyebrow { font:600 .68rem/1 Inter; letter-spacing:.08em; text-transform:uppercase; color:var(--learn); }
+    .concept h2 { font:700 1.3rem/1.25 'Space Grotesk'; margin:8px 0 10px; }
+    .concept .body { font:500 .98rem/1.6 Inter; color:var(--ink); }
+    .concept .outcome { margin-top:12px; font:500 .88rem/1.5 Inter; color:var(--muted); }
+    .concept .outcome b { color:var(--ink); font-weight:600; }
+
+    .qcard { background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:20px 18px; margin-bottom:16px; box-shadow:0 8px 30px rgba(0,0,0,.25); }
+    .qcard .tag { font:600 .66rem/1 Inter; letter-spacing:.08em; text-transform:uppercase; color:var(--learn); display:inline-flex; align-items:center; gap:8px; }
+    .qcard .diff { padding:3px 8px; border-radius:999px; font:700 .62rem/1 'Space Grotesk'; letter-spacing:.04em; }
+    .diff-apprentice { background:rgba(61,220,151,.14); color:var(--good); }
+    .diff-designer { background:rgba(55,183,228,.14); color:#37b7e4; }
+    .diff-solver { background:rgba(139,124,246,.16); color:var(--learn); }
+    .qcard h2 { font:600 1.2rem/1.45 'Space Grotesk'; margin:11px 0 0; color:var(--ink); }
+
+    .choices { display:grid; gap:10px; }
+    .choice { display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:var(--surface); border:1px solid var(--line); color:var(--ink);
+      border-radius:14px; padding:14px; font:500 1rem/1.4 Inter; cursor:pointer; transition:transform .08s, border-color .15s, background .15s; }
+    .choice:not([disabled]):active { transform:scale(.985); }
+    .choice .badge { flex:none; width:30px; height:30px; border-radius:9px; display:grid; place-items:center; font:700 .95rem 'Space Grotesk'; background:var(--surface-soft); border:1px solid var(--line-strong); color:var(--muted); }
+    .choice.correct { border-color:var(--good); background:rgba(61,220,151,.12); }
+    .choice.correct .badge { background:var(--good); color:#06281b; border-color:var(--good); }
+    .choice.wrong { border-color:var(--bad); background:rgba(255,90,79,.12); }
+    .choice.wrong .badge { background:var(--bad); color:#2a0a08; border-color:var(--bad); }
+    .choice[disabled] { cursor:default; }
+
+    .explain { margin-top:14px; background:var(--surface-soft); border:1px solid var(--line-strong); border-left:4px solid var(--learn); border-radius:12px; padding:14px; }
+    .explain .head { font:700 .94rem Inter; margin-bottom:7px; }
+    .explain .head.ok { color:var(--good); } .explain .head.no { color:var(--bad); }
+    .explain .body { font:500 .94rem/1.55 Inter; color:var(--ink); }
+    .explain .calc { margin-top:10px; font:600 .86rem/1.4 'Space Grotesk'; color:var(--ink); background:var(--bg); border:1px solid var(--line); border-radius:9px; padding:9px 11px; }
+    .explain .teaches { margin-top:11px; display:flex; flex-wrap:wrap; gap:6px; }
+    .explain .chip { font:600 .72rem/1 Inter; color:var(--learn); background:rgba(139,124,246,.10); border:1px solid rgba(139,124,246,.3); border-radius:999px; padding:5px 9px; }
+
+    /* results */
+    .result { text-align:center; background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:26px 20px; margin-top:6px; box-shadow:0 8px 30px rgba(0,0,0,.25); }
+    .result .ring { font:700 2.6rem/1 'Space Grotesk'; }
+    .result.pass .ring { color:var(--good); } .result.fail .ring { color:var(--bad); }
+    .result .ttl { font:700 1.25rem 'Space Grotesk'; margin:10px 0 6px; }
+    .result .msg { color:var(--muted); font:500 .95rem/1.55 Inter; max-width:42ch; margin:0 auto; }
+
+    .src-foot { text-align:center; margin-top:18px; font:500 .76rem/1.5 Inter; color:var(--muted); }
+    .hidden { display:none !important; }
+  </style>
+</head>
+<body>
+  <header class="app-bar">
+    <a class="back" href="../index.html" aria-label="Back">‹</a>
+    <div><div class="title">Learn Hydraulic Calcs</div><div class="sub">How the numbers actually work</div></div>
+  </header>
+
+  <main class="l-wrap">
+    <!-- OVERVIEW -->
+    <section id="screen-overview">
+      <div class="hero">
+        <div class="ic">📐</div>
+        <h1>Learn <span class="grad">Hydraulic Calcs</span></h1>
+        <p>A six-level course on how a fire sprinkler hydraulic calculation really works — from tree accumulation to grid solving to water supply. Pass each level to unlock the next.</p>
+        <span class="src-badge">🎓 6 levels · 35 questions · not beginner trivia</span>
+      </div>
+
+      <div class="prog">
+        <div class="top"><span class="lbl">Course progress</span><span class="val" id="progVal">0 of 6 levels passed</span></div>
+        <div class="bar"><div class="fill" id="progFill"></div></div>
+      </div>
+
+      <div class="lessons" id="lessonList"></div>
+
+      <p class="src-foot">Your progress is saved on this device. Each level requires answering every question and meeting its passing score.</p>
+    </section>
+
+    <!-- LESSON -->
+    <section id="screen-lesson" class="hidden">
+      <div class="crumb">
+        <button id="backToCourse">‹ All levels</button>
+        <span class="pos" id="lessonPos"></span>
+      </div>
+      <div class="qbar"><div class="fill" id="qbarFill"></div></div>
+
+      <!-- concept intro -->
+      <div id="conceptView">
+        <div class="concept">
+          <div class="eyebrow" id="conceptEyebrow">Level</div>
+          <h2 id="conceptTitle">—</h2>
+          <div class="body" id="conceptBody">—</div>
+          <div class="outcome" id="conceptOutcome"></div>
+        </div>
+        <button class="btn primary" id="beginBtn">▶ Begin level</button>
+      </div>
+
+      <!-- question -->
+      <div id="quizView" class="hidden">
+        <div class="qcard">
+          <div class="tag"><span id="qLevel">Level</span><span class="diff" id="qDiff">designer</span></div>
+          <h2 id="qText">—</h2>
+        </div>
+        <div class="choices" id="choices"></div>
+        <div class="explain hidden" id="explain">
+          <div class="head" id="explainHead"></div>
+          <div class="body" id="explainBody"></div>
+          <div class="calc hidden" id="explainCalc"></div>
+          <div class="teaches" id="explainTeaches"></div>
+        </div>
+        <div class="hidden" id="nextWrap" style="margin-top:16px"><button class="btn primary" id="nextBtn">Next →</button></div>
+      </div>
+
+      <!-- results -->
+      <div id="resultView" class="hidden">
+        <div class="result" id="resultCard">
+          <div class="ring" id="resultRing">0%</div>
+          <div class="ttl" id="resultTitle">—</div>
+          <div class="msg" id="resultMsg">—</div>
+        </div>
+        <div class="btn-row">
+          <button class="btn ghost" id="retryBtn">↻ Retry level</button>
+          <button class="btn primary" id="resultPrimaryBtn">Continue</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="./learn-hydraulics-course.js"></script>
+  <script>
+  (function () {
+    "use strict";
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("../sw.js").catch(function () {});
+    var C = window.HydraulicCourse;
+    var $ = function (id) { return document.getElementById(id); };
+    var letters = ["A", "B", "C", "D", "E"];
+    var STORE = "learnHydraulicResults";
+
+    function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" })[c]; }); }
+    function loadResults() { try { var v = JSON.parse(localStorage.getItem(STORE) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
+    function saveResult(r) {
+      var all = loadResults().filter(function (x) { return x.questionId !== r.questionId; });   // keep latest per question (matches engine)
+      all.push(r);
+      try { localStorage.setItem(STORE, JSON.stringify(all)); } catch (e) {}
+    }
+
+    // ---- state ----
+    var lesson = null, qIndex = 0;
+
+    function show(name) {
+      $("screen-overview").classList.add("hidden");
+      $("screen-lesson").classList.add("hidden");
+      $("screen-" + name).classList.remove("hidden");
+      window.scrollTo(0, 0);
+    }
+
+    // ---- overview ----
+    function renderOverview() {
+      var cp = C.courseProgress(loadResults());
+      var unlocked = {}; cp.unlockedLessonIds.forEach(function (id) { unlocked[id] = 1; });
+      var passedCount = cp.lessons.filter(function (l) { return l.passed; }).length;
+      $("progVal").textContent = passedCount + " of " + C.lessons.length + " levels passed";
+      $("progFill").style.width = Math.round((passedCount / C.lessons.length) * 100) + "%";
+
+      $("lessonList").innerHTML = C.lessons.map(function (l, i) {
+        var lp = cp.lessons[i];
+        var isUnlocked = !!unlocked[l.id];
+        var cls = lp.passed ? "done" : (isUnlocked ? "open" : "");
+        var stateHtml, dis = "";
+        if (lp.passed) stateHtml = '<span class="state ok">✓ ' + lp.scorePercent + '%</span>';
+        else if (isUnlocked) stateHtml = '<span class="state go">' + (lp.answered > 0 ? "↻ Retry" : "▶ Start") + '</span>';
+        else { stateHtml = '<span class="state lock">🔒 Locked</span>'; dis = " disabled"; }
+        var meta = '<span>' + l.questions.length + ' questions</span><span>Pass ≥ ' + l.unlockScore + '%</span>' +
+          (!isUnlocked && i > 0 ? '<span>Pass “' + esc(C.lessons[i - 1].title) + '” to unlock</span>' : '');
+        return '<button class="lcard ' + cls + '" data-id="' + l.id + '"' + dis + '>' +
+          '<span class="n">' + (lp.passed ? "✓" : (i + 1)) + '</span>' +
+          '<span class="mid"><span class="t">' + esc(l.title) + '</span>' +
+          '<span class="o">' + esc(l.outcome) + '</span>' +
+          '<span class="meta">' + meta + '</span></span>' +
+          stateHtml + '</button>';
+      }).join("");
+
+      [].forEach.call($("lessonList").children, function (b) {
+        if (b.disabled) return;
+        b.onclick = function () { openLesson(b.dataset.id); };
+      });
+      show("overview");
+    }
+
+    // ---- lesson ----
+    function openLesson(id) {
+      lesson = C.getLessonById(id);
+      if (!lesson) return;
+      qIndex = 0;
+      var idx = C.lessons.indexOf(lesson) + 1;
+      $("lessonPos").textContent = "Level " + idx + " of " + C.lessons.length;
+      $("conceptEyebrow").textContent = "Level " + idx + " · " + lesson.questions.length + " questions · pass ≥ " + lesson.unlockScore + "%";
+      $("conceptTitle").textContent = lesson.title;
+      $("conceptBody").textContent = lesson.concept;
+      $("conceptOutcome").innerHTML = "<b>By the end:</b> " + esc(lesson.outcome);
+      $("conceptView").classList.remove("hidden");
+      $("quizView").classList.add("hidden");
+      $("resultView").classList.add("hidden");
+      $("qbarFill").style.width = "0";
+      show("lesson");
+    }
+
+    function renderQuestion() {
+      var q = lesson.questions[qIndex];
+      $("conceptView").classList.add("hidden");
+      $("resultView").classList.add("hidden");
+      $("quizView").classList.remove("hidden");
+      $("qbarFill").style.width = Math.round((qIndex / lesson.questions.length) * 100) + "%";
+      $("qLevel").textContent = "Q" + (qIndex + 1) + " of " + lesson.questions.length;
+      $("qDiff").textContent = q.difficulty;
+      $("qDiff").className = "diff diff-" + q.difficulty;
+      $("qText").textContent = q.prompt;
+      $("explain").classList.add("hidden");
+      $("nextWrap").classList.add("hidden");
+      $("choices").innerHTML = q.choices.map(function (txt, i) {
+        return '<button class="choice" data-i="' + i + '"><span class="badge">' + letters[i] + '</span><span>' + esc(txt) + '</span></button>';
+      }).join("");
+      [].forEach.call($("choices").children, function (b) { b.onclick = function () { pick(parseInt(b.dataset.i, 10)); }; });
+    }
+
+    var locked = false;
+    function pick(choice) {
+      if (locked) return;
+      locked = true;
+      var q = lesson.questions[qIndex];
+      var graded = C.gradeAnswer(q.id, choice);
+      saveResult(graded);
+      [].forEach.call($("choices").children, function (b) {
+        var i = parseInt(b.dataset.i, 10);
+        b.disabled = true;
+        if (i === q.answerIndex) b.classList.add("correct");
+        else if (i === choice) b.classList.add("wrong");
+      });
+      $("explainHead").className = "head " + (graded.correct ? "ok" : "no");
+      $("explainHead").textContent = graded.correct ? "✓ Correct" : "✗ Correct answer: " + letters[q.answerIndex];
+      $("explainBody").textContent = q.explanation;
+      if (q.calculationNote) { $("explainCalc").textContent = "🧮  " + q.calculationNote; $("explainCalc").classList.remove("hidden"); }
+      else $("explainCalc").classList.add("hidden");
+      $("explainTeaches").innerHTML = (q.teaches || []).map(function (t) { return '<span class="chip">' + esc(t) + '</span>'; }).join("");
+      $("explain").classList.remove("hidden");
+      $("nextBtn").textContent = qIndex + 1 >= lesson.questions.length ? "See results →" : "Next →";
+      $("nextWrap").classList.remove("hidden");
+    }
+
+    function next() {
+      locked = false;
+      if (qIndex + 1 >= lesson.questions.length) { finishLesson(); return; }
+      qIndex++;
+      renderQuestion();
+    }
+
+    function finishLesson() {
+      var lp = C.lessonProgress(lesson.id, loadResults());
+      var idx = C.lessons.indexOf(lesson);
+      var nextLesson = C.lessons[idx + 1];
+      $("qbarFill").style.width = "100%";
+      $("quizView").classList.add("hidden");
+      $("conceptView").classList.add("hidden");
+      $("resultView").classList.remove("hidden");
+      $("resultRing").textContent = lp.scorePercent + "%";
+      $("resultCard").className = "result " + (lp.passed ? "pass" : "fail");
+      if (lp.passed) {
+        $("resultTitle").textContent = "Level passed! 🎉";
+        $("resultMsg").textContent = "You scored " + lp.scorePercent + "% (" + lp.correct + " of " + lp.answered + "). " +
+          (nextLesson ? "The next level, “" + nextLesson.title + ",” is now unlocked." : "That was the final level — you’ve completed the course.");
+        $("resultPrimaryBtn").textContent = nextLesson ? "Next level →" : "Back to levels";
+        $("resultPrimaryBtn").onclick = function () { if (nextLesson) openLesson(nextLesson.id); else renderOverview(); };
+      } else {
+        $("resultTitle").textContent = "Not quite — keep going";
+        $("resultMsg").textContent = "You scored " + lp.scorePercent + "%. You need " + lesson.unlockScore + "% to pass this level. Review the explanations and retry — your best answers are kept.";
+        $("resultPrimaryBtn").textContent = "Back to levels";
+        $("resultPrimaryBtn").onclick = renderOverview;
+      }
+      window.scrollTo(0, 0);
+    }
+
+    $("beginBtn").onclick = function () { qIndex = 0; renderQuestion(); };
+    $("nextBtn").onclick = next;
+    $("retryBtn").onclick = function () { openLesson(lesson.id); };
+    $("backToCourse").onclick = renderOverview;
+
+    renderOverview();
+  })();
+  </script>
+</body>
+</html>
