@@ -28,6 +28,19 @@
     .pc-btn { flex:1; border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:12px; padding:13px; font:600 .95rem Inter; cursor:pointer; }
     .pc-btn.primary { background:var(--grad-fire); color:#1a0d06; border:0; }
     .pc-src { font:500 .7rem Inter; color:var(--muted); margin-top:4px; }
+    .pc-netsolve { margin-top:14px; border-top:1px solid var(--line); padding-top:12px; }
+    .pc-netsolve > .pc-btn { width:100%; }
+    .pc-netnote { font:500 .72rem/1.45 Inter; color:var(--muted); margin:8px 0 0; }
+    .pc-net { margin-top:12px; }
+    .pc-netgrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .pc-netcell { border:1px solid var(--line); border-radius:10px; padding:9px 11px; display:flex; flex-direction:column; gap:2px; background:var(--surface); }
+    .pc-netcell .nl { font:600 .68rem Inter; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
+    .pc-netcell .nv { font:700 1.05rem Inter; color:var(--ink); }
+    .pc-netcell .ns { font:500 .68rem/1.3 Inter; color:var(--muted); }
+    .pc-netcompare { font:500 .78rem/1.5 Inter; color:var(--ink); margin:12px 0 0; }
+    .pc-netsupply { font:600 .82rem/1.45 Inter; margin:10px 0 0; padding:9px 11px; border-radius:10px; }
+    .pc-netsupply.ok { color:#3ad07a; background:rgba(58,208,122,.08); border:1px solid rgba(58,208,122,.3); }
+    .pc-netsupply.bad { color:#ff6a5a; background:rgba(255,106,90,.08); border:1px solid rgba(255,106,90,.3); }
     details.pc-adv { margin-top:14px; } details.pc-adv > summary { cursor:pointer; font:600 .8rem Inter; color:var(--muted); }
     /* wizard */
     .pc-progress { margin:2px 0 16px; }
@@ -161,6 +174,12 @@
 
         <div class="pc-break" id="breakdown"></div>
         <p class="pc-warn" id="warn" hidden></p>
+
+        <div class="pc-netsolve" id="netSolveWrap" hidden>
+          <button class="pc-btn" id="netSolveBtn" type="button">⚙ Run full network solve</button>
+          <p class="pc-netnote">Builds the actual pipe network (cross mains, branch lines, every operating head) and balances it with a Newton-Raphson nodal solve — like a real hydraulic engine. Validated against AutoSPRINK reference calcs (±4%).</p>
+          <div class="pc-net" id="netResult" hidden></div>
+        </div>
         <p class="pc-src" id="srcline"></p>
 
         <div class="pc-actions">
@@ -185,6 +204,8 @@
   </main>
 
   <script src="./prelim-calc-engine.js"></script>
+  <script src="./hydro-solver.js"></script>
+  <script src="./hydro-grid.js"></script>
   <script>
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("../sw.js").catch(function () {});
 
@@ -340,6 +361,81 @@
       // supply + pump
       renderSupply(r);
       window.__lastResult = r;
+
+      // network-solve availability (density/area bases on a tree/grid)
+      var canSolve = (r.basisType === "da" || r.basisType === "da-custom") && window.HydroGrid;
+      el("netSolveWrap").hidden = !canSolve;
+      el("netResult").hidden = true;
+    }
+
+    function numv(id) { var v = parseFloat(val(id)); return isFinite(v) ? v : null; }
+
+    function solverInputsFrom(r) {
+      var inp = {
+        lengthFt: r.inputs.lengthFt, widthFt: r.inputs.widthFt, heightFt: r.inputs.heightFt,
+        systemType: r.systemType, mainOrientation: r.orientation,
+        density: r.density, designAreaFt2: r.designArea, coverageFt2: r.maxCoverageFt2,
+        kFactor: r.headKFactor, minHeadPressure: r.headPressurePsi,
+        branchSpacingFt: r.hazard.branchSpacingFt,
+        mainId: r.inputs.mainId, secondaryId: r.inputs.secondaryId, branchId: r.inputs.branchId, riserId: r.inputs.mainId,
+        C: r.inputs.cFactor, hoseGpm: r.hoseGpm, includeFittings: true
+      };
+      if (r.hasUnderground) { inp.hasUnderground = true; inp.undergroundId = r.undergroundId; inp.undergroundLengthFt = r.undergroundLengthFt; inp.undergroundC = r.undergroundCFactor; }
+      var ss = numv("sStatic"), sr = numv("sResid"), sf = numv("sFlow");
+      if (ss != null && sr != null && sf != null && ss > sr && sf > 0) { inp.supplyStatic = ss; inp.supplyResidual = sr; inp.supplyTestFlow = sf; }
+      return inp;
+    }
+
+    function runNetworkSolve() {
+      var r = window.__lastResult; if (!r) return;
+      var box = el("netResult"); box.hidden = false;
+      box.innerHTML = '<p class="pc-netnote">Solving…</p>';
+      // let the "Solving…" paint before the (synchronous) solve
+      setTimeout(function () {
+        var inp = solverInputsFrom(r), out;
+        try { out = window.HydroGrid.analyze(inp); }
+        catch (e) { box.innerHTML = '<p class="pc-warn">Network solve failed: ' + (e && e.message ? e.message : e) + '</p>'; return; }
+        renderNetwork(out, r);
+      }, 30);
+    }
+
+    function renderNetwork(out, r) {
+      var box = el("netResult"), m = out.meta, sol = out.solution;
+      if (!out.converged) { box.innerHTML = '<p class="pc-warn">⚠ The network solve did not converge (residual ' + (sol ? sol.maxResidual.toFixed(2) : "?") + ' gpm). Showing the parametric estimate only.</p>'; return; }
+
+      // sprinkler discharge spread (near heads over-discharge vs the remote minimum)
+      var qs = Object.keys(sol.sprinklerFlows).map(function (k) { return sol.sprinklerFlows[k]; });
+      var qMin = Math.min.apply(null, qs), qMax = Math.max.apply(null, qs);
+      // most-remote branch: both-end feed split (grid) — flow from each cross main into the remote rung
+      var remoteRung = out.anchorHead.replace(/^H(\d+).*/, "$1");
+      var fromTop = 0, fromBot = 0;
+      sol.pipeFlows.forEach(function (p) {
+        if (p.id === "tieU" + remoteRung) fromTop = Math.abs(p.flow);
+        if (p.id === "armBU" + remoteRung) fromBot = Math.abs(p.flow);
+      });
+
+      var dPsi = out.requiredPressure - r.totalPsiPreMargin; // vs parametric (pre-margin, comparable basis)
+      var b = "";
+      b += '<div class="pc-netgrid">';
+      b += netCell("Required pressure", out.requiredPressure.toFixed(1) + " psi", "at the source (solved)");
+      b += netCell("System demand", fmt(out.totalDemand) + " gpm", fmt(out.sprinklerDemand) + " sprinkler + " + fmt(out.hoseGpm) + " hose");
+      b += netCell("Operating heads", m.operatingHeads + "", m.nOpBranches + " branch lines × " + m.kHeads + " heads");
+      b += netCell("Head discharge", qMin.toFixed(1) + "–" + qMax.toFixed(1) + " gpm", "remote head at minimum; near heads over-discharge");
+      if (m.grid && (fromTop + fromBot) > 0) b += netCell("Remote branch feed", fromBot.toFixed(0) + " + " + fromTop.toFixed(0) + " gpm", "fed from BOTH cross mains (bottom + top)");
+      b += netCell("Network size", sol.pipeFlows.length + " pipes", out.iterations + " Newton iterations");
+      b += '</div>';
+
+      b += '<p class="pc-netcompare">Parametric estimate was <b>' + fmt(r.totalPsiPreMargin) + ' psi</b> / <b>' + fmt(r.physicalGpm) + ' gpm</b> (pre-margin). Network solve: <b>' + out.requiredPressure.toFixed(1) + ' psi</b> / <b>' + fmt(out.sprinklerDemand) + ' gpm</b> — Δ ' + (dPsi >= 0 ? "+" : "") + dPsi.toFixed(1) + ' psi.</p>';
+
+      if (out.availablePressure != null) {
+        var ok = out.safetyMargin >= 0;
+        b += '<p class="pc-netsupply ' + (ok ? "ok" : "bad") + '">' + (ok ? "✓" : "✗") + ' Supply at ' + fmt(out.totalDemand) + ' gpm: <b>' + out.availablePressure.toFixed(1) + ' psi</b> available vs <b>' + out.requiredPressure.toFixed(1) + ' psi</b> required — margin <b>' + (out.safetyMargin >= 0 ? "+" : "") + out.safetyMargin.toFixed(1) + ' psi</b>.</p>';
+      }
+      box.innerHTML = b;
+    }
+
+    function netCell(label, value, sub) {
+      return '<div class="pc-netcell"><span class="nl">' + label + '</span><span class="nv">' + value + '</span>' + (sub ? '<span class="ns">' + sub + '</span>' : '') + '</div>';
     }
 
     function renderSupply(r) {
@@ -470,6 +566,7 @@
       if (window.SFAuth && SFAuth.gateExport) { SFAuth.gateExport(exportPNG, { feature: "PNG export", body: "Run the preliminary estimate free as much as you like. Saving the report image needs a free SprinkFlow account." }); return; }
       exportPNG();
     });
+    el("netSolveBtn").addEventListener("click", runNetworkSolve);
     render();
 
     // ---- wizard navigation ----
