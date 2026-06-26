@@ -293,8 +293,8 @@
     var hazard = hazardById(inputs.hazardId);
     var C = num(inputs.cFactor) || DEFAULT_C;
     var K = num(inputs.kFactor) || DEFAULT_K;
-    var gpmMargin = (inputs.gpmMarginPct == null ? 15 : num(inputs.gpmMarginPct)) || 0;
-    var psiMargin = (inputs.psiMarginPct == null ? 15 : num(inputs.psiMarginPct)) || 0;
+    var gpmMargin = (inputs.gpmMarginPct == null ? 5 : num(inputs.gpmMarginPct)) || 0;
+    var psiMargin = (inputs.psiMarginPct == null ? 10 : num(inputs.psiMarginPct)) || 0;
     var systemType = (inputs.systemType === "grid") ? "grid" : "tree";
     var orientation = (inputs.mainOrientation === "width") ? "width" : "length";
 
