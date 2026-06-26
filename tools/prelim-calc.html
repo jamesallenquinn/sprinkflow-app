@@ -29,6 +29,17 @@
     .pc-btn.primary { background:var(--grad-fire); color:#1a0d06; border:0; }
     .pc-src { font:500 .7rem Inter; color:var(--muted); margin-top:4px; }
     details.pc-adv { margin-top:14px; } details.pc-adv > summary { cursor:pointer; font:600 .8rem Inter; color:var(--muted); }
+    /* wizard */
+    .pc-progress { margin:2px 0 16px; }
+    .pc-dots { display:flex; gap:8px; justify-content:center; margin-bottom:8px; }
+    .pc-dot { width:9px; height:9px; border-radius:50%; border:0; padding:0; background:var(--line); cursor:pointer; transition:transform .15s, background .15s; }
+    .pc-dot.done { background:var(--accent, #ff7a3c); opacity:.5; }
+    .pc-dot.active { background:var(--accent, #ff7a3c); transform:scale(1.3); }
+    .pc-steplabel { text-align:center; font:700 .72rem Inter; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+    .pc-step-title { font:700 1.2rem 'Space Grotesk', Inter; color:var(--ink); margin:4px 0 14px; }
+    .pc-optional { color:var(--muted); font-weight:500; font-size:.82rem; text-transform:none; }
+    .pc-nav { display:flex; gap:10px; margin-top:18px; }
+    .pc-nav .pc-btn { flex:1; }
   </style>
 </head>
 <body>
@@ -37,89 +48,112 @@
     <div><div class="title">Preliminary Calculation</div><div class="sub">Early sprinkler demand &amp; feasibility estimate</div></div>
   </header>
 
-  <main class="tool-page">
-    <div class="sub-h">Building</div>
-    <div class="row2">
-      <div class="field"><label>Length (ft or ft-in)</label><input id="len" type="text" inputmode="decimal" placeholder="e.g. 200 or 200-6" /></div>
-      <div class="field"><label>Width (ft or ft-in)</label><input id="wid" type="text" inputmode="decimal" placeholder="e.g. 100 or 100-6" /></div>
-    </div>
-    <div class="field"><label>Height (ft or ft-in)</label><input id="hgt" type="text" inputmode="decimal" placeholder="e.g. 16 or 15-2 to highest sprinkler" /></div>
-    <div class="field"><label>Occupancy hazard classification</label>
-      <select id="hazard"></select>
+  <main class="tool-page pc-wizard">
+    <div class="pc-progress">
+      <div class="pc-dots" id="pcDots"></div>
+      <div class="pc-steplabel" id="pcStepLabel"></div>
     </div>
 
-    <div class="sub-h">System</div>
-    <div class="row2">
-      <div class="field"><label>System type</label>
-        <select id="sysType"><option value="tree">Tree</option><option value="grid">Grid</option></select>
+    <section class="pc-step" data-step="1">
+      <div class="pc-step-title">Building</div>
+      <div class="row2">
+        <div class="field"><label>Length (ft or ft-in)</label><input id="len" type="text" inputmode="decimal" placeholder="e.g. 200 or 200-6" /></div>
+        <div class="field"><label>Width (ft or ft-in)</label><input id="wid" type="text" inputmode="decimal" placeholder="e.g. 100 or 100-6" /></div>
       </div>
-      <div class="field"><label>Mains run along the…</label>
-        <select id="mainOrient"><option value="length">Length</option><option value="width">Width</option></select>
+      <div class="field"><label>Height (ft or ft-in)</label><input id="hgt" type="text" inputmode="decimal" placeholder="e.g. 16 or 15-2 to highest sprinkler" /></div>
+      <div class="field"><label>Occupancy hazard classification</label>
+        <select id="hazard"></select>
       </div>
-    </div>
+      <p class="hint">Building footprint, height to the highest sprinkler, and the occupancy hazard.</p>
+    </section>
 
-    <div class="sub-h">Piping</div>
-    <div class="row2">
-      <div class="field"><label id="mainPipeLbl">Max main pipe size</label><select id="mainPipe"></select></div>
-      <div class="field" id="secPipeWrap" hidden><label>Secondary main size</label><select id="secPipe"></select></div>
-    </div>
-    <div class="field"><label>Max branchline pipe size</label><select id="branchPipe"></select></div>
-    <div class="row2">
-      <div class="field"><label>Underground main (ductile iron)</label><select id="ugPipe"></select></div>
-      <div class="field"><label>Underground length (ft or ft-in)</label><input id="ugLength" type="text" inputmode="decimal" placeholder="optional, e.g. 150" /></div>
-    </div>
-
-    <div class="sub-h">Backflow preventer</div>
-    <div class="row2">
-      <div class="field"><label>Assembly type</label><select id="bfType"></select></div>
-      <div class="field" id="bfSizeWrap" hidden><label>Backflow line size</label><select id="bfSize"></select></div>
-    </div>
-
-    <div class="sub-h">Safety margin</div>
-    <div class="row2">
-      <div class="field"><label>Flow (GPM) margin %</label><input id="gpmMargin" type="number" inputmode="decimal" value="5" /></div>
-      <div class="field"><label>Pressure (PSI) margin %</label><input id="psiMargin" type="number" inputmode="decimal" value="10" /></div>
-    </div>
-
-    <div class="sub-h">Known water supply (optional)</div>
-    <div class="row2">
-      <div class="field"><label>Static (psi)</label><input id="sStatic" type="number" inputmode="decimal" placeholder="psi" /></div>
-      <div class="field"><label>Residual (psi)</label><input id="sResid" type="number" inputmode="decimal" placeholder="psi" /></div>
-    </div>
-    <div class="field"><label>Flow at residual (gpm)</label><input id="sFlow" type="number" inputmode="decimal" placeholder="gpm" /></div>
-
-    <details class="pc-adv">
-      <summary>Advanced assumptions</summary>
-      <div class="row2" style="margin-top:10px">
-        <div class="field"><label>Hazen-Williams C</label><input id="cFactor" type="number" inputmode="decimal" value="120" /></div>
-        <div class="field"><label>Sprinkler K-factor</label><input id="kFactor" type="number" inputmode="decimal" value="5.6" /></div>
+    <section class="pc-step" data-step="2" hidden>
+      <div class="pc-step-title">System layout</div>
+      <div class="row2">
+        <div class="field"><label>System type</label>
+          <select id="sysType"><option value="tree">Tree</option><option value="grid">Grid</option></select>
+        </div>
+        <div class="field"><label>Mains run along the…</label>
+          <select id="mainOrient"><option value="length">Length</option><option value="width">Width</option></select>
+        </div>
       </div>
-      <p class="hint">Defaults: C=120 (black steel), K=5.6 (Sch 40 actual IDs). Friction coefficients are calibrated to reference hydraulic results for OH2 — a tree main runs length + ½ width; grid mains feed from both ends (primary + secondary in parallel) and over-discharge less than trees.</p>
-    </details>
+      <p class="hint">Tree = single feed main with dead-end branch lines. Grid = branch lines fed from two parallel mains (lower friction, demand near theoretical).</p>
+    </section>
 
-    <div class="result-card" id="resultCard" hidden>
-      <p class="pc-summary" id="summary"></p>
-      <div class="pc-status idle" id="supplyStatus" hidden></div>
-      <svg id="chart" viewBox="0 0 340 220" style="width:100%;height:auto;margin-top:6px" hidden></svg>
-
-      <div class="pc-break" id="breakdown"></div>
-      <p class="pc-warn" id="warn" hidden></p>
-      <p class="pc-src" id="srcline"></p>
-
-      <div class="pc-actions">
-        <button class="pc-btn primary" id="exportBtn">⬇ Export estimate (PNG)</button>
+    <section class="pc-step" data-step="3" hidden>
+      <div class="pc-step-title">Piping</div>
+      <div class="row2">
+        <div class="field"><label id="mainPipeLbl">Max main pipe size</label><select id="mainPipe"></select></div>
+        <div class="field" id="secPipeWrap" hidden><label>Secondary main size</label><select id="secPipe"></select></div>
       </div>
+      <div class="field"><label>Max branchline pipe size</label><select id="branchPipe"></select></div>
+      <div class="row2">
+        <div class="field"><label>Underground main (ductile iron)</label><select id="ugPipe"></select></div>
+        <div class="field"><label>Underground length (ft or ft-in)</label><input id="ugLength" type="text" inputmode="decimal" placeholder="optional, e.g. 150" /></div>
+      </div>
+      <p class="hint">Underground is optional — leave the size at “none” if there's no supply lateral to include.</p>
+    </section>
+
+    <section class="pc-step" data-step="4" hidden>
+      <div class="pc-step-title">Backflow &amp; safety margin</div>
+      <div class="row2">
+        <div class="field"><label>Backflow assembly</label><select id="bfType"></select></div>
+        <div class="field" id="bfSizeWrap" hidden><label>Backflow line size</label><select id="bfSize"></select></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Flow (GPM) margin %</label><input id="gpmMargin" type="number" inputmode="decimal" value="5" /></div>
+        <div class="field"><label>Pressure (PSI) margin %</label><input id="psiMargin" type="number" inputmode="decimal" value="10" /></div>
+      </div>
+      <details class="pc-adv">
+        <summary>Advanced assumptions</summary>
+        <div class="row2" style="margin-top:10px">
+          <div class="field"><label>Hazen-Williams C</label><input id="cFactor" type="number" inputmode="decimal" value="120" /></div>
+          <div class="field"><label>Sprinkler K-factor</label><input id="kFactor" type="number" inputmode="decimal" value="5.6" /></div>
+        </div>
+        <p class="hint">Defaults: C=120 (black steel), K=5.6 (Sch 40 actual IDs). Coefficients are calibrated to reference hydraulics for OH2.</p>
+      </details>
+    </section>
+
+    <section class="pc-step" data-step="5" hidden>
+      <div class="pc-step-title">Water supply <span class="pc-optional">(optional)</span></div>
+      <div class="row2">
+        <div class="field"><label>Static (psi)</label><input id="sStatic" type="number" inputmode="decimal" placeholder="psi" /></div>
+        <div class="field"><label>Residual (psi)</label><input id="sResid" type="number" inputmode="decimal" placeholder="psi" /></div>
+      </div>
+      <div class="field"><label>Flow at residual (gpm)</label><input id="sFlow" type="number" inputmode="decimal" placeholder="gpm" /></div>
+      <p class="hint">Enter a flow test to check whether the supply meets the demand and get a preliminary pump recommendation. Skip if unknown.</p>
+    </section>
+
+    <section class="pc-step" data-step="6" hidden>
+      <div class="pc-step-title">Estimate</div>
+      <div class="result-card" id="resultCard" hidden>
+        <p class="pc-summary" id="summary"></p>
+        <div class="pc-status idle" id="supplyStatus" hidden></div>
+        <svg id="chart" viewBox="0 0 340 220" style="width:100%;height:auto;margin-top:6px" hidden></svg>
+
+        <div class="pc-break" id="breakdown"></div>
+        <p class="pc-warn" id="warn" hidden></p>
+        <p class="pc-src" id="srcline"></p>
+
+        <div class="pc-actions">
+          <button class="pc-btn primary" id="exportBtn">⬇ Export estimate (PNG)</button>
+        </div>
+      </div>
+
+      <p class="hint" id="err" data-tone="error"></p>
+
+      <p class="pc-disclaimer">
+        <b>Preliminary estimating / feasibility tool only.</b> Early theoretical demand from simplified,
+        calibrated assumptions (idealized tree/grid geometry, density/area design point, chart-derived
+        backflow loss). It does <b>not</b> replace a full NFPA 13 hydraulic calculation or engineering review.
+      </p>
+    </section>
+
+    <div class="pc-nav">
+      <button class="pc-btn" id="pcBack" type="button">‹ Back</button>
+      <button class="pc-btn primary" id="pcNext" type="button">Next ›</button>
     </div>
-
-    <p class="hint" id="err" data-tone="error"></p>
-
-    <p class="pc-disclaimer">
-      <b>Preliminary estimating / feasibility tool only.</b> This produces an early theoretical
-      demand estimate from simplified, calibrated assumptions (idealized tree/grid geometry,
-      density/area design point, chart-derived backflow loss). It does <b>not</b> replace a full
-      NFPA 13 hydraulic calculation or engineering review. Verify all values against current code
-      and manufacturer data.
-    </p>
+    <p class="hint" id="pcStepHint" data-tone="error"></p>
   </main>
 
   <script src="./prelim-calc-engine.js"></script>
@@ -396,6 +430,55 @@
       exportPNG();
     });
     render();
+
+    // ---- wizard navigation ----
+    var STEP_TITLES = ["Building", "System", "Piping", "Backflow & margin", "Water supply", "Estimate"];
+    var STEP_COUNT = STEP_TITLES.length;
+    var curStep = 1;
+    var steps = [].slice.call(document.querySelectorAll(".pc-step"));
+
+    var dotsWrap = el("pcDots");
+    for (var di = 0; di < STEP_COUNT; di++) {
+      (function (idx) {
+        var d = document.createElement("button");
+        d.type = "button"; d.className = "pc-dot"; d.setAttribute("aria-label", "Go to step " + (idx + 1) + " — " + STEP_TITLES[idx]);
+        d.addEventListener("click", function () { showStep(idx + 1); });
+        dotsWrap.appendChild(d);
+      })(di);
+    }
+
+    function validateStep(n) {
+      if (n === 1) {
+        var L = PrelimCalc.parseFeetInches(val("len")), W = PrelimCalc.parseFeetInches(val("wid")), H = PrelimCalc.parseFeetInches(val("hgt"));
+        if (!(L > 0) || !(W > 0) || H == null || H < 0) return "Enter building length, width, and height to continue.";
+      }
+      return "";
+    }
+
+    function showStep(n) {
+      curStep = Math.max(1, Math.min(STEP_COUNT, n));
+      steps.forEach(function (s) { s.hidden = (parseInt(s.dataset.step, 10) !== curStep); });
+      el("pcStepLabel").textContent = "Step " + curStep + " of " + STEP_COUNT + " · " + STEP_TITLES[curStep - 1];
+      [].forEach.call(dotsWrap.children, function (d, i) {
+        d.classList.toggle("active", i + 1 === curStep);
+        d.classList.toggle("done", i + 1 < curStep);
+      });
+      el("pcBack").style.display = curStep === 1 ? "none" : "";
+      var next = el("pcNext");
+      if (curStep === STEP_COUNT) { next.style.display = "none"; }
+      else { next.style.display = ""; next.textContent = (curStep === STEP_COUNT - 1) ? "See estimate ›" : "Next ›"; }
+      el("pcStepHint").textContent = "";
+      if (curStep === STEP_COUNT) render();
+      window.scrollTo(0, 0);
+    }
+
+    el("pcNext").addEventListener("click", function () {
+      var msg = validateStep(curStep);
+      if (msg) { el("pcStepHint").textContent = msg; return; }
+      showStep(curStep + 1);
+    });
+    el("pcBack").addEventListener("click", function () { showStep(curStep - 1); });
+    showStep(1);
   </script>
   <script src="./sprinkflow-auth.js"></script>
 </body>
