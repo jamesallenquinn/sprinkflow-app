@@ -30,16 +30,22 @@
    * coverageFt2 = assumed max protection area per sprinkler (for head-pressure est.)
    * branchSpacingFt = assumed branch line spacing (for branch tributary flow est.)
    */
-  //  maxCoverageFt2 = NFPA max protection area per sprinkler — used for the START HEAD
-  //    PRESSURE (worst case: a max-spaced head must flow density over the largest area).
-  //  coverageFt2 = typical/design coverage (~80% of max — real layouts aren't max-spaced)
-  //    used only for the SPRINKLER COUNT take-off; user-adjustable.
+  //  Design-basis list. `type` selects how demand + head pressure are computed:
+  //    "da"        — density/area occupancy (LH/OH/EH): demand = density x designArea.
+  //    "da-custom" — storage density/area (user enters density + area, e.g. 0.60 / 2000).
+  //    "residential" — (n) heads x flow/head; head P = (flow/K)^2 (default 4 @ 13 gpm, K4.9).
+  //    "esfr"      — storage ESFR/FM: (n) heads x K x sqrt(P); head P = P (e.g. 12, K22.4, 50 psi).
+  //  maxCoverageFt2 = NFPA max protection area per sprinkler — drives head PRESSURE (worst
+  //  case) and the sprinkler COUNT take-off. kFactor is the head K for the basis.
   var HAZARDS = [
-    { id: "light", label: "Light Hazard",        density: 0.10, designArea: 1500, hoseGpm: 100, durationMin: 30,  coverageFt2: 180, maxCoverageFt2: 225, branchSpacingFt: 14, ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" },
-    { id: "oh1",   label: "Ordinary Hazard 1",   density: 0.15, designArea: 1500, hoseGpm: 250, durationMin: 90,  coverageFt2: 100, maxCoverageFt2: 130, branchSpacingFt: 10, ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" },
-    { id: "oh2",   label: "Ordinary Hazard 2",   density: 0.20, designArea: 1500, hoseGpm: 250, durationMin: 90,  coverageFt2: 100, maxCoverageFt2: 130, branchSpacingFt: 10, ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" },
-    { id: "eh1",   label: "Extra Hazard 1",      density: 0.30, designArea: 2500, hoseGpm: 500, durationMin: 120, coverageFt2: 80,  maxCoverageFt2: 100, branchSpacingFt: 10, ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" },
-    { id: "eh2",   label: "Extra Hazard 2",      density: 0.40, designArea: 2500, hoseGpm: 500, durationMin: 120, coverageFt2: 80,  maxCoverageFt2: 100, branchSpacingFt: 10, ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" }
+    { id: "light", label: "Light Hazard",            type: "da", density: 0.10, designArea: 1500, hoseGpm: 100, durationMin: 30,  maxCoverageFt2: 225, branchSpacingFt: 14, kFactor: 5.6,  ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" },
+    { id: "oh1",   label: "Ordinary Hazard 1",       type: "da", density: 0.15, designArea: 1500, hoseGpm: 250, durationMin: 90,  maxCoverageFt2: 130, branchSpacingFt: 10, kFactor: 5.6,  ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" },
+    { id: "oh2",   label: "Ordinary Hazard 2",       type: "da", density: 0.20, designArea: 1500, hoseGpm: 250, durationMin: 90,  maxCoverageFt2: 130, branchSpacingFt: 10, kFactor: 5.6,  ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" },
+    { id: "eh1",   label: "Extra Hazard 1",          type: "da", density: 0.30, designArea: 2500, hoseGpm: 500, durationMin: 120, maxCoverageFt2: 100, branchSpacingFt: 10, kFactor: 5.6,  ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" },
+    { id: "eh2",   label: "Extra Hazard 2",          type: "da", density: 0.40, designArea: 2500, hoseGpm: 500, durationMin: 120, maxCoverageFt2: 100, branchSpacingFt: 10, kFactor: 5.6,  ref: "NFPA 13 Table 19.2.3.1.1 / 19.2.3.1.2" },
+    { id: "res",   label: "Residential (4 heads)",   type: "residential", heads: 4, flowPerHead: 13, kFactor: 4.9, hoseGpm: 0, durationMin: 30, maxCoverageFt2: 144, branchSpacingFt: 12, ref: "NFPA 13R/13D residential (4 most-remote heads)" },
+    { id: "storage-da",   label: "Storage — Density / Area", type: "da-custom", density: 0.60, designArea: 2000, hoseGpm: 500, durationMin: 120, maxCoverageFt2: 100, branchSpacingFt: 10, kFactor: 16.8, ref: "NFPA 13 storage (CMDA/CMSA) — use the Storage Analysis tool for criteria" },
+    { id: "storage-esfr", label: "Storage — ESFR / FM",      type: "esfr", heads: 12, kFactor: 22.4, psi: 50, hoseGpm: 250, durationMin: 60, maxCoverageFt2: 100, branchSpacingFt: 10, ref: "NFPA 13 storage (ESFR) — use the Storage Analysis tool for criteria" }
   ];
 
   function hazardById(id) {
@@ -318,28 +324,66 @@
 
     if (errors.length) return { errors: errors, warnings: warnings };
 
-    // 1) Sprinkler demand. Theoretical minimum = density x design area. Real systems
-    //    discharge above this ("overflow"): trees more (pressure imbalance), grids less
-    //    (balanced). The overage factor models that; the GPM safety margin is an added
-    //    user cushion on top. Friction is computed at the estimated (physical) demand.
-    var sprinklerBaseGpm = hazard.density * hazard.designArea;          // theoretical min
-    var overageFactor = OVERAGE[systemType];
+    // 1-3) Demand, head pressure, and an "effective design area" (for the branch geometry)
+    //      depend on the design basis. maxCoverage (NFPA max) drives head pressure (worst
+    //      case = max-spaced) and the sprinkler count. The GPM safety margin is added on top.
+    var basisType = hazard.type || "da";
+    var maxCoverage = num(inputs.maxCoverageFt2) || hazard.maxCoverageFt2;
+    var headFlow, headPressure, headK = K, density, designArea, sprinklerBaseGpm, effDesignArea, overageFactor, hoseGpm, basisText, basisSub;
+    var resHeads = null, resK = null, resFlowPerHead = null, esfrHeads = null, esfrK = null, esfrPsi = null;
+    var hoseOverride = num(inputs.hoseGpm);
+
+    if (basisType === "residential") {
+      resHeads = num(inputs.resHeads) || hazard.heads;
+      resK = num(inputs.resK) || hazard.kFactor;
+      resFlowPerHead = num(inputs.resFlowPerHead) || hazard.flowPerHead;
+      sprinklerBaseGpm = resHeads * resFlowPerHead;
+      headPressure = Math.pow(resFlowPerHead / resK, 2);
+      headK = resK; headFlow = resFlowPerHead;
+      effDesignArea = resHeads * maxCoverage;
+      density = resFlowPerHead / maxCoverage;          // equivalent density for branch geometry
+      designArea = effDesignArea;
+      overageFactor = 1;                               // demand is specified directly, no overflow
+      hoseGpm = (hoseOverride == null) ? hazard.hoseGpm : hoseOverride;
+      basisText = "(" + resHeads + ") residential heads @ " + resFlowPerHead + " gpm";
+      basisSub = "K=" + resK + " — " + resHeads + " most-remote heads";
+    } else if (basisType === "esfr") {
+      esfrHeads = num(inputs.esfrHeads) || hazard.heads;
+      esfrK = num(inputs.esfrK) || hazard.kFactor;
+      esfrPsi = num(inputs.esfrPsi) || hazard.psi;
+      headFlow = esfrK * Math.sqrt(esfrPsi);
+      sprinklerBaseGpm = esfrHeads * headFlow;
+      headPressure = esfrPsi;
+      headK = esfrK;
+      effDesignArea = esfrHeads * maxCoverage;
+      density = headFlow / maxCoverage;
+      designArea = effDesignArea;
+      overageFactor = 1;
+      hoseGpm = (hoseOverride == null) ? hazard.hoseGpm : hoseOverride;
+      basisText = "(" + esfrHeads + ") ESFR heads, K" + esfrK + " @ " + esfrPsi + " psi";
+      basisSub = headFlow.toFixed(0) + " gpm/head — storage ESFR/FM";
+    } else {
+      // "da" (occupancy preset) or "da-custom" (storage — user enters density + area + K).
+      if (basisType === "da-custom") {
+        density = num(inputs.densityGpm) || hazard.density;
+        designArea = num(inputs.designAreaFt2) || hazard.designArea;
+        headK = num(inputs.daK) || hazard.kFactor;
+      } else {
+        density = hazard.density;
+        designArea = hazard.designArea;
+        headK = K;
+      }
+      sprinklerBaseGpm = density * designArea;
+      headFlow = density * maxCoverage;
+      headPressure = Math.pow(headFlow / headK, 2);
+      effDesignArea = designArea;
+      overageFactor = OVERAGE[systemType];
+      hoseGpm = (hoseOverride == null) ? hazard.hoseGpm : hoseOverride;
+      basisText = density.toFixed(2) + " gpm/ft² over " + designArea.toLocaleString() + " ft²";
+      basisSub = hazard.ref;
+    }
     var physicalGpm = sprinklerBaseGpm * overageFactor;                 // estimated real demand
     var sprinklerDesignGpm = physicalGpm * (1 + gpmMargin / 100);       // + safety cushion
-
-    // 2) Hose stream allowance (added outside the building demand point).
-    var hoseGpm = hazard.hoseGpm;
-
-    // Sprinkler coverage. maxCoverage (NFPA max) drives head PRESSURE — worst case, a
-    // max-spaced head must flow density over the largest area. coverage (actual/design,
-    // user-adjustable, ~80% of max by default) drives the sprinkler COUNT only.
-    var maxCoverage = num(inputs.maxCoverageFt2) || hazard.maxCoverageFt2;
-    var coverage = num(inputs.coverageFt2) || hazard.coverageFt2;
-
-    // 3) Starting (most-remote) sprinkler operating pressure to make density, sized for a
-    //    MAX-spaced sprinkler (conservative for a preliminary estimate).
-    var headFlow = hazard.density * maxCoverage;                        // gpm at one head
-    var headPressure = Math.pow(headFlow / K, 2);                       // P = (Q/K)^2
 
     // 4) Elevation loss over building height.
     var elevPsi = elevationLoss(H);
@@ -356,9 +400,9 @@
     //  or between the two mains (grid). The flowing portion is the design-area span
     //  (1.2*sqrt(area)); beyond that the branch dead-runs the cumulative flow back to
     //  the main — which is why mains on the short side (long branches) lose far more.
-    var designAreaBranchLen = 1.2 * Math.sqrt(hazard.designArea);
+    var designAreaBranchLen = 1.2 * Math.sqrt(effDesignArea);
     var flowSpan = Math.min(branchRunDim, designAreaBranchLen);
-    var branchFlowGpm = Math.min(hazard.density * flowSpan * hazard.branchSpacingFt, physicalGpm);
+    var branchFlowGpm = Math.min(density * flowSpan * hazard.branchSpacingFt, physicalGpm);
     var branchLen = Math.max(designAreaBranchLen, branchRunDim);
 
     // 5) Main friction. Tree = single main; grid = primary + secondary mains in parallel
@@ -416,7 +460,7 @@
     //    spacing (heads on a grid, branch lines one spacing apart); mains add the feed
     //    run (one tree main, or two grid cross mains).
     var buildingArea = L * W;
-    var sprinklerCount = Math.ceil(buildingArea / coverage);
+    var sprinklerCount = Math.ceil(buildingArea / maxCoverage);
     var estBranchPipeFt = buildingArea / hazard.branchSpacingFt;
     var estMainPipeFt = (systemType === "grid") ? (2 * mainRunDim + 0.5 * branchRunDim) : mainLen;
     var estPipeLengthFt = estBranchPipeFt + estMainPipeFt;
@@ -435,8 +479,14 @@
         mainId: mainId, secondaryId: secondaryId, branchId: branchId,
         gpmMarginPct: gpmMargin, psiMarginPct: psiMargin },
       areaFt2: L * W,
-      density: hazard.density,
-      designArea: hazard.designArea,
+      basisType: basisType,
+      basisText: basisText,
+      basisSub: basisSub,
+      density: density,
+      designArea: designArea,
+      headKFactor: headK,
+      residential: (basisType === "residential") ? { heads: resHeads, kFactor: resK, flowPerHead: resFlowPerHead } : null,
+      esfr: (basisType === "esfr") ? { heads: esfrHeads, kFactor: esfrK, psi: esfrPsi, gpmPerHead: headFlow } : null,
       // flows
       sprinklerBaseGpm: sprinklerBaseGpm,
       overageFactor: overageFactor,
@@ -452,7 +502,6 @@
       totalGpmWithHose: sprinklerDesignGpm + hoseGpm,
       // pressure components
       headPressurePsi: headPressure,
-      coverageFt2: coverage,
       maxCoverageFt2: maxCoverage,
       elevationPsi: elevPsi,
       mainFrictionPsi: mainPsi,

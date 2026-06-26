@@ -61,11 +61,38 @@
         <div class="field"><label>Width (ft or ft-in)</label><input id="wid" type="text" inputmode="decimal" placeholder="e.g. 100 or 100-6" /></div>
       </div>
       <div class="field"><label>Height (ft or ft-in)</label><input id="hgt" type="text" inputmode="decimal" placeholder="e.g. 16 or 15-2 to highest sprinkler" /></div>
-      <div class="field"><label>Occupancy hazard classification</label>
+      <div class="field"><label>Design basis</label>
         <select id="hazard"></select>
       </div>
-      <div class="field"><label>Sprinkler coverage (ft²/head)</label><input id="coverage" type="number" inputmode="decimal" /></div>
-      <p class="hint">Coverage is the typical (design) spacing — used for the <b>sprinkler count</b>. Required <b>pressure</b> is always sized for a max-spaced head (the worst case). Adjust coverage to match your layout.</p>
+
+      <div id="grpRes" hidden>
+        <div class="row2">
+          <div class="field"><label>Number of heads</label><input id="resHeads" type="number" inputmode="decimal" value="4" /></div>
+          <div class="field"><label>Flow per head (gpm)</label><input id="resFlow" type="number" inputmode="decimal" value="13" /></div>
+        </div>
+        <div class="field"><label>Sprinkler K-factor</label><input id="resK" type="number" inputmode="decimal" value="4.9" /></div>
+        <p class="hint">Default (4) K4.9 residential heads at 13 gpm each. Extended-coverage heads (e.g. 20×20) flow more — raise the flow per head (≈20 gpm).</p>
+      </div>
+
+      <div id="grpSda" hidden>
+        <div class="row2">
+          <div class="field"><label>Density (gpm/ft²)</label><input id="daDensity" type="number" inputmode="decimal" value="0.60" /></div>
+          <div class="field"><label>Design area (ft²)</label><input id="daArea" type="number" inputmode="decimal" value="2000" /></div>
+        </div>
+        <div class="field"><label>Sprinkler K-factor</label><input id="daK" type="number" inputmode="decimal" value="16.8" /></div>
+        <p class="hint">Storage CMDA/CMSA density/area. Not sure of the criteria? Use the <a href="../storage-hazard.html">Storage Analysis</a> tool to find your required demand.</p>
+      </div>
+
+      <div id="grpEsfr" hidden>
+        <div class="row2">
+          <div class="field"><label>Number of heads</label><input id="esfrHeads" type="number" inputmode="decimal" value="12" /></div>
+          <div class="field"><label>K-factor</label><input id="esfrK" type="number" inputmode="decimal" value="22.4" /></div>
+        </div>
+        <div class="field"><label>Operating pressure (psi)</label><input id="esfrPsi" type="number" inputmode="decimal" value="50" /></div>
+        <p class="hint">ESFR/FM storage — (n) heads at a K-factor and pressure. Not sure? Use the <a href="../storage-hazard.html">Storage Analysis</a> tool.</p>
+      </div>
+
+      <p class="hint">Building footprint, height to the highest sprinkler, and the design basis. Pressure is sized for a max-spaced sprinkler (worst case).</p>
     </section>
 
     <section class="pc-step" data-step="2" hidden>
@@ -178,7 +205,7 @@
       var hz = el("hazard");
       PrelimCalc.HAZARDS.forEach(function (h) { hz.add(new Option(h.label, h.id)); });
       hz.value = "oh2";
-      syncCoverage();
+      showBasisGroups();
       [["mainPipe", "4"], ["secPipe", "2.5"], ["branchPipe", "2"]].forEach(function (pair) {
         var s = el(pair[0]);
         PIPE_SIZES.forEach(function (p) { s.add(new Option(p[1], p[0])); });
@@ -195,11 +222,12 @@
       refreshSystem();
     })();
 
-    // Default the coverage input to the selected hazard's typical (design) spacing,
-    // unless the user has manually overridden it.
-    function syncCoverage() {
-      var hzObj = PrelimCalc.hazardById(val("hazard")), cov = el("coverage");
-      if (hzObj && !cov.dataset.touched) cov.value = hzObj.coverageFt2;
+    // Show the input group for the selected design basis (residential / storage-DA / ESFR).
+    function showBasisGroups() {
+      var t = (PrelimCalc.hazardById(val("hazard")) || {}).type || "da";
+      el("grpRes").hidden = t !== "residential";
+      el("grpSda").hidden = t !== "da-custom";
+      el("grpEsfr").hidden = t !== "esfr";
     }
 
     // Show/hide the secondary main (grid only), relabel the primary main, and default
@@ -234,7 +262,10 @@
       }
       return {
         lengthFt: val("len"), widthFt: val("wid"), heightFt: val("hgt"),
-        hazardId: val("hazard"), coverageFt2: val("coverage"),
+        hazardId: val("hazard"),
+        resHeads: val("resHeads"), resK: val("resK"), resFlowPerHead: val("resFlow"),
+        densityGpm: val("daDensity"), designAreaFt2: val("daArea"), daK: val("daK"),
+        esfrHeads: val("esfrHeads"), esfrK: val("esfrK"), esfrPsi: val("esfrPsi"),
         systemType: val("sysType"), mainOrientation: val("mainOrient"),
         mainNominal: val("mainPipe"),
         secondaryNominal: val("sysType") === "grid" ? val("secPipe") : null,
@@ -279,12 +310,12 @@
         : sizeLabel(r.inputs.mainNominal) + " (ID " + r.inputs.mainId + '")') +
         " × " + fmt(r.mainLengthFt) + " ft @ " + fmt(r.physicalGpm) + " gpm";
       var b = "";
-      b += row("Design basis", r.density.toFixed(2) + " gpm/ft² over " + fmt(r.designArea) + " ft²", r.hazard.ref);
+      b += row("Design basis", r.basisText, r.basisSub);
       b += row("Sprinkler demand (theoretical min)", fmt(r.sprinklerBaseGpm) + " gpm", "density × design area");
       b += row("Estimated demand (+" + overPct + "% " + r.systemType + " overflow)", fmt(r.physicalGpm) + " gpm", "grids run nearer the minimum than trees");
       b += row("Design flow (after +" + r.inputs.gpmMarginPct + "% margin)", fmt(r.sprinklerDesignGpm) + " gpm");
       b += row("Hose stream allowance", fmt(r.hoseGpm) + " gpm", "duration " + r.durationMin + " min");
-      b += row("Start sprinkler pressure", r.headPressurePsi.toFixed(1) + " psi", "K=" + r.inputs.kFactor + ", max " + r.maxCoverageFt2 + " ft²/head (worst case)");
+      b += row("Start sprinkler pressure", r.headPressurePsi.toFixed(1) + " psi", "K=" + r.headKFactor + ", max " + r.maxCoverageFt2 + " ft²/head (worst case)");
       b += row("Elevation loss", r.elevationPsi.toFixed(1) + " psi", fmt(r.inputs.heightFt) + " ft × 0.433");
       b += row("Main friction (Hazen-Williams)", r.mainFrictionPsi.toFixed(1) + " psi", mainDesc);
       b += row("Branch friction (Hazen-Williams)", r.branchFrictionPsi.toFixed(1) + " psi", sizeLabel(r.inputs.branchNominal) + " (ID " + r.inputs.branchId + '") × ' + fmt(r.branchLengthFt) + " ft @ " + fmt(r.branchFlowGpm) + " gpm" + (r.systemType === "grid" ? ", fed both ends" : " tributary"));
@@ -371,7 +402,7 @@
       lines.push([r.hazard.label + "  ·  " + fmt(r.areaFt2) + " sq ft  ·  " + fmt(r.inputs.heightFt) + " ft tall  ·  " + r.systemType + " system, mains along " + r.orientation, 12, false, "#555"]);
       lines.push(["", 6, false, "#000"]);
       var rows = [
-        ["Design basis", r.density.toFixed(2) + " gpm/ft² over " + fmt(r.designArea) + " ft²"],
+        ["Design basis", r.basisText],
         ["Sprinkler demand (theoretical min)", fmt(r.sprinklerBaseGpm) + " gpm"],
         ["Estimated demand (+" + Math.round((r.overageFactor - 1) * 100) + "% " + r.systemType + " overflow)", fmt(r.physicalGpm) + " gpm"],
         ["Design flow (after +" + r.inputs.gpmMarginPct + "% margin)", fmt(r.sprinklerDesignGpm) + " gpm"],
@@ -434,8 +465,7 @@
     el("sysType").addEventListener("change", function () { refreshSystem(); render(); });
     el("mainPipe").addEventListener("change", function () { refreshSystem(); });
     el("secPipe").addEventListener("change", function () { el("secPipe").dataset.touched = "1"; });
-    el("hazard").addEventListener("change", function () { syncCoverage(); render(); });
-    el("coverage").addEventListener("input", function () { el("coverage").dataset.touched = "1"; });
+    el("hazard").addEventListener("change", function () { showBasisGroups(); render(); });
     el("exportBtn").addEventListener("click", function () {
       if (window.SFAuth && SFAuth.gateExport) { SFAuth.gateExport(exportPNG, { feature: "PNG export", body: "Run the preliminary estimate free as much as you like. Saving the report image needs a free SprinkFlow account." }); return; }
       exportPNG();
