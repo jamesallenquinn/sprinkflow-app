@@ -161,18 +161,19 @@
       </div>
       <div class="qbar"><div class="fill" id="qbarFill"></div></div>
 
-      <!-- concept intro -->
+      <!-- teaching bite -->
       <div id="conceptView">
-        <div class="concept">
+        <div class="concept hidden" id="biteConcept">
           <div class="eyebrow" id="conceptEyebrow">Level</div>
           <h2 id="conceptTitle">—</h2>
           <div class="body" id="conceptBody">—</div>
           <div class="outcome" id="conceptOutcome"></div>
         </div>
-        <div class="sections-head" id="sectionsHead">Learn the concept</div>
-        <div id="lessonSections"></div>
-        <button class="btn primary" id="beginBtn">Start the quiz →</button>
-        <p class="src-foot" id="quizHint">You’ll answer every question, with an explanation after each. Score the passing mark to unlock the next level.</p>
+        <div class="section" id="biteCard"></div>
+        <div class="btn-row">
+          <button class="btn ghost" id="bitePrevBtn">‹ Back</button>
+          <button class="btn primary" id="biteNextBtn">Check understanding →</button>
+        </div>
       </div>
 
       <!-- question -->
@@ -225,7 +226,7 @@
     }
 
     // ---- state ----
-    var lesson = null, qIndex = 0;
+    var lesson = null, sectionIndex = 0, pendingQ = null, locked = false;
 
     function show(name) {
       $("screen-overview").classList.add("hidden");
@@ -267,45 +268,62 @@
       show("overview");
     }
 
-    // ---- lesson ----
+    // ---- lesson (bite-by-bite: teach one bite, then its 1-2 checkpoints) ----
+    function answeredSet() { var d = {}; loadResults().forEach(function (r) { d[r.questionId] = 1; }); return d; }
+    function biteCheckIds() { return (lesson.sections[sectionIndex] && lesson.sections[sectionIndex].checkQuestionIds) || []; }
+    function nextCheckpointId() { var d = answeredSet(), ids = biteCheckIds(); for (var i = 0; i < ids.length; i++) if (!d[ids[i]]) return ids[i]; return null; }
+
     function openLesson(id) {
       lesson = C.getLessonById(id);
       if (!lesson) return;
-      qIndex = 0;
+      sectionIndex = 0;
+      renderBite();
+    }
+
+    function renderBite() {
+      var sects = lesson.sections, s = sects[sectionIndex];
       var idx = C.lessons.indexOf(lesson) + 1;
       $("lessonPos").textContent = "Level " + idx + " of " + C.lessons.length;
-      $("conceptEyebrow").textContent = "Level " + idx + " · " + lesson.questions.length + " questions · pass ≥ " + lesson.unlockScore + "%";
-      $("conceptTitle").textContent = lesson.title;
-      $("conceptBody").textContent = lesson.concept;
-      $("conceptOutcome").innerHTML = "<b>By the end:</b> " + esc(lesson.outcome);
-      var sects = lesson.sections || [];
-      $("sectionsHead").textContent = "Learn the concept · " + sects.length + " section" + (sects.length === 1 ? "" : "s");
-      $("lessonSections").innerHTML = sects.map(function (s, i) {
-        var pts = (s.keyPoints || []).map(function (p) { return "<li>" + esc(p) + "</li>"; }).join("");
-        return '<div class="section">' +
-          '<div class="s-eyebrow">Section ' + (i + 1) + '</div>' +
-          '<h3>' + esc(s.title) + '</h3>' +
-          '<div class="s-body">' + esc(s.body) + '</div>' +
-          (s.formula ? '<div class="s-formula">' + esc(s.formula) + '</div>' : '') +
-          (s.example ? '<div class="s-example"><b>Example:</b> ' + esc(s.example) + '</div>' : '') +
-          (pts ? '<ul class="s-points">' + pts + '</ul>' : '') +
-          '</div>';
-      }).join("");
-      $("quizHint").textContent = lesson.questions.length + " questions · pass ≥ " + lesson.unlockScore + "% to unlock the next level. An explanation follows every answer.";
+      if (sectionIndex === 0) {
+        $("biteConcept").classList.remove("hidden");
+        $("conceptEyebrow").textContent = "Level " + idx + " · " + sects.length + " bites · pass ≥ " + lesson.unlockScore + "%";
+        $("conceptTitle").textContent = lesson.title;
+        $("conceptBody").textContent = lesson.concept;
+        $("conceptOutcome").innerHTML = "<b>By the end:</b> " + esc(lesson.outcome);
+      } else {
+        $("biteConcept").classList.add("hidden");
+      }
+      var pts = (s.keyPoints || []).map(function (p) { return "<li>" + esc(p) + "</li>"; }).join("");
+      var nChecks = biteCheckIds().length;
+      $("biteCard").innerHTML =
+        '<div class="s-eyebrow">Bite ' + (sectionIndex + 1) + ' of ' + sects.length +
+          (nChecks ? ' · ' + nChecks + ' checkpoint' + (nChecks === 1 ? '' : 's') : '') + '</div>' +
+        '<h3>' + esc(s.title) + '</h3>' +
+        '<div class="s-body">' + esc(s.body) + '</div>' +
+        (s.formula ? '<div class="s-formula">' + esc(s.formula) + '</div>' : '') +
+        (s.example ? '<div class="s-example"><b>Example:</b> ' + esc(s.example) + '</div>' : '') +
+        (pts ? '<ul class="s-points">' + pts + '</ul>' : '');
+      $("biteNextBtn").textContent = nextCheckpointId() ? "Check understanding →" : (sectionIndex < sects.length - 1 ? "Continue →" : "Finish level →");
+      $("bitePrevBtn").style.visibility = sectionIndex === 0 ? "hidden" : "visible";
+      $("qbarFill").style.width = Math.round((sectionIndex / sects.length) * 100) + "%";
       $("conceptView").classList.remove("hidden");
       $("quizView").classList.add("hidden");
       $("resultView").classList.add("hidden");
-      $("qbarFill").style.width = "0";
       show("lesson");
     }
 
-    function renderQuestion() {
-      var q = lesson.questions[qIndex];
+    function startCheckpointOrAdvance() { if (nextCheckpointId()) renderCheckpoint(); else advanceBite(); }
+
+    function renderCheckpoint() {
+      pendingQ = nextCheckpointId();
+      if (!pendingQ) { advanceBite(); return; }
+      var q = C.getQuestionById(pendingQ);
+      var ids = biteCheckIds(), d = answeredSet();
+      var answered = ids.filter(function (id) { return d[id]; }).length;
       $("conceptView").classList.add("hidden");
       $("resultView").classList.add("hidden");
       $("quizView").classList.remove("hidden");
-      $("qbarFill").style.width = Math.round((qIndex / lesson.questions.length) * 100) + "%";
-      $("qLevel").textContent = "Q" + (qIndex + 1) + " of " + lesson.questions.length;
+      $("qLevel").textContent = "Checkpoint " + (answered + 1) + " of " + ids.length;
       $("qDiff").textContent = q.difficulty;
       $("qDiff").className = "diff diff-" + q.difficulty;
       $("qText").textContent = q.prompt;
@@ -314,38 +332,54 @@
       $("choices").innerHTML = q.choices.map(function (txt, i) {
         return '<button class="choice" data-i="' + i + '"><span class="badge">' + letters[i] + '</span><span>' + esc(txt) + '</span></button>';
       }).join("");
-      [].forEach.call($("choices").children, function (b) { b.onclick = function () { pick(parseInt(b.dataset.i, 10)); }; });
+      [].forEach.call($("choices").children, function (b) { b.onclick = function () { pickCheckpoint(parseInt(b.dataset.i, 10)); }; });
+      locked = false;
+      window.scrollTo(0, 0);
     }
 
-    var locked = false;
-    function pick(choice) {
+    function pickCheckpoint(choice) {
       if (locked) return;
       locked = true;
-      var q = lesson.questions[qIndex];
-      var graded = C.gradeAnswer(q.id, choice);
-      saveResult(graded);
+      var q = C.getQuestionById(pendingQ);
+      saveResult(C.gradeAnswer(q.id, choice));
+      var correct = choice === q.answerIndex;
       [].forEach.call($("choices").children, function (b) {
         var i = parseInt(b.dataset.i, 10);
         b.disabled = true;
         if (i === q.answerIndex) b.classList.add("correct");
         else if (i === choice) b.classList.add("wrong");
       });
-      $("explainHead").className = "head " + (graded.correct ? "ok" : "no");
-      $("explainHead").textContent = graded.correct ? "✓ Correct" : "✗ Correct answer: " + letters[q.answerIndex];
+      $("explainHead").className = "head " + (correct ? "ok" : "no");
+      $("explainHead").textContent = correct ? "✓ Correct" : "✗ Correct answer: " + letters[q.answerIndex];
       $("explainBody").textContent = q.explanation;
       if (q.calculationNote) { $("explainCalc").textContent = "🧮  " + q.calculationNote; $("explainCalc").classList.remove("hidden"); }
       else $("explainCalc").classList.add("hidden");
       $("explainTeaches").innerHTML = (q.teaches || []).map(function (t) { return '<span class="chip">' + esc(t) + '</span>'; }).join("");
       $("explain").classList.remove("hidden");
-      $("nextBtn").textContent = qIndex + 1 >= lesson.questions.length ? "See results →" : "Next →";
+      var lastBite = sectionIndex >= lesson.sections.length - 1;
+      $("nextBtn").textContent = nextCheckpointId() ? "Next checkpoint →" : (lastBite ? "See results →" : "Continue →");
       $("nextWrap").classList.remove("hidden");
     }
 
-    function next() {
+    function continueAfterFeedback() {
       locked = false;
-      if (qIndex + 1 >= lesson.questions.length) { finishLesson(); return; }
-      qIndex++;
-      renderQuestion();
+      if (nextCheckpointId()) renderCheckpoint();
+      else advanceBite();
+    }
+
+    function advanceBite() {
+      if (sectionIndex < lesson.sections.length - 1) { sectionIndex++; renderBite(); }
+      else finishLesson();
+    }
+
+    function goToPrevBite() { if (sectionIndex > 0) { sectionIndex--; renderBite(); } }
+
+    function retryLesson() {
+      var qids = {}; lesson.questions.forEach(function (q) { qids[q.id] = 1; });
+      var kept = loadResults().filter(function (r) { return !qids[r.questionId]; });
+      try { localStorage.setItem(STORE, JSON.stringify(kept)); } catch (e) {}
+      sectionIndex = 0;
+      renderBite();
     }
 
     function finishLesson() {
@@ -373,9 +407,10 @@
       window.scrollTo(0, 0);
     }
 
-    $("beginBtn").onclick = function () { qIndex = 0; renderQuestion(); };
-    $("nextBtn").onclick = next;
-    $("retryBtn").onclick = function () { openLesson(lesson.id); };
+    $("biteNextBtn").onclick = startCheckpointOrAdvance;
+    $("bitePrevBtn").onclick = goToPrevBite;
+    $("nextBtn").onclick = continueAfterFeedback;
+    $("retryBtn").onclick = retryLesson;
     $("backToCourse").onclick = renderOverview;
 
     renderOverview();
