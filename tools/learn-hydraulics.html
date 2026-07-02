@@ -47,8 +47,8 @@
     .lcard.done .n { background:var(--good); color:#06281b; border-color:var(--good); }
     .lcard.open .n { background:rgba(139,124,246,.16); border-color:var(--learn); color:var(--learn); }
     .lcard .mid { flex:1; min-width:0; }
-    .lcard .t { font:700 1.04rem/1.25 'Space Grotesk'; }
-    .lcard .o { font:500 .86rem/1.4 Inter; color:var(--muted); margin-top:4px; }
+    .lcard .t { display:block; font:700 1.04rem/1.25 'Space Grotesk'; }
+    .lcard .o { display:block; font:500 .86rem/1.4 Inter; color:var(--muted); margin-top:4px; }
     .lcard .meta { font:600 .76rem Inter; color:var(--muted); margin-top:9px; display:flex; flex-wrap:wrap; gap:6px 12px; }
     .lcard .state { flex:none; align-self:center; font:700 .8rem 'Space Grotesk'; padding:7px 11px; border-radius:999px; white-space:nowrap; }
     .lcard .state.go { background:rgba(139,124,246,.16); color:var(--learn); border:1px solid rgba(139,124,246,.4); }
@@ -61,6 +61,32 @@
     .btn + .btn { margin-top:10px; }
     .btn-row { display:flex; gap:10px; margin-top:16px; }
     .btn-row .btn { margin-top:0; }
+
+    /* system diagram (the worked example, pinned through the lesson) */
+    .diagram { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:10px 10px 6px; margin-bottom:12px; }
+    .diagram svg { display:block; width:100%; height:auto; }
+    .diagram .pipe { stroke:var(--line-strong); stroke-width:3; stroke-linecap:round; }
+    .diagram .pipe.flow { stroke:#37b7e4; stroke-width:3.5; }
+    .diagram .head { fill:var(--surface-soft); stroke:var(--line-strong); stroke-width:2; }
+    .diagram .head.focus { fill:rgba(139,124,246,.30); stroke:var(--learn); stroke-width:2.5; }
+    .diagram .riser { fill:var(--surface-soft); stroke:var(--line-strong); stroke-width:2; }
+    .diagram .riser.focus { fill:rgba(139,124,246,.30); stroke:var(--learn); }
+    .diagram .nname { font:600 9px Inter; fill:var(--muted); }
+    .diagram .dlabel { font:700 10px Inter; fill:var(--learn); }
+    .diagram .cap { font:500 .78rem/1.45 Inter; color:var(--muted); text-align:center; padding:6px 4px 4px; }
+
+    /* the calc sheet that builds itself */
+    .calcsheet { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:12px 12px 8px; margin-bottom:12px; overflow-x:auto; }
+    .calcsheet .cs-head { font:700 .64rem/1 Inter; letter-spacing:.08em; text-transform:uppercase; color:var(--learn); margin:0 2px 8px; }
+    .calcsheet table { width:100%; border-collapse:collapse; font:500 .78rem/1.35 Inter; color:var(--ink); }
+    .calcsheet th { font:700 .62rem/1 Inter; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); text-align:left; padding:4px 8px 6px 2px; border-bottom:1px solid var(--line); white-space:nowrap; }
+    .calcsheet td { padding:7px 8px 7px 2px; border-bottom:1px solid var(--line); white-space:nowrap; }
+    .calcsheet tr:last-child td { border-bottom:0; }
+    .calcsheet tr.new td { background:rgba(139,124,246,.10); }
+    .calcsheet tr.new td:first-child { border-radius:8px 0 0 8px; } .calcsheet tr.new td:last-child { border-radius:0 8px 8px 0; }
+
+    /* recommended-next chip on the overview */
+    .lcard .state.rec { background:rgba(55,183,228,.14); color:#37b7e4; border:1px solid rgba(55,183,228,.4); }
 
     /* lesson screen */
     .crumb { display:flex; align-items:center; gap:10px; margin:8px 0 6px; }
@@ -139,8 +165,8 @@
       <div class="hero">
         <div class="ic">📐</div>
         <h1>Learn <span class="grad">Hydraulic Calcs</span></h1>
-        <p>A six-level course on how a fire sprinkler hydraulic calculation really works — from tree accumulation to grid solving to water supply. Pass each level to unlock the next.</p>
-        <span class="src-badge">🎓 6 levels · 35 questions · not beginner trivia</span>
+        <p>Follow one real four-head system from its most remote sprinkler back to the water supply — and build its calc sheet as you go. Explore the levels in any order; checkpoints earn each level's badge.</p>
+        <span class="src-badge">🎓 6 levels · one worked example · real numbers</span>
       </div>
 
       <div class="prog">
@@ -150,7 +176,7 @@
 
       <div class="lessons" id="lessonList"></div>
 
-      <p class="src-foot">Your progress is saved on this device. Each level requires answering every question and meeting its passing score.</p>
+      <p class="src-foot">Your progress is saved on this device. Levels are open to explore — hit a level's passing score to earn its ✓ badge.</p>
     </section>
 
     <!-- LESSON -->
@@ -160,6 +186,46 @@
         <span class="pos" id="lessonPos"></span>
       </div>
       <div class="qbar"><div class="fill" id="qbarFill"></div></div>
+
+      <!-- the worked-example system, pinned through the lesson -->
+      <div class="diagram hidden" id="stepDiagram">
+        <svg viewBox="0 0 340 205" xmlns="http://www.w3.org/2000/svg" aria-label="Example sprinkler system diagram">
+          <line class="pipe" id="p-sup"  x1="14"  y1="176" x2="38"  y2="176" />
+          <line class="pipe" id="p-cm1"  x1="46"  y1="176" x2="120" y2="176" />
+          <line class="pipe" id="p-cm2"  x1="120" y1="176" x2="240" y2="176" />
+          <line class="pipe" id="p-bl2b" x1="120" y1="176" x2="120" y2="116" />
+          <line class="pipe" id="p-bl2a" x1="120" y1="116" x2="120" y2="56"  />
+          <line class="pipe" id="p-b1b"  x1="240" y1="176" x2="240" y2="116" />
+          <line class="pipe" id="p-b1a"  x1="240" y1="116" x2="240" y2="56"  />
+          <rect class="riser" id="n-riser" x="34" y="170" width="12" height="12" />
+          <circle class="head" id="n-h3" cx="120" cy="56"  r="7" />
+          <circle class="head" id="n-h4" cx="120" cy="116" r="7" />
+          <circle class="head" id="n-h1" cx="240" cy="56"  r="7" />
+          <circle class="head" id="n-h2" cx="240" cy="116" r="7" />
+          <text class="nname" x="106" y="45">H3</text>
+          <text class="nname" x="106" y="105">H4</text>
+          <text class="nname" x="228" y="59" text-anchor="end">H1</text>
+          <text class="nname" x="228" y="119" text-anchor="end">H2</text>
+          <text class="nname" x="28"  y="198">riser</text>
+          <text class="nname" x="150" y="192">cross main</text>
+          <text class="dlabel hidden" id="t-h1"    x="334" y="42" text-anchor="end"></text>
+          <text class="dlabel hidden" id="t-h2"    x="334" y="102" text-anchor="end"></text>
+          <text class="dlabel hidden" id="t-h3"    x="10"  y="60"  text-anchor="start"></text>
+          <text class="dlabel hidden" id="t-h4"    x="10"  y="120" text-anchor="start"></text>
+          <text class="dlabel hidden" id="t-riser" x="52"  y="166"></text>
+          <text class="dlabel hidden" id="t-cm"    x="130" y="166"></text>
+        </svg>
+        <div class="cap" id="diagramCap"></div>
+      </div>
+
+      <!-- the calc sheet that builds itself -->
+      <div class="calcsheet hidden" id="calcSheet">
+        <div class="cs-head">Calc sheet — building as you go</div>
+        <table>
+          <thead><tr><th>Node</th><th>P psi</th><th>+Q</th><th>ΣQ gpm</th><th>Pipe → next</th><th>Pf</th></tr></thead>
+          <tbody id="calcRows"></tbody>
+        </table>
+      </div>
 
       <!-- teaching bite -->
       <div id="conceptView">
@@ -238,22 +304,21 @@
     // ---- overview ----
     function renderOverview() {
       var cp = C.courseProgress(loadResults());
-      var unlocked = {}; cp.unlockedLessonIds.forEach(function (id) { unlocked[id] = 1; });
       var passedCount = cp.lessons.filter(function (l) { return l.passed; }).length;
+      var recIndex = -1;   // first unpassed level = "Up next" (soft guidance, no locks)
+      cp.lessons.some(function (l, i) { if (!l.passed) { recIndex = i; return true; } return false; });
       $("progVal").textContent = passedCount + " of " + C.lessons.length + " levels passed";
       $("progFill").style.width = Math.round((passedCount / C.lessons.length) * 100) + "%";
 
       $("lessonList").innerHTML = C.lessons.map(function (l, i) {
         var lp = cp.lessons[i];
-        var isUnlocked = !!unlocked[l.id];
-        var cls = lp.passed ? "done" : (isUnlocked ? "open" : "");
-        var stateHtml, dis = "";
+        var cls = lp.passed ? "done" : "open";
+        var stateHtml;
         if (lp.passed) stateHtml = '<span class="state ok">✓ ' + lp.scorePercent + '%</span>';
-        else if (isUnlocked) stateHtml = '<span class="state go">' + (lp.answered > 0 ? "↻ Retry" : "▶ Start") + '</span>';
-        else { stateHtml = '<span class="state lock">🔒 Locked</span>'; dis = " disabled"; }
-        var meta = '<span>' + l.questions.length + ' questions</span><span>Pass ≥ ' + l.unlockScore + '%</span>' +
-          (!isUnlocked && i > 0 ? '<span>Pass “' + esc(C.lessons[i - 1].title) + '” to unlock</span>' : '');
-        return '<button class="lcard ' + cls + '" data-id="' + l.id + '"' + dis + '>' +
+        else if (i === recIndex) stateHtml = '<span class="state rec">★ Up next</span>';
+        else stateHtml = '<span class="state go">' + (lp.answered > 0 ? "↻ Retry" : "▶ Start") + '</span>';
+        var meta = '<span>' + l.sections.length + ' steps</span><span>' + l.questions.length + ' checkpoints</span><span>Badge ≥ ' + l.unlockScore + '%</span>';
+        return '<button class="lcard ' + cls + '" data-id="' + l.id + '">' +
           '<span class="n">' + (lp.passed ? "✓" : (i + 1)) + '</span>' +
           '<span class="mid"><span class="t">' + esc(l.title) + '</span>' +
           '<span class="o">' + esc(l.outcome) + '</span>' +
@@ -262,13 +327,12 @@
       }).join("");
 
       [].forEach.call($("lessonList").children, function (b) {
-        if (b.disabled) return;
         b.onclick = function () { openLesson(b.dataset.id); };
       });
       show("overview");
     }
 
-    // ---- lesson (bite-by-bite: teach one bite, then its 1-2 checkpoints) ----
+    // ---- lesson (step-by-step: teach one step, then its 1-2 checkpoints) ----
     function answeredSet() { var d = {}; loadResults().forEach(function (r) { d[r.questionId] = 1; }); return d; }
     function biteCheckIds() { return (lesson.sections[sectionIndex] && lesson.sections[sectionIndex].checkQuestionIds) || []; }
     function nextCheckpointId() { var d = answeredSet(), ids = biteCheckIds(); for (var i = 0; i < ids.length; i++) if (!d[ids[i]]) return ids[i]; return null; }
@@ -286,7 +350,7 @@
       $("lessonPos").textContent = "Level " + idx + " of " + C.lessons.length;
       if (sectionIndex === 0) {
         $("biteConcept").classList.remove("hidden");
-        $("conceptEyebrow").textContent = "Level " + idx + " · " + sects.length + " bites · pass ≥ " + lesson.unlockScore + "%";
+        $("conceptEyebrow").textContent = "Level " + idx + " · " + sects.length + " steps · badge ≥ " + lesson.unlockScore + "%";
         $("conceptTitle").textContent = lesson.title;
         $("conceptBody").textContent = lesson.concept;
         $("conceptOutcome").innerHTML = "<b>By the end:</b> " + esc(lesson.outcome);
@@ -296,13 +360,15 @@
       var pts = (s.keyPoints || []).map(function (p) { return "<li>" + esc(p) + "</li>"; }).join("");
       var nChecks = biteCheckIds().length;
       $("biteCard").innerHTML =
-        '<div class="s-eyebrow">Bite ' + (sectionIndex + 1) + ' of ' + sects.length +
+        '<div class="s-eyebrow">Step ' + (sectionIndex + 1) + ' of ' + sects.length +
           (nChecks ? ' · ' + nChecks + ' checkpoint' + (nChecks === 1 ? '' : 's') : '') + '</div>' +
         '<h3>' + esc(s.title) + '</h3>' +
         '<div class="s-body">' + esc(s.body) + '</div>' +
         (s.formula ? '<div class="s-formula">' + esc(s.formula) + '</div>' : '') +
         (s.example ? '<div class="s-example"><b>Example:</b> ' + esc(s.example) + '</div>' : '') +
         (pts ? '<ul class="s-points">' + pts + '</ul>' : '');
+      renderDiagram(s.diagram);
+      renderCalcSheet();
       $("biteNextBtn").textContent = nextCheckpointId() ? "Check understanding →" : (sectionIndex < sects.length - 1 ? "Continue →" : "Finish level →");
       $("bitePrevBtn").style.visibility = sectionIndex === 0 ? "hidden" : "visible";
       $("qbarFill").style.width = Math.round((sectionIndex / sects.length) * 100) + "%";
@@ -310,6 +376,42 @@
       $("quizView").classList.add("hidden");
       $("resultView").classList.add("hidden");
       show("lesson");
+    }
+
+    // ---- worked-example diagram + self-building calc sheet ----
+    var DIAG_PIPES = ["p-sup", "p-cm1", "p-cm2", "p-bl2a", "p-bl2b", "p-b1a", "p-b1b"];
+    var DIAG_NODES = ["n-riser", "n-h1", "n-h2", "n-h3", "n-h4"];
+    var DIAG_LABELS = ["t-h1", "t-h2", "t-h3", "t-h4", "t-riser", "t-cm"];
+
+    function renderDiagram(cfg) {
+      var box = $("stepDiagram");
+      if (!cfg) { box.classList.add("hidden"); return; }
+      box.classList.remove("hidden");
+      DIAG_PIPES.forEach(function (id) { $(id).classList.remove("flow"); });
+      DIAG_NODES.forEach(function (id) { $(id).classList.remove("focus"); });
+      DIAG_LABELS.forEach(function (id) { $(id).classList.add("hidden"); $(id).textContent = ""; });
+      (cfg.flow || []).forEach(function (id) { var el = $(id); if (el) el.classList.add("flow"); });
+      (cfg.focus || []).forEach(function (id) { var el = $(id); if (el) el.classList.add("focus"); });
+      Object.keys(cfg.labels || {}).forEach(function (id) {
+        var el = $(id);
+        if (el) { el.textContent = cfg.labels[id]; el.classList.remove("hidden"); }
+      });
+      $("diagramCap").textContent = cfg.caption || "";
+    }
+
+    function renderCalcSheet() {
+      var box = $("calcSheet");
+      var rows = [];
+      for (var i = 0; i <= sectionIndex && i < lesson.sections.length; i++) {
+        if (lesson.sections[i].calcRow) rows.push({ r: lesson.sections[i].calcRow, isNew: i === sectionIndex });
+      }
+      if (!rows.length) { box.classList.add("hidden"); return; }
+      box.classList.remove("hidden");
+      $("calcRows").innerHTML = rows.map(function (x) {
+        return '<tr' + (x.isNew ? ' class="new"' : '') + '><td>' + esc(x.r.node) + '</td><td>' + esc(x.r.p) +
+          '</td><td>' + esc(x.r.qAdd) + '</td><td>' + esc(x.r.qTotal) + '</td><td>' + esc(x.r.pipe) +
+          '</td><td>' + esc(x.r.pf) + '</td></tr>';
+      }).join("");
     }
 
     function startCheckpointOrAdvance() { if (nextCheckpointId()) renderCheckpoint(); else advanceBite(); }
@@ -389,18 +491,20 @@
       $("qbarFill").style.width = "100%";
       $("quizView").classList.add("hidden");
       $("conceptView").classList.add("hidden");
+      $("stepDiagram").classList.add("hidden");
+      $("calcSheet").classList.add("hidden");
       $("resultView").classList.remove("hidden");
       $("resultRing").textContent = lp.scorePercent + "%";
       $("resultCard").className = "result " + (lp.passed ? "pass" : "fail");
       if (lp.passed) {
-        $("resultTitle").textContent = "Level passed! 🎉";
+        $("resultTitle").textContent = "Badge earned! 🎉";
         $("resultMsg").textContent = "You scored " + lp.scorePercent + "% (" + lp.correct + " of " + lp.answered + "). " +
-          (nextLesson ? "The next level, “" + nextLesson.title + ",” is now unlocked." : "That was the final level — you’ve completed the course.");
+          (nextLesson ? "Up next: “" + nextLesson.title + ".”" : "That was the final level — you’ve followed the whole calc, end to end.");
         $("resultPrimaryBtn").textContent = nextLesson ? "Next level →" : "Back to levels";
         $("resultPrimaryBtn").onclick = function () { if (nextLesson) openLesson(nextLesson.id); else renderOverview(); };
       } else {
         $("resultTitle").textContent = "Not quite — keep going";
-        $("resultMsg").textContent = "You scored " + lp.scorePercent + "%. You need " + lesson.unlockScore + "% to pass this level. Review the explanations and retry — your best answers are kept.";
+        $("resultMsg").textContent = "You scored " + lp.scorePercent + "%. This level's badge takes " + lesson.unlockScore + "%. Review the explanations and retry — or keep exploring and come back.";
         $("resultPrimaryBtn").textContent = "Back to levels";
         $("resultPrimaryBtn").onclick = renderOverview;
       }
