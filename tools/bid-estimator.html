@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Bid Estimator — SprinkFlow</title>
+  <meta name="theme-color" content="#0d1116" />
+  <link rel="manifest" href="../manifest.webmanifest" />
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <header class="app-bar">
+    <a class="back" href="../index.html" aria-label="Back">‹</a>
+    <div><div class="title">Bid Estimator</div><div class="sub">Quick job-walk estimate</div></div>
+    <button class="acct-btn" id="acctBtn" type="button" hidden>Account</button>
+  </header>
+
+  <main class="tool-page">
+    <div class="wiz-progress" id="wizProgress"></div>
+    <div id="wizSteps"></div>
+  </main>
+
+  <style>
+    .wiz-progress { display: flex; gap: 6px; margin-bottom: 18px; }
+    .wiz-progress i { flex: 1; height: 4px; border-radius: 999px; background: var(--line); transition: background .2s; }
+    .wiz-progress i.done { background: var(--accent); }
+    .wiz-progress i.on { background: var(--grad-fire); }
+    .wiz-step h2 { font: 700 1.35rem "Space Grotesk", sans-serif; margin: 0 0 4px; }
+    .wiz-step .q-sub { color: var(--muted); font-size: .9rem; margin: 0 0 16px; line-height: 1.4; }
+    .wiz-num { width: 100%; box-sizing: border-box; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 13px; padding: 16px; color: var(--ink); font: 800 1.6rem "Space Grotesk", sans-serif; text-align: center; }
+    .wiz-num:focus { outline: none; border-color: var(--water); box-shadow: 0 0 0 3px rgba(55,183,228,.2); }
+    .opt-list { display: grid; gap: 10px; }
+    .opt-list.two { grid-template-columns: 1fr 1fr; }
+    .opt { display: flex; flex-direction: column; gap: 2px; text-align: left; background: var(--surface); border: 1.5px solid var(--line); border-radius: 13px; padding: 14px 16px; color: var(--ink); font: 700 1rem Inter, sans-serif; cursor: pointer; }
+    .opt small { font-weight: 500; color: var(--muted); font-size: .8rem; }
+    .opt.sel { border-color: var(--accent); background: rgba(255,176,58,.08); }
+    .opt.sel small { color: var(--ink); }
+    .addon { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 13px; padding: 13px 15px; color: var(--ink); font: 700 .98rem Inter, sans-serif; cursor: pointer; }
+    .addon .cost { color: var(--muted); font-weight: 600; font-size: .85rem; }
+    .addon.sel { border-color: var(--accent); background: rgba(255,176,58,.08); }
+    .addon.sel .cost { color: var(--accent); }
+    .addon .chk { width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--line-strong); flex: 0 0 auto; display: grid; place-items: center; color: #1a0d06; font-size: 14px; }
+    .addon.sel .chk { background: var(--accent); border-color: var(--accent); }
+    .wiz-nav { display: flex; gap: 10px; margin-top: 22px; }
+    .wiz-nav .btn { flex: 1; }
+    .est-total { text-align: center; padding: 22px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; margin-bottom: 14px; }
+    .est-total .lbl { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
+    .est-total .big { font: 800 2.7rem "Space Grotesk", sans-serif; background: var(--grad-fw); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; line-height: 1.1; }
+    .est-total .heads { color: var(--water); font: 700 1rem Inter, sans-serif; margin-top: 2px; }
+    .est-summary { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 16px; }
+    .est-summary span { background: var(--surface-soft); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; font: 600 .82rem Inter, sans-serif; color: var(--ink); }
+    .est-rows { background: var(--surface); border: 1px solid var(--line); border-radius: 13px; padding: 6px 14px; margin-bottom: 14px; }
+    .est-rows .r { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font: 500 .9rem Inter, sans-serif; color: var(--muted); }
+    .est-rows .r:last-child { border-bottom: 0; }
+    .est-rows .r b { color: var(--ink); font-variant-numeric: tabular-nums; }
+    .rates summary { cursor: pointer; font: 700 .92rem Inter, sans-serif; padding: 12px 0; color: var(--ink); }
+    .rate-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; }
+    .rate-row label { color: var(--muted); font-size: .86rem; }
+    .rate-row input { width: 120px; background: var(--bg); border: 1px solid var(--line-strong); border-radius: 9px; padding: 9px; color: var(--ink); font: 600 .95rem Inter, sans-serif; text-align: right; }
+    .disclaim { color: var(--line-strong); font-size: .78rem; line-height: 1.45; margin-top: 16px; }
+  </style>
+
+  <script src="./sprinkflow-auth.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("../sw.js").catch(() => {});
+    var $ = function (id) { return document.getElementById(id); };
+
+    var CFG = {
+      coverage: { light: 225, ordinary: 130, extra: 100, storage: 100, res13d: 144, res13r: 144 },
+      occLabel: { light: "Light hazard", ordinary: "Ordinary hazard", extra: "Extra hazard", storage: "Storage / ESFR", res13d: "Residential 13D", res13r: "Residential 13R" },
+      occList: [
+        { id: "light", label: "Light hazard", desc: "offices, schools, churches" },
+        { id: "ordinary", label: "Ordinary hazard", desc: "retail, light manufacturing, shops" },
+        { id: "extra", label: "Extra hazard", desc: "spray, woodworking, high heat" },
+        { id: "storage", label: "Storage / ESFR", desc: "warehouse, racks, high-pile" },
+        { id: "res13d", label: "Residential 13D", desc: "one- & two-family homes" },
+        { id: "res13r", label: "Residential 13R", desc: "low-rise apartments" },
+      ],
+      systems: [
+        { id: "wet", label: "Wet", mult: 1.0 },
+        { id: "dry", label: "Dry", mult: 1.25 },
+        { id: "preaction", label: "Preaction", mult: 1.35 },
+        { id: "esfr", label: "ESFR", mult: 1.2 },
+        { id: "antifreeze", label: "Antifreeze", mult: 1.15 },
+        { id: "other", label: "Other", mult: 1.0 },
+      ],
+      layouts: [
+        { pct: 0, label: "Wide open", desc: "warehouse or one big room" },
+        { pct: 25, label: "Mostly open", desc: "a few offices or walls" },
+        { pct: 50, label: "Average", desc: "typical office / retail mix" },
+        { pct: 75, label: "Cut up", desc: "lots of separate rooms" },
+        { pct: 100, label: "Very cut up", desc: "tons of small rooms" },
+      ],
+      addons: [
+        { id: "backflow", label: "Backflow preventer", cost: 3500 },
+        { id: "riser", label: "Riser assembly", cost: 2500 },
+        { id: "fdc", label: "Fire dept connection (FDC)", cost: 1500 },
+        { id: "underground", label: "Underground lead-in", cost: 8000 },
+        { id: "pump", label: "Fire pump", cost: 35000 },
+        { id: "antifreeze", label: "Antifreeze loop", cost: 1200 },
+        { id: "monitor", label: "Monitor / tamper / flow switch", cost: 800 },
+      ],
+      ratePerHead: 250,
+      designRateSqft: 0.2,   // design cost default: 20 cents / sq ft
+      designRateHr: 125,     // or bill design hourly
+    };
+
+    var KEY = "sf.bidwiz";
+    function load() { try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { return null; } }
+    function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+    var S = load() || {};
+    S.area = S.area || "";
+    S.system = S.system || "wet";
+    S.occupancy = S.occupancy || "light";
+    S.layout = typeof S.layout === "number" ? S.layout : 0;
+    S.addons = S.addons || {};
+    S.ratePerHead = S.ratePerHead != null ? S.ratePerHead : CFG.ratePerHead;
+    S.addonCosts = S.addonCosts || {};
+    S.designOn = S.designOn != null ? S.designOn : true;   // design cost is almost always needed → on by default
+    S.designMode = S.designMode || "sqft";                 // "sqft" (per sq ft) or "hourly"
+    S.designRateSqft = S.designRateSqft != null ? S.designRateSqft : CFG.designRateSqft;
+    S.designHours = S.designHours || 0;
+    S.designRateHr = S.designRateHr != null ? S.designRateHr : CFG.designRateHr;
+    var step = 0;
+
+    var money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+    function num(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
+    function ceilEven(n) { var c = Math.ceil(n - 1e-9); if (c <= 0) return 0; return c % 2 === 0 ? c : c + 1; }
+    function addonCost(a) { return S.addonCosts[a.id] != null ? num(S.addonCosts[a.id]) : a.cost; }
+
+    function compute() {
+      var area = num(S.area);
+      var cov = CFG.coverage[S.occupancy] || 225;
+      var layout = CFG.layouts[S.layout] || CFG.layouts[0];
+      var raw = cov > 0 ? (area / cov) * (1 + layout.pct / 100) : 0;
+      var heads = raw > 0 ? ceilEven(raw) : 0;
+      var sys = CFG.systems.filter(function (x) { return x.id === S.system; })[0] || CFG.systems[0];
+      var rph = num(S.ratePerHead) || CFG.ratePerHead;
+      var base = heads * rph * sys.mult;
+      var addonTotal = 0, addonList = [];
+      CFG.addons.forEach(function (a) { if (S.addons[a.id]) { var c = addonCost(a); addonTotal += c; addonList.push({ label: a.label, cost: c }); } });
+      var design = 0;
+      if (S.designOn) {
+        if (S.designMode === "hourly") design = num(S.designHours) * (num(S.designRateHr) || CFG.designRateHr);
+        else design = area * (S.designRateSqft != null ? num(S.designRateSqft) : CFG.designRateSqft);
+      }
+      var subtotal = base + design + addonTotal;
+      var total = subtotal > 0 ? Math.ceil(subtotal / 50) * 50 : 0;
+      return { area: area, cov: cov, layout: layout, heads: heads, sys: sys, rph: rph, base: base, design: design, addonTotal: addonTotal, addonList: addonList, total: total };
+    }
+
+    var TOTAL_STEPS = 7;
+    function renderProgress() {
+      var p = $("wizProgress"), html = "";
+      for (var i = 0; i < TOTAL_STEPS; i++) html += '<i class="' + (i < step ? "done" : i === step ? "on" : "") + '"></i>';
+      p.innerHTML = html;
+    }
+
+    function optList(items, selId, onPick, two) {
+      var div = document.createElement("div");
+      div.className = "opt-list" + (two ? " two" : "");
+      items.forEach(function (it) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "opt" + (it.id === selId || it.idx === selId ? " sel" : "");
+        b.innerHTML = "<span>" + it.label + "</span>" + (it.desc ? "<small>" + it.desc + "</small>" : "");
+        b.onclick = function () { onPick(it); };
+        div.appendChild(b);
+      });
+      return div;
+    }
+
+    function nav(backLabel, nextLabel, onNext, nextDisabled) {
+      var wrap = document.createElement("div");
+      wrap.className = "wiz-nav";
+      if (step > 0) {
+        var back = document.createElement("button");
+        back.className = "btn btn-ghost"; back.type = "button"; back.textContent = backLabel || "Back";
+        back.onclick = function () { step--; render(); };
+        wrap.appendChild(back);
+      }
+      var next = document.createElement("button");
+      next.className = "btn btn-primary"; next.type = "button"; next.textContent = nextLabel || "Next";
+      next.disabled = !!nextDisabled;
+      next.onclick = onNext;
+      wrap.appendChild(next);
+      return wrap;
+    }
+
+    function render() {
+      renderProgress();
+      var root = $("wizSteps");
+      root.innerHTML = "";
+      var s = document.createElement("div");
+      s.className = "wiz-step";
+
+      if (step === 0) {
+        s.innerHTML = '<h2>Area of work</h2><p class="q-sub">Roughly how many square feet are you covering?</p>';
+        var inp = document.createElement("input");
+        inp.className = "wiz-num"; inp.type = "number"; inp.inputMode = "numeric"; inp.placeholder = "e.g. 10000"; inp.value = S.area;
+        inp.oninput = function () { S.area = inp.value; save(); var n = next0(); if (nb) nb.disabled = !(num(S.area) > 0); };
+        s.appendChild(inp);
+        function next0() { return num(S.area) > 0; }
+        var navEl = nav("Back", "Next", function () { if (num(S.area) > 0) { step = 1; render(); } }, !(num(S.area) > 0));
+        var nb = navEl.querySelector(".btn-primary");
+        s.appendChild(navEl);
+        root.appendChild(s);
+        setTimeout(function () { inp.focus(); }, 60);
+        return;
+      }
+
+      if (step === 1) {
+        s.innerHTML = '<h2>Type of system</h2><p class="q-sub">Pick the system you\'ll install.</p>';
+        s.appendChild(optList(CFG.systems, S.system, function (it) { S.system = it.id; save(); step = 2; render(); }, true));
+        s.appendChild(nav("Back", "Next", function () { step = 2; render(); }));
+        root.appendChild(s);
+        return;
+      }
+
+      if (step === 2) {
+        s.innerHTML = '<h2>Occupancy</h2><p class="q-sub">This sets how much area each sprinkler can cover.</p>';
+        s.appendChild(optList(CFG.occList, S.occupancy, function (it) { S.occupancy = it.id; save(); step = 3; render(); }));
+        s.appendChild(nav("Back", "Next", function () { step = 3; render(); }));
+        root.appendChild(s);
+        return;
+      }
+
+      if (step === 3) {
+        s.innerHTML = '<h2>Building layout</h2><p class="q-sub">More walls and small rooms means more sprinklers per square foot.</p>';
+        var items = CFG.layouts.map(function (l, i) { return { idx: i, label: l.label, desc: l.desc + "  (+" + l.pct + "%)" }; });
+        s.appendChild(optList(items, S.layout, function (it) { S.layout = it.idx; save(); step = 4; render(); }));
+        s.appendChild(nav("Back", "Next", function () { step = 4; render(); }));
+        root.appendChild(s);
+        return;
+      }
+
+      if (step === 4) {
+        s.innerHTML = '<h2>Design cost</h2><p class="q-sub">You almost always need to factor this in. Default is $0.20 / sq ft — or bill it hourly.</p>';
+        var incl = document.createElement("button");
+        incl.type = "button";
+        incl.className = "addon" + (S.designOn ? " sel" : "");
+        incl.innerHTML = '<span>Include design cost</span><span class="chk">' + (S.designOn ? "✓" : "") + "</span>";
+        incl.onclick = function () { S.designOn = !S.designOn; save(); render(); };
+        s.appendChild(incl);
+
+        if (S.designOn) {
+          var modeWrap = document.createElement("div");
+          modeWrap.className = "opt-list two";
+          [["sqft", "Per sq ft"], ["hourly", "Hourly"]].forEach(function (m) {
+            var mb = document.createElement("button");
+            mb.type = "button";
+            mb.className = "opt" + (S.designMode === m[0] ? " sel" : "");
+            mb.innerHTML = "<span>" + m[1] + "</span>";
+            mb.onclick = function () { S.designMode = m[0]; save(); render(); };
+            modeWrap.appendChild(mb);
+          });
+          s.appendChild(modeWrap);
+
+          var fld = document.createElement("div");
+          if (S.designMode === "hourly") {
+            fld.innerHTML =
+              '<div class="rate-row"><label>Design hours</label><input type="number" inputmode="numeric" id="dHours" value="' + (num(S.designHours) || "") + '" placeholder="e.g. 16" /></div>' +
+              '<div class="rate-row"><label>Rate ($/hr)</label><input type="number" inputmode="numeric" id="dHr" value="' + (num(S.designRateHr) || CFG.designRateHr) + '" /></div>';
+          } else {
+            fld.innerHTML =
+              '<div class="rate-row"><label>Rate ($/sq ft)</label><input type="number" inputmode="decimal" step="0.01" id="dSqft" value="' + (S.designRateSqft != null ? S.designRateSqft : CFG.designRateSqft) + '" /></div>';
+          }
+          s.appendChild(fld);
+
+          var read = document.createElement("div");
+          read.className = "est-summary";
+          var paintDesign = function () {
+            var cd = compute();
+            read.innerHTML = '<span>Design cost: ' + money.format(cd.design) + '</span>' +
+              (S.designMode === "sqft" ? '<span>' + Number(cd.area).toLocaleString() + ' sq ft × $' + (S.designRateSqft != null ? S.designRateSqft : CFG.designRateSqft) + '/sq ft</span>' : '');
+          };
+          paintDesign();
+          s.appendChild(read);
+
+          fld.addEventListener("input", function (e) {
+            var t = e.target;
+            if (t.id === "dSqft") S.designRateSqft = num(t.value);
+            else if (t.id === "dHours") S.designHours = num(t.value);
+            else if (t.id === "dHr") S.designRateHr = num(t.value);
+            save();
+            paintDesign();
+          });
+        }
+        s.appendChild(nav("Back", "Next", function () { step = 5; render(); }));
+        root.appendChild(s);
+        return;
+      }
+
+      if (step === 5) {
+        s.innerHTML = '<h2>Quick add-ons</h2><p class="q-sub">Tap anything this job includes. Adjust prices on the estimate screen.</p>';
+        var list = document.createElement("div");
+        list.className = "opt-list";
+        CFG.addons.forEach(function (a) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "addon" + (S.addons[a.id] ? " sel" : "");
+          b.innerHTML = '<span>' + a.label + '<br><span class="cost">' + money.format(addonCost(a)) + '</span></span><span class="chk">' + (S.addons[a.id] ? "✓" : "") + "</span>";
+          b.onclick = function () { S.addons[a.id] = !S.addons[a.id]; save(); render(); };
+          list.appendChild(b);
+        });
+        s.appendChild(list);
+        s.appendChild(nav("Back", "See estimate", function () { step = 6; render(); }));
+        root.appendChild(s);
+        return;
+      }
+
+      // step 6 — result
+      var c = compute();
+      s.innerHTML =
+        '<div class="est-total"><div class="lbl">Estimated bid</div><div class="big">' + (c.total > 0 ? money.format(c.total) : "—") + '</div>' +
+        '<div class="heads">' + (c.heads > 0 ? "≈ " + c.heads + " sprinklers" : "enter an area to estimate") + "</div></div>";
+
+      var sum = document.createElement("div");
+      sum.className = "est-summary";
+      sum.innerHTML =
+        "<span>" + Number(c.area).toLocaleString() + " sq ft</span>" +
+        "<span>" + c.sys.label + "</span>" +
+        "<span>" + CFG.occLabel[S.occupancy] + "</span>" +
+        "<span>" + c.layout.label + "</span>" +
+        (c.design > 0 ? "<span>design</span>" : "") +
+        c.addonList.map(function (a) { return "<span>" + a.label.replace(/\s*\(.*\)/, "") + "</span>"; }).join("");
+      s.appendChild(sum);
+
+      var rows = document.createElement("div");
+      rows.className = "est-rows";
+      var rowHtml = '<div class="r"><span>' + c.heads + " sprinklers × " + money.format(c.rph) + "/head" + (c.sys.mult !== 1 ? " × " + c.sys.mult + " (" + c.sys.label + ")" : "") + '</span><b>' + money.format(c.base) + "</b></div>";
+      if (c.design > 0) {
+        var dLabel = S.designMode === "hourly"
+          ? ("Design (" + num(S.designHours) + " hr × " + money.format(num(S.designRateHr) || CFG.designRateHr) + ")")
+          : ("Design ($" + (S.designRateSqft != null ? S.designRateSqft : CFG.designRateSqft) + "/sq ft)");
+        rowHtml += '<div class="r"><span>' + dLabel + '</span><b>' + money.format(c.design) + "</b></div>";
+      }
+      c.addonList.forEach(function (a) { rowHtml += '<div class="r"><span>' + a.label + '</span><b>' + money.format(a.cost) + "</b></div>"; });
+      rowHtml += '<div class="r"><span><b>Total (rounded up to $50)</b></span><b>' + money.format(c.total) + "</b></div>";
+      rows.innerHTML = rowHtml;
+      s.appendChild(rows);
+
+      var rates = document.createElement("details");
+      rates.className = "rates";
+      var ratesHtml = "<summary>⚙ Your rates &amp; add-on prices</summary>";
+      ratesHtml += '<div class="rate-row"><label>Installed price per sprinkler</label><input type="number" inputmode="numeric" data-rate="head" value="' + (num(S.ratePerHead) || CFG.ratePerHead) + '" /></div>';
+      ratesHtml += '<div class="rate-row"><label>Design — $/sq ft</label><input type="number" inputmode="decimal" step="0.01" data-design="sqft" value="' + (S.designRateSqft != null ? S.designRateSqft : CFG.designRateSqft) + '" /></div>';
+      ratesHtml += '<div class="rate-row"><label>Design — $/hr</label><input type="number" inputmode="numeric" data-design="hr" value="' + (num(S.designRateHr) || CFG.designRateHr) + '" /></div>';
+      CFG.addons.forEach(function (a) { ratesHtml += '<div class="rate-row"><label>' + a.label + '</label><input type="number" inputmode="numeric" data-addon="' + a.id + '" value="' + addonCost(a) + '" /></div>'; });
+      rates.innerHTML = ratesHtml;
+      rates.addEventListener("input", function (e) {
+        var t = e.target;
+        if (t.dataset.rate === "head") { S.ratePerHead = num(t.value); save(); }
+        else if (t.dataset.design === "sqft") { S.designRateSqft = num(t.value); save(); }
+        else if (t.dataset.design === "hr") { S.designRateHr = num(t.value); save(); }
+        else if (t.dataset.addon) { S.addonCosts[t.dataset.addon] = num(t.value); save(); }
+        var c2 = compute();
+        s.querySelector(".est-total .big").textContent = c2.total > 0 ? money.format(c2.total) : "—";
+      });
+      s.appendChild(rates);
+
+      var navWrap = document.createElement("div");
+      navWrap.className = "wiz-nav";
+      var edit = document.createElement("button");
+      edit.className = "btn btn-ghost"; edit.type = "button"; edit.textContent = "‹ Edit answers";
+      edit.onclick = function () { step = 0; render(); };
+      var again = document.createElement("button");
+      again.className = "btn btn-primary"; again.type = "button"; again.textContent = "New estimate";
+      again.onclick = function () { S.area = ""; S.addons = {}; S.layout = 0; S.designHours = 0; save(); step = 0; render(); };
+      navWrap.appendChild(edit); navWrap.appendChild(again);
+      s.appendChild(navWrap);
+
+      var disc = document.createElement("p");
+      disc.className = "disclaim";
+      disc.textContent = "A rough job-walk number — sprinkler count from area ÷ coverage, bumped for layout and rounded up to an even count. Verify against a real layout and your own pricing before you submit a bid.";
+      s.appendChild(disc);
+
+      root.appendChild(s);
+    }
+
+    // ---- account button (free SprinkFlow account; gate handled by sprinkflow-auth.js) ----
+    function syncAcct() {
+      var b = $("acctBtn"); if (!b || !window.SFAuth) return;
+      b.hidden = false;
+      if (SFAuth.isSignedIn()) { b.textContent = SFAuth.displayName() || "Account"; b.classList.add("in"); }
+      else { b.textContent = "Sign in"; b.classList.remove("in"); }
+    }
+    if (window.SFAuth) {
+      $("acctBtn").onclick = function () { SFAuth.openSignIn({}); };
+      SFAuth.onChange(syncAcct);
+      syncAcct();
+    }
+
+    render();
+  </script>
+</body>
+</html>

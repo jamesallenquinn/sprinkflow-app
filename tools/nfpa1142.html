@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>NFPA 1142 Water Supply — SprinkFlow</title>
+  <meta name="theme-color" content="#0d1116" />
+  <link rel="manifest" href="../manifest.webmanifest" />
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <header class="app-bar">
+    <a class="back" href="../index.html" aria-label="Back">‹</a>
+    <div><div class="title">NFPA 1142</div><div class="sub">Rural water-supply requirement</div></div>
+  </header>
+
+  <main class="tool-page">
+    <div class="field"><label>Structure name (optional)</label><input id="title" type="text" placeholder="Structure" /></div>
+
+    <div class="field"><label>Total volume — enter area × height, or L × W × H</label></div>
+    <div class="row2">
+      <div class="field"><label>Area (sq ft)</label><input id="area" type="number" inputmode="decimal" placeholder="sq ft" /></div>
+      <div class="field"><label>Avg height (ft)</label><input id="areaHeight" type="number" inputmode="decimal" placeholder="ft" /></div>
+    </div>
+    <div class="field"><label>— or dimensions —</label></div>
+    <div class="row3">
+      <div class="field"><label>L (ft)</label><input id="length" type="number" inputmode="decimal" placeholder="L" /></div>
+      <div class="field"><label>W (ft)</label><input id="width" type="number" inputmode="decimal" placeholder="W" /></div>
+      <div class="field"><label>H (ft)</label><input id="dimensionHeight" type="number" inputmode="decimal" placeholder="H" /></div>
+    </div>
+
+    <div class="field"><label>Occupancy Hazard Classification (OHC)</label>
+      <select id="ohc">
+        <option value="3">3 — Severe Hazard</option>
+        <option value="4">4 — High Hazard</option>
+        <option value="5" selected>5 — Moderate Hazard</option>
+        <option value="6">6 — Low Hazard</option>
+        <option value="7">7 — Light Hazard</option>
+      </select>
+    </div>
+    <div class="field"><label>Construction Classification (CC)</label>
+      <select id="cc">
+        <option value="0.5">Type I — 0.5</option>
+        <option value="0.75">Type II — 0.75</option>
+        <option value="1.0" selected>Type III — 1.0</option>
+        <option value="0.75">Type IV — 0.75</option>
+        <option value="1.5">Type V — 1.5</option>
+      </select>
+    </div>
+    <div class="field"><label>Exposure hazards</label>
+      <select id="exposure"><option value="without" selected>Without exposure hazards</option><option value="with">With exposure hazards (×1.5)</option></select>
+    </div>
+
+    <div class="result-card">
+      <div class="lbl">Minimum water supply</div>
+      <div class="big" id="gallons">— gal</div>
+      <div class="result-row"><span>Minimum flow rate</span><span class="v" id="gpm">—</span></div>
+      <div class="result-row"><span>Building volume</span><span class="v" id="vol">—</span></div>
+      <div class="result-row"><span>Calculated (pre-minimum)</span><span class="v" id="calc">—</span></div>
+      <p class="hint" id="note"></p>
+    </div>
+    <p class="hint">Supply = (Volume ÷ OHC) × CC × exposure multiplier, with NFPA 1142 minimums (2,000 gal, or 3,000 with exposures). Flow rate tiers: ≤15k→250, ≤22.5k→500, ≤30k→750, &gt;30k→1000 gpm.</p>
+  </main>
+
+  <script>
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("../sw.js").catch(()=>{});
+    const f = id => parseFloat(document.getElementById(id).value);
+    const fmt = n => Math.round(n).toLocaleString();
+    function update(){
+      const area=f("area"), areaH=f("areaHeight"), L=f("length"), W=f("width"), H=f("dimensionHeight");
+      const ohc=parseInt(document.getElementById("ohc").value,10);
+      const cc=parseFloat(document.getElementById("cc").value);
+      const withExp = document.getElementById("exposure").value==="with";
+      let volume=0, src="";
+      const hasArea = Number.isFinite(area) && area>0;
+      const hasDims = [L,W,H].every(v=>Number.isFinite(v)&&v>0);
+      if (hasArea){ const h=(Number.isFinite(areaH)&&areaH>0)?areaH:1; volume=area*h; src=`${area.toLocaleString()} sq ft × ${h} ft`; }
+      else if (hasDims){ volume=L*W*H; src=`${L} × ${W} × ${H} ft`; }
+      else { document.getElementById("gallons").textContent="— gal"; document.getElementById("gpm").textContent="—"; document.getElementById("vol").textContent="—"; document.getElementById("calc").textContent="—"; document.getElementById("note").textContent="Enter area (with optional height) or L × W × H."; return; }
+      const mult = withExp?1.5:1;
+      const minGal = withExp?3000:2000;
+      const calc = (volume/ohc)*cc*mult;
+      const gallons = Math.max(Math.round(calc), minGal);
+      let gpm=250; if(gallons>30000)gpm=1000; else if(gallons>22500)gpm=750; else if(gallons>15000)gpm=500;
+      document.getElementById("gallons").textContent = fmt(gallons)+" gal";
+      document.getElementById("gpm").textContent = gpm.toLocaleString()+" gpm";
+      document.getElementById("vol").textContent = fmt(volume)+" cu ft ("+src+")";
+      document.getElementById("calc").textContent = fmt(calc)+" gal";
+      document.getElementById("note").textContent = gallons===minGal ? `Raised to the ${minGal.toLocaleString()} gal minimum.` : "";
+    }
+    document.querySelectorAll("input,select").forEach(el=>el.addEventListener("input",update));
+    update();
+  </script>
+  <script src="./sprinkflow-auth.js"></script>
+</body>
+</html>

@@ -14,133 +14,52 @@
       "title": "Tree Systems And Flow Accumulation",
       "outcome": "Learner can trace a non-looped system from remote sprinklers back to the source.",
       "unlockScore": 70,
-      "concept": "Meet the four-head system we calculate together through this whole course, and learn the one property that makes its calc walkable: every sprinkler has exactly one path back to the supply.",
+      "concept": "A tree system has one hydraulic path from each flowing sprinkler back to the supply. Pipe flow accumulates as branches combine. The calculation can be walked from the most remote outlets toward the riser because there are no parallel paths that require loop balancing.",
       "sections": [
         {
-                "id": "meet-the-system",
-                "title": "Meet the system we'll calculate",
-                "body": "This is the exact system we calculate together through this whole course: four sprinklers (H1-H4) on two branch lines, a cross main, a riser, and the water supply. By the last level you'll have followed a complete hydraulic calc through it, number by number.",
-                "keyPoints": [
-                        "H1 is the sprinkler farthest from the supply - keep an eye on it.",
-                        "Every level of this course works on this same system.",
-                        "Nothing here is abstract: every rule gets applied to these pipes."
-                ],
-                "diagram": {
-                        "labels": {
-                                "t-h1": "most remote",
-                                "t-riser": "from supply"
-                        },
-                        "caption": "Our example: 4 heads, 2 branch lines, one cross main, one riser."
-                },
-                "checkQuestionIds": []
+          "id": "tree-what-it-is",
+          "title": "What the computer is modeling",
+          "body": "A tree system is a directed network with no closed hydraulic loops. Each operating sprinkler has exactly one route back to the source. The program can start at the remote sprinklers and move upstream, adding each outlet flow to the pipe segments that feed it.",
+          "keyPoints": [
+            "Each active sprinkler contributes discharge at one node.",
+            "Each upstream pipe carries the sum of all downstream outlets.",
+            "There is no need to decide how water splits between parallel feed paths."
+          ],
+          "checkQuestionIds": [
+            "tree-001",
+            "tree-002"
+          ]
         },
         {
-                "id": "tree-what-it-is",
-                "title": "It's a tree: one path back to the supply",
-                "body": "Trace from any sprinkler back to the riser - there is exactly one route. That makes this a tree system. Because water can't take two parallel paths, the calc never has to decide how flow splits. It can simply start at the far end and add flows together while walking toward the supply.",
-                "diagram": {
-                        "focus": [
-                                "n-h1"
-                        ],
-                        "flow": [
-                                "p-b1a",
-                                "p-b1b",
-                                "p-cm2",
-                                "p-cm1"
-                        ],
-                        "labels": {
-                                "t-h1": "start here"
-                        },
-                        "caption": "H1's only route to the supply - highlighted. Every head has exactly one."
-                },
-                "keyPoints": [
-                        "One route per sprinkler = a tree.",
-                        "Flows simply accumulate as branches join.",
-                        "No loops means no balancing - yet."
-                ],
-                "checkQuestionIds": [
-                        "tree-001",
-                        "tree-002"
-                ]
+          "id": "tree-node-rule",
+          "title": "The node rule",
+          "body": "Every junction still has to balance. The total flow entering a node must equal the flow leaving the node plus any sprinkler, hose, or other outlet discharge at that same node.",
+          "formula": "flow in = flow out + local discharge",
+          "example": "If 150 gpm enters a tee and a sprinkler at that tee discharges 42 gpm, the remaining pipe leaving the tee carries 108 gpm.",
+          "keyPoints": [
+            "This is conservation of mass.",
+            "A junction with no outlet has equal total inflow and outflow.",
+            "A sprinkler node removes flow from the pipe network."
+          ],
+          "checkQuestionIds": [
+            "tree-003",
+            "tree-005"
+          ]
         },
         {
-                "id": "tree-node-rule",
-                "title": "The node rule (water is bookkeeping)",
-                "body": "Every junction has to balance: what flows in must equal what flows out plus whatever discharges there. Stand at the tee where H2 meets the branch line: if 150 gpm arrived and a sprinkler at that tee discharged 42 gpm, the pipe continuing on carries exactly 108 gpm. The whole calc is this bookkeeping, repeated.",
-                "formula": "flow in = flow out + discharge at the node",
-                "diagram": {
-                        "focus": [
-                                "n-h2"
-                        ],
-                        "flow": [
-                                "p-b1a",
-                                "p-b1b"
-                        ],
-                        "labels": {
-                                "t-h2": "a junction must balance"
-                        },
-                        "caption": "At H2's tee: inflow = outflow + H2's own discharge."
-                },
-                "keyPoints": [
-                        "Conservation of mass - nothing more.",
-                        "A junction with no outlet: inflow equals outflow.",
-                        "A sprinkler node removes its discharge from the pipe."
-                ],
-                "checkQuestionIds": [
-                        "tree-003",
-                        "tree-005"
-                ]
-        },
-        {
-                "id": "tree-calculation-order",
-                "title": "Why the calc starts at H1 and walks backward",
-                "body": "The calc begins at the most remote sprinkler - H1 - because that head needs the most help: every foot of pipe between it and the supply costs pressure. Starting there and walking toward the riser, each segment's flow is just the running total of the heads behind it. That backward walk only works because this is a tree.",
-                "diagram": {
-                        "focus": [
-                                "n-h1",
-                                "n-riser"
-                        ],
-                        "flow": [
-                                "p-b1a",
-                                "p-b1b",
-                                "p-cm2",
-                                "p-cm1"
-                        ],
-                        "labels": {
-                                "t-h1": "calc starts here",
-                                "t-riser": "ends here"
-                        },
-                        "caption": "Remote head to riser: the direction every tree calc walks."
-                },
-                "keyPoints": [
-                        "Most remote head = hydraulically most demanding.",
-                        "Each pipe carries the sum of all heads downstream of it.",
-                        "Add a loop and this simple walk breaks - that's Level 4."
-                ],
-                "checkQuestionIds": [
-                        "tree-004"
-                ]
-        },
-        {
-                "id": "tree-ready",
-                "title": "Ready: next we put real numbers on H1",
-                "body": "You now know the shape of the calc: start remote, respect the node rule, accumulate toward the supply. In the next level we stop talking and start calculating - H1 gets a pressure, a flow, and the first row of a real calc sheet.",
-                "diagram": {
-                        "focus": [
-                                "n-h1"
-                        ],
-                        "labels": {
-                                "t-h1": "next: Q = K x sqrt(P)"
-                        },
-                        "caption": "Level 2 computes this head's actual discharge."
-                },
-                "keyPoints": [
-                        "Level 2: sprinkler discharge, with our system's real numbers.",
-                        "Checkpoints along the way earn this level's badge."
-                ],
-                "checkQuestionIds": []
+          "id": "tree-calculation-order",
+          "title": "Calculation order",
+          "body": "A tree calculation can be solved in a stable order: determine active sprinkler flows, add flows into branch segments, combine branches into mains, then calculate pressure loss from the remote area back to the supply.",
+          "keyPoints": [
+            "The farthest active outlets are usually calculated first.",
+            "Pipe flow increases as branches combine toward the source.",
+            "The supply must provide the total accumulated demand plus required pressure."
+          ],
+          "checkQuestionIds": [
+            "tree-004"
+          ]
         }
-],
+      ],
       "questions": [
         {
           "id": "tree-001",
@@ -245,165 +164,68 @@
       "concept": "A density-area design establishes minimum required sprinkler flow. A sprinkler's actual discharge is pressure-driven by Q = K sqrt(P). Final calculated flow may exceed the density minimum when node pressure is higher than the minimum pressure.",
       "sections": [
         {
-                "id": "sprinkler-minimum-demand",
-                "title": "What H1 is required to deliver",
-                "body": "Our example building is Light Hazard: the design density is 0.10 gpm per square foot, and H1 covers 130 square feet. Multiply them and H1 must deliver at least 13.0 gpm. That's the code floor - the calc's first real number.",
-                "formula": "minimum flow = density x coverage area = 0.10 x 130 = 13.0 gpm",
-                "diagram": {
-                        "focus": [
-                                "n-h1"
-                        ],
-                        "labels": {
-                                "t-h1": "must deliver >= 13.0 gpm"
-                        },
-                        "caption": "The design basis sets H1's minimum - not its actual - flow."
-                },
-                "keyPoints": [
-                        "Density x area = minimum required flow at the head.",
-                        "This is a floor. The actual discharge will be higher.",
-                        "Every head in the design area gets this same check."
-                ],
-                "checkQuestionIds": [
-                        "sprinkler-003"
-                ]
+          "id": "sprinkler-minimum-demand",
+          "title": "Minimum demand comes from density",
+          "body": "The design density and sprinkler coverage area set the minimum required flow for each operating sprinkler. This is a design floor, not necessarily the exact final flow.",
+          "formula": "minimum sprinkler flow = density x coverage area",
+          "example": "At 0.20 gpm/ft2 over 130 ft2, minimum flow is 0.20 x 130 = 26 gpm.",
+          "keyPoints": [
+            "Density is usually in gpm per square foot.",
+            "Coverage area is the floor area assigned to that sprinkler.",
+            "The result is the minimum acceptable sprinkler discharge."
+          ],
+          "checkQuestionIds": [
+            "sprinkler-003"
+          ]
         },
         {
-                "id": "sprinkler-pressure-driven",
-                "title": "What H1 actually delivers: Q = K x sqrt(P)",
-                "body": "A sprinkler is just an orifice: push harder and more water comes out. The K-factor is the size of that orifice in calc terms. Our heads are K5.6, so at any pressure P the discharge is 5.6 times the square root of P. The sprinkler doesn't know the code minimum - it only knows the pressure at its inlet.",
-                "formula": "Q = K x sqrt(P)   ->   our heads: Q = 5.6 x sqrt(P)",
-                "diagram": {
-                        "focus": [
-                                "n-h1"
-                        ],
-                        "labels": {
-                                "t-h1": "K = 5.6"
-                        },
-                        "caption": "Same head, more pressure, more water. Always."
-                },
-                "keyPoints": [
-                        "K-factor: gpm per sqrt(psi) - the orifice constant.",
-                        "Discharge is driven by pressure, not by the design minimum.",
-                        "K5.6 is the standard 1/2-inch orifice."
-                ],
-                "checkQuestionIds": [
-                        "sprinkler-001",
-                        "sprinkler-002"
-                ]
+          "id": "sprinkler-pressure-driven",
+          "title": "Actual discharge comes from pressure",
+          "body": "Once the network pressure at a sprinkler node is known, the actual sprinkler flow is calculated from its K-factor. Higher pressure produces higher flow, but the relationship uses the square root of pressure.",
+          "formula": "Q = K x sqrt(P)",
+          "example": "A K8.0 sprinkler at 25 psi flows 8.0 x sqrt(25) = 40 gpm.",
+          "keyPoints": [
+            "Two sprinklers with the same K-factor can flow differently if node pressures differ.",
+            "Actual flow must be at least the density-based minimum.",
+            "Large K sprinklers can produce significant flow at relatively low pressure."
+          ],
+          "checkQuestionIds": [
+            "sprinkler-001",
+            "sprinkler-002"
+          ]
         },
         {
-                "id": "sprinkler-invert-formula",
-                "title": "Picking H1's starting pressure",
-                "body": "Flip the formula: to push 13.0 gpm through a K5.6 head takes (13.0 / 5.6)^2 = 5.4 psi. But NFPA 13 also sets an absolute floor of 7 psi operating pressure at any sprinkler. 7.0 beats 5.4, so the calc starts H1 at 7.0 psi - whichever requirement is higher wins.",
-                "formula": "P = (Q / K)^2 = (13.0 / 5.6)^2 = 5.4 psi  ->  7 psi code minimum governs",
-                "diagram": {
-                        "focus": [
-                                "n-h1"
-                        ],
-                        "labels": {
-                                "t-h1": "start at 7.0 psi"
-                        },
-                        "caption": "The higher of 'pressure for required flow' and the 7 psi floor."
-                },
-                "keyPoints": [
-                        "Invert Q = K x sqrt(P) to get P = (Q/K)^2.",
-                        "NFPA 13 minimum operating pressure: 7 psi.",
-                        "The governing value is always the HIGHER one."
-                ],
-                "checkQuestionIds": [
-                        "sprinkler-004"
-                ]
+          "id": "sprinkler-pressure-ratio",
+          "title": "Pressure changes are not linear",
+          "body": "Because sprinkler discharge uses the square root of pressure, increasing pressure does not increase flow one-for-one. A sprinkler at 16 psi does not flow twice as much as the same sprinkler at 8 psi.",
+          "formula": "flow ratio = sqrt(P2) / sqrt(P1)",
+          "example": "For the same K-factor, 16 psi compared with 9 psi gives a flow ratio of sqrt(16) / sqrt(9) = 4 / 3.",
+          "keyPoints": [
+            "Same K-factor does not mean same flow if pressures differ.",
+            "Pressure has a square-root effect on discharge.",
+            "This is why small pressure differences create smaller flow differences."
+          ],
+          "checkQuestionIds": [
+            "sprinkler-006"
+          ]
         },
         {
-                "id": "sprinkler-first-row",
-                "title": "The first row of the calc sheet",
-                "body": "Now compute it: Q = 5.6 x sqrt(7.0) = 14.8 gpm. H1 starts at 7.0 psi and discharges 14.8 gpm - more than the 13.0 required, exactly as it should be. That pair of numbers is the first row of the calc sheet below, and every remaining row of this course builds on it.",
-                "formula": "Q1 = 5.6 x sqrt(7.0) = 14.8 gpm",
-                "diagram": {
-                        "focus": [
-                                "n-h1"
-                        ],
-                        "labels": {
-                                "t-h1": "14.8 gpm @ 7.0 psi"
-                        },
-                        "caption": "H1, calculated. The calc sheet just gained its first row."
-                },
-                "calcRow": {
-                        "node": "H1",
-                        "p": "7.0",
-                        "qAdd": "14.8",
-                        "qTotal": "14.8",
-                        "pipe": "1\" Sch 40 x 12 ft",
-                        "pf": "0.9"
-                },
-                "keyPoints": [
-                        "14.8 gpm actual vs 13.0 gpm required - the floor is met.",
-                        "The 12 ft of 1-inch pipe to H2 will cost 0.9 psi (Level 3 shows how).",
-                        "A calc sheet is just these rows, walked to the supply."
-                ],
-                "checkQuestionIds": []
-        },
-        {
-                "id": "sprinkler-pressure-ratio",
-                "title": "Why H2 flows MORE than H1",
-                "body": "Water reaching H1 first had to get past H2's tee, losing 0.9 psi of friction in that 12 ft of pipe. So the pressure AT H2 is higher: 7.0 + 0.9 = 7.9 psi. And a K5.6 head at 7.9 psi discharges 5.6 x sqrt(7.9) = 15.7 gpm. Upstream heads always flow more than the remote head - the calc must use each head's real pressure, never copy-paste the minimum.",
-                "formula": "P2 = 7.0 + 0.9 = 7.9 psi  ->  Q2 = 5.6 x sqrt(7.9) = 15.7 gpm",
-                "diagram": {
-                        "focus": [
-                                "n-h2"
-                        ],
-                        "flow": [
-                                "p-b1a"
-                        ],
-                        "labels": {
-                                "t-h1": "14.8 gpm @ 7.0",
-                                "t-h2": "15.7 gpm @ 7.9"
-                        },
-                        "caption": "Higher pressure upstream = more discharge. Branch now carries 30.6 gpm."
-                },
-                "calcRow": {
-                        "node": "H2",
-                        "p": "7.9",
-                        "qAdd": "15.7",
-                        "qTotal": "30.6",
-                        "pipe": "1-1/4\" x 10 ft",
-                        "pf": "0.8"
-                },
-                "keyPoints": [
-                        "Pressure grows as you walk upstream; so does discharge.",
-                        "The branch line now carries 14.8 + 15.7 = 30.6 gpm.",
-                        "Sixteen psi at a head flows 4/3 what nine psi does - sqrt scaling."
-                ],
-                "checkQuestionIds": [
-                        "sprinkler-006"
-                ]
-        },
-        {
-                "id": "sprinkler-design-vs-actual",
-                "title": "Design minimum vs. what the sheet shows",
-                "body": "So the finished calc will show every head flowing above its 13.0 gpm minimum - H1 at 14.8, H2 at 15.7, and the heads nearer the supply higher still. That's not an error and not waste; it's hydraulics. The minimum lives in the design criteria; the actual flows live on the calc sheet - and the supply has to carry the actuals.",
-                "diagram": {
-                        "flow": [
-                                "p-b1a",
-                                "p-b1b"
-                        ],
-                        "labels": {
-                                "t-h1": "14.8",
-                                "t-h2": "15.7",
-                                "t-cm": "30.6 gpm heads to the main"
-                        },
-                        "caption": "Actual discharges, accumulating toward the supply - Level 3 follows them."
-                },
-                "keyPoints": [
-                        "Minimums come from density x area; actuals come from Q = K x sqrt(P).",
-                        "A sheet showing flows above minimum is a calc working correctly.",
-                        "Total demand is the sum of ACTUAL discharges - never the minimums."
-                ],
-                "checkQuestionIds": [
-                        "sprinkler-005"
-                ]
+          "id": "sprinkler-invert-formula",
+          "title": "Finding minimum pressure",
+          "body": "The program can invert the discharge equation to find the pressure needed to produce a required minimum flow.",
+          "formula": "P = (Q / K)^2",
+          "example": "A K22.4 sprinkler needing 26 gpm requires (26 / 22.4)^2 = 1.35 psi minimum theoretical pressure.",
+          "keyPoints": [
+            "This pressure only proves the individual sprinkler can meet minimum flow.",
+            "The full system may require more pressure because of pipe friction and elevation.",
+            "Final actual flow may be much higher than the minimum."
+          ],
+          "checkQuestionIds": [
+            "sprinkler-004",
+            "sprinkler-005"
+          ]
         }
-],
+      ],
       "questions": [
         {
           "id": "sprinkler-001",

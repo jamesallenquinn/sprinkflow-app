@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Contain the Blaze — SprinkFlow</title>
+  <meta name="description" content="A fire-sprinkler arcade game. Tap the bays to douse spreading fire and keep the warehouse contained as long as you can." />
+  <meta name="theme-color" content="#0d1116" />
+  <link rel="manifest" href="../manifest.webmanifest" />
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="../assets/logo.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+  <style>
+    :root { --good:#3ddc97; --warn:#ffb03a; --bad:#ff5a4f; }
+    html, body { overscroll-behavior:none; }
+    .bz-wrap { max-width:480px; margin:0 auto; padding:0 12px calc(10px + env(safe-area-inset-bottom,0px)); display:flex; flex-direction:column; }
+    .bz-hud { display:flex; align-items:center; gap:8px; margin:6px 0 8px; }
+    .bz-hud .pill { flex:1; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:7px 8px; text-align:center; }
+    .bz-hud .k { font:600 .6rem/1 Inter; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); }
+    .bz-hud .v { font:700 1.15rem/1.1 'Space Grotesk'; margin-top:3px; }
+    .bz-hud .score .v { color:var(--accent); }
+    .bz-hud .combo .v { color:var(--brand); }
+    .bz-hud .combo.hot .v { animation:cpop .25s ease; }
+    @keyframes cpop { 50% { transform:scale(1.35); } }
+
+    .bz-bar-wrap { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+    .bz-bar-wrap .lbl { font:700 .62rem Inter; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); flex:0 0 auto; }
+    .bz-bar { flex:1; height:14px; border-radius:99px; background:var(--surface-soft); overflow:hidden; border:1px solid var(--line); }
+    .bz-bar > i { display:block; height:100%; width:100%; background:var(--good); transition:width .12s linear, background .2s; }
+    .bz-bar.low > i { animation:barpulse .5s ease-in-out infinite; }
+    @keyframes barpulse { 50% { opacity:.55; } }
+
+    .bz-stage { position:relative; border-radius:16px; overflow:hidden; }
+    canvas#game { display:block; width:100%; height:auto; background:#0b1014; border:1px solid var(--line); border-radius:16px; touch-action:manipulation; }
+
+    .bz-overlay { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; text-align:center;
+      background:rgba(7,10,13,.82); backdrop-filter:blur(3px); border-radius:16px; padding:20px; z-index:5; }
+    .bz-overlay.show { display:flex; }
+    .bz-overlay .flame { font-size:46px; filter:drop-shadow(0 6px 18px rgba(255,90,47,.5)); }
+    .bz-overlay h1 { font:700 1.7rem/1.05 'Space Grotesk'; margin:10px 0 4px; }
+    .bz-overlay h1 .grad { background:var(--grad-fire); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+    .bz-overlay p { color:var(--muted); margin:0 0 14px; max-width:34ch; font-size:.92rem; line-height:1.4; }
+    .bz-btn { border:0; border-radius:14px; padding:15px 26px; font:700 1.05rem 'Space Grotesk'; cursor:pointer; background:var(--grad-fire); color:#1a0d06; }
+    .bz-btn.ghost { background:var(--surface); color:var(--ink); border:1px solid var(--line); font-weight:600; padding:13px 22px; }
+    .bz-btn + .bz-btn { margin-top:10px; }
+    .bz-final { display:flex; gap:18px; margin:6px 0 14px; }
+    .bz-final .s .v { font:700 2.2rem 'Space Grotesk'; }
+    .bz-final .s .v.gold { background:var(--grad-fw); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+    .bz-final .s .k { font:600 .6rem Inter; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+
+    /* leaderboard */
+    .bz-who { font:500 .84rem Inter; color:var(--muted); margin:4px 0 8px; min-height:18px; }
+    .bz-who b { color:var(--accent); } .bz-who button { background:none; border:0; color:var(--water); font:600 .82rem Inter; cursor:pointer; text-decoration:underline; }
+    .bz-lb { width:100%; max-width:340px; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--surface); }
+    .bz-lb-h { font:700 .9rem 'Space Grotesk'; padding:10px 14px; border-bottom:1px solid var(--line); }
+    .bz-lb-row { display:flex; align-items:center; gap:10px; padding:8px 14px; border-bottom:1px solid var(--line); font:600 .88rem Inter; }
+    .bz-lb-row:last-child { border-bottom:0; }
+    .bz-lb-row .rk { width:22px; color:var(--muted); font:700 .9rem 'Space Grotesk'; text-align:center; }
+    .bz-lb-row .nm { flex:1; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .bz-lb-row .sc { color:var(--accent); font:700 .92rem 'Space Grotesk'; }
+    .bz-lb-row.me { background:rgba(255,176,58,.10); }
+    .bz-lb-empty { padding:14px; text-align:center; color:var(--muted); font:500 .84rem Inter; }
+    .rankmsg { font:600 .9rem Inter; min-height:18px; margin:2px 0 6px; color:var(--ok); }
+    .bz-hint { text-align:center; color:var(--muted); font:500 .76rem Inter; padding:8px 0 2px; }
+  </style>
+</head>
+<body>
+  <header class="app-bar">
+    <a class="back" href="../index.html" aria-label="Back">‹</a>
+    <div><div class="title">Contain the Blaze</div><div class="sub">Douse the bays · keep it contained</div></div>
+  </header>
+
+  <main class="bz-wrap">
+    <div class="bz-hud">
+      <div class="pill score"><div class="k">Score</div><div class="v" id="scoreVal">0</div></div>
+      <div class="pill"><div class="k">Best</div><div class="v" id="bestVal">0</div></div>
+      <div class="pill combo" id="comboPill"><div class="k">Combo</div><div class="v" id="comboVal">×1</div></div>
+    </div>
+    <div class="bz-bar-wrap">
+      <span class="lbl">Containment</span>
+      <div class="bz-bar" id="contBar"><i id="contFill"></i></div>
+    </div>
+
+    <div class="bz-stage">
+      <canvas id="game" width="350" height="490"></canvas>
+
+      <div class="bz-overlay show" id="startOverlay">
+        <div class="flame">🔥</div>
+        <h1>Contain the <span class="grad">Blaze</span></h1>
+        <p>Fire keeps breaking out across the warehouse. Tap a burning bay to drop the sprinkler and knock it down. Let the containment bar empty and it's fully involved. How long can you hold it?</p>
+        <button class="bz-btn" id="playBtn">▶ Play</button>
+      </div>
+
+      <div class="bz-overlay" id="overOverlay">
+        <h1 id="overTitle">Fully involved 🚒</h1>
+        <div class="bz-final">
+          <div class="s"><div class="v gold" id="finalScore">0</div><div class="k">Score</div></div>
+          <div class="s"><div class="v" id="finalWave" style="color:var(--water)">0s</div><div class="k">Survived</div></div>
+        </div>
+        <div class="rankmsg" id="rankMsg"></div>
+        <div class="bz-who" id="whoLine"></div>
+        <div class="bz-lb" id="lbBox"><div class="bz-lb-h">🏆 Top Fire Marshals</div><div id="lbList"><div class="bz-lb-empty">Loading…</div></div></div>
+        <button class="bz-btn" id="againBtn" style="margin-top:14px">↻ Play again</button>
+        <button class="bz-btn ghost" id="postBtn">Sign in to post your score</button>
+      </div>
+    </div>
+    <div class="bz-hint">Tip: prioritize the biggest flames — they spread to nearby bays.</div>
+  </main>
+
+  <script src="./sprinkflow-auth.js"></script>
+  <script>
+  (function () {
+    "use strict";
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("../sw.js").catch(function(){});
+    var $ = function (id) { return document.getElementById(id); };
+    var canvas = $("game"), ctx = canvas.getContext("2d");
+
+    var COLS = 5, ROWS = 7;
+    var cells = [];                 // {fire:0-3, gt:0 growth timer, hit:0 douse flash, ig:0 ignite anim}
+    var particles = [];
+    var state = "start";            // start | playing | over
+    var score = 0, combo = 1, comboT = 0, containment = 100, elapsed = 0;
+    var spawnT = 0, shake = 0, pendingScore = 0;
+    var best = (function () { var v = parseInt(localStorage.getItem("blazeBest") || "0", 10); return isFinite(v) ? v : 0; })();
+    $("bestVal").textContent = best;
+
+    var cssW = 350, cssH = 490, cell = 70, dpr = 1;
+    function resize() {
+      var w = Math.min(canvas.parentElement.clientWidth, 460);
+      cell = Math.floor(w / COLS);
+      cssW = cell * COLS; cssH = cell * ROWS;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.style.width = cssW + "px"; canvas.style.height = cssH + "px";
+      canvas.width = Math.round(cssW * dpr); canvas.height = Math.round(cssH * dpr);
+    }
+    window.addEventListener("resize", resize);
+
+    function reset() {
+      cells = [];
+      for (var i = 0; i < COLS * ROWS; i++) cells.push({ fire: 0, gt: 0, hit: 0, ig: 0 });
+      particles = []; score = 0; combo = 1; comboT = 0; containment = 100; elapsed = 0; spawnT = 0; shake = 0;
+      $("scoreVal").textContent = "0"; $("comboVal").textContent = "×1";
+    }
+
+    // difficulty curves (ramp with elapsed seconds)
+    function spawnInterval() { return Math.max(0.62, 1.9 - elapsed * 0.012); }   // seconds between ignitions
+    function growthInterval() { return Math.max(0.72, 1.55 - elapsed * 0.009); } // seconds per fire level-up / spread
+
+    var IDX = function (c, r) { return r * COLS + c; };
+    function neighbors(i) {
+      var c = i % COLS, r = (i / COLS) | 0, out = [];
+      if (c > 0) out.push(IDX(c - 1, r)); if (c < COLS - 1) out.push(IDX(c + 1, r));
+      if (r > 0) out.push(IDX(c, r - 1)); if (r < ROWS - 1) out.push(IDX(c, r + 1));
+      return out;
+    }
+    function igniteRandomEmpty() {
+      var empties = [];
+      for (var i = 0; i < cells.length; i++) if (cells[i].fire === 0) empties.push(i);
+      if (!empties.length) return;
+      var i = empties[(Math.random() * empties.length) | 0];
+      cells[i].fire = 1; cells[i].gt = 0; cells[i].ig = 1;
+    }
+    function spread(i) {
+      var n = neighbors(i).filter(function (j) { return cells[j].fire === 0; });
+      if (!n.length) return false;
+      var j = n[(Math.random() * n.length) | 0];
+      cells[j].fire = 1; cells[j].gt = 0; cells[j].ig = 1;
+      return true;
+    }
+
+    function douse(i) {
+      var cl = cells[i];
+      if (cl.fire <= 0) return;
+      var gained = Math.round(cl.fire * 14 * combo);
+      score += gained;
+      combo = Math.min(combo + 1, 25); comboT = 1.2;
+      $("scoreVal").textContent = score.toLocaleString();
+      $("comboVal").textContent = "×" + combo;
+      var pill = $("comboPill"); pill.classList.remove("hot"); void pill.offsetWidth; pill.classList.add("hot");
+      containment = Math.min(100, containment + cl.fire * 2.2);   // relief for dousing
+      // splash particles
+      var cx = (i % COLS + 0.5) * cell, cy = (((i / COLS) | 0) + 0.5) * cell;
+      for (var p = 0; p < 16; p++) {
+        var a = Math.random() * Math.PI * 2, sp = 60 + Math.random() * 160;
+        particles.push({ x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40, life: 0.5 + Math.random() * 0.3, r: 2 + Math.random() * 3 });
+      }
+      cl.fire = 0; cl.gt = 0; cl.hit = 0.32;
+    }
+
+    function update(dt) {
+      if (state !== "playing") return;
+      elapsed += dt;
+      $("finalWave");
+      // spawn
+      spawnT += dt;
+      if (spawnT >= spawnInterval()) { spawnT = 0; igniteRandomEmpty(); }
+      // grow / spread + accumulate intensity
+      var intensity = 0;
+      for (var i = 0; i < cells.length; i++) {
+        var cl = cells[i];
+        if (cl.ig > 0) cl.ig = Math.max(0, cl.ig - dt * 3);
+        if (cl.hit > 0) cl.hit = Math.max(0, cl.hit - dt * 3);
+        if (cl.fire > 0) {
+          intensity += cl.fire;
+          cl.gt += dt;
+          if (cl.gt >= growthInterval()) {
+            cl.gt = 0;
+            if (cl.fire < 3) cl.fire++;
+            else { if (spread(i)) { shake = Math.min(shake + 4, 9); } }
+          }
+        }
+      }
+      // containment drain (more fire = faster); slow regen when clear
+      if (intensity > 0) containment -= intensity * 1.7 * dt;
+      else containment = Math.min(100, containment + 3 * dt);
+      // combo decay
+      if (comboT > 0) { comboT -= dt; if (comboT <= 0) { combo = 1; $("comboVal").textContent = "×1"; } }
+      // particles
+      for (var p = particles.length - 1; p >= 0; p--) {
+        var pt = particles[p]; pt.life -= dt;
+        if (pt.life <= 0) { particles.splice(p, 1); continue; }
+        pt.vy += 520 * dt; pt.x += pt.vx * dt; pt.y += pt.vy * dt;
+      }
+      if (shake > 0) shake = Math.max(0, shake - dt * 22);
+      // bar UI
+      containment = Math.max(0, containment);
+      var fill = $("contFill"), bar = $("contBar");
+      fill.style.width = containment + "%";
+      fill.style.background = containment > 55 ? "var(--good)" : containment > 28 ? "var(--warn)" : "var(--bad)";
+      bar.classList.toggle("low", containment <= 28);
+      if (containment <= 0) gameOver();
+    }
+
+    function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+    function render(t) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+      var sx = shake ? (Math.random() - 0.5) * shake : 0, sy = shake ? (Math.random() - 0.5) * shake : 0;
+      ctx.save(); ctx.translate(sx, sy);
+      var pad = Math.max(3, cell * 0.06);
+      for (var i = 0; i < cells.length; i++) {
+        var c = i % COLS, r = (i / COLS) | 0, x = c * cell, y = r * cell, cl = cells[i];
+        // bay
+        roundRect(x + pad, y + pad, cell - pad * 2, cell - pad * 2, cell * 0.16);
+        ctx.fillStyle = cl.fire > 0 ? "#1d130d" : "#141d24";
+        ctx.fill();
+        ctx.lineWidth = 1; ctx.strokeStyle = "rgba(255,255,255,0.05)"; ctx.stroke();
+        if (cl.hit > 0) { roundRect(x + pad, y + pad, cell - pad * 2, cell - pad * 2, cell * 0.16); ctx.fillStyle = "rgba(55,183,228," + (cl.hit) + ")"; ctx.fill(); }
+        if (cl.fire > 0) {
+          var cx = x + cell / 2, cy = y + cell / 2;
+          var flick = 1 + Math.sin(t * 0.012 + i) * 0.08 + (cl.fire === 3 ? Math.sin(t * 0.03 + i) * 0.06 : 0);
+          var sizeBase = (0.30 + cl.fire * 0.14) * cell * flick;
+          // glow
+          var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, sizeBase * 1.3);
+          g.addColorStop(0, "rgba(255,150,40," + (0.35 + cl.fire * 0.12) + ")");
+          g.addColorStop(1, "rgba(255,90,40,0)");
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, sizeBase * 1.3, 0, Math.PI * 2); ctx.fill();
+          // flame emoji
+          ctx.font = sizeBase + "px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          if (cl.ig > 0) { ctx.globalAlpha = 1 - cl.ig * 0.5; }
+          ctx.fillText("🔥", cx, cy + sizeBase * 0.04);
+          ctx.globalAlpha = 1;
+        }
+      }
+      // particles
+      for (var p = 0; p < particles.length; p++) {
+        var pt = particles[p];
+        ctx.globalAlpha = Math.max(0, Math.min(1, pt.life * 2.2));
+        ctx.fillStyle = "#6fd6f2"; ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    var last = 0;
+    function loop(ts) {
+      if (!last) last = ts;
+      var dt = Math.min(0.05, (ts - last) / 1000); last = ts;
+      update(dt);
+      render(ts);
+      requestAnimationFrame(loop);
+    }
+
+    // input
+    function pointerCell(ev) {
+      var rect = canvas.getBoundingClientRect();
+      var px = (ev.clientX - rect.left), py = (ev.clientY - rect.top);
+      var c = Math.floor(px / cell), r = Math.floor(py / cell);
+      if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return -1;
+      return IDX(c, r);
+    }
+    canvas.addEventListener("pointerdown", function (ev) {
+      if (state !== "playing") return;
+      ev.preventDefault();
+      var i = pointerCell(ev); if (i >= 0) douse(i);
+    });
+
+    function start() {
+      resize(); reset(); state = "playing"; last = 0;
+      $("startOverlay").classList.remove("show"); $("overOverlay").classList.remove("show");
+    }
+    function gameOver() {
+      state = "over";
+      if (score > best) { best = score; try { localStorage.setItem("blazeBest", String(best)); } catch (e) {} }
+      $("bestVal").textContent = best;
+      $("finalScore").textContent = score.toLocaleString();
+      $("finalWave").textContent = Math.floor(elapsed) + "s";
+      $("rankMsg").textContent = ""; pendingScore = score;
+      renderWho(); submitScore(); loadLeaderboard();
+      $("overOverlay").classList.add("show");
+    }
+
+    // ---- leaderboard (shared SprinkFlow sign-in) ----
+    function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" })[c]; }); }
+    function lbName() { return (window.SFAuth && SFAuth.displayName()) || ""; }
+    function renderWho() {
+      var who = $("whoLine");
+      if (window.SFAuth && SFAuth.isSignedIn()) {
+        who.innerHTML = 'Signed in as <b>' + esc(SFAuth.displayName()) + '</b> · <button id="bzSignOut">sign out</button>';
+        $("bzSignOut").onclick = function () { SFAuth.signOut(); };
+        $("postBtn").textContent = "↑ Post score to global board";
+      } else {
+        who.innerHTML = 'Sign in to post your score to the global board.';
+        $("postBtn").textContent = "Sign in to post your score";
+      }
+    }
+    function loadLeaderboard() {
+      if (!window.SFAuth) return;
+      SFAuth.read("blaze_scores?select=display_name,best_score&order=best_score.desc&limit=10").then(function (rows) {
+        var list = $("lbList");
+        if (!Array.isArray(rows) || !rows.length) { list.innerHTML = '<div class="bz-lb-empty">No scores yet. Claim the top spot! 🥇</div>'; return; }
+        var me = lbName().toLowerCase();
+        list.innerHTML = rows.map(function (r, i) {
+          var mine = me && String(r.display_name).toLowerCase() === me ? " me" : "";
+          var medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
+          return '<div class="bz-lb-row' + mine + '"><div class="rk">' + medal + '</div><div class="nm">' + esc(r.display_name) + '</div><div class="sc">' + Number(r.best_score).toLocaleString() + '</div></div>';
+        }).join("");
+      });
+    }
+    function submitScore() {
+      if (!window.SFAuth || !SFAuth.isSignedIn() || pendingScore <= 0) return;
+      $("rankMsg").style.color = "var(--muted)"; $("rankMsg").textContent = "Posting your score…";
+      SFAuth.rpc("submit_blaze_score", { p_display_name: SFAuth.displayName(), p_score: pendingScore }).then(function (res) {
+        if (res.ok) { $("rankMsg").style.color = "var(--ok)"; $("rankMsg").textContent = "✓ Score posted!"; loadLeaderboard(); }
+        else if (res.reason === "expired") { $("rankMsg").textContent = ""; }
+        else if (res.reason !== "not-signed-in") { $("rankMsg").style.color = "var(--accent)"; $("rankMsg").textContent = "Couldn't post (offline?)."; }
+      });
+    }
+
+    $("playBtn").onclick = start;
+    $("againBtn").onclick = start;
+    $("postBtn").onclick = function () {
+      if (window.SFAuth && SFAuth.isSignedIn()) submitScore();
+      else if (window.SFAuth) SFAuth.openSignIn({ onSuccess: function () { renderWho(); submitScore(); loadLeaderboard(); } });
+    };
+    if (window.SFAuth) SFAuth.onChange(function () { renderWho(); loadLeaderboard(); });
+    document.addEventListener("visibilitychange", function () { if (document.hidden) last = 0; });
+
+    resize(); reset(); render(0);
+    requestAnimationFrame(loop);
+  })();
+  </script>
+</body>
+</html>
