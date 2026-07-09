@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "studio.sprinkflow.app.twa",
+        "sha256_cert_fingerprints": ["F6:60:B0:77:FA:B1:B3:4A:F0:BB:58:48:C9:E3:B4:F4:9C:73:D6:5C:18:D0:5E:6C:80:48:5E:C0:6D:05:0E:BC"]
+      }
+    }]
