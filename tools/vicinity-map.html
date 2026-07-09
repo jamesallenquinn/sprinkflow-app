@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Vicinity Map — SprinkFlow</title>
+  <meta name="description" content="Generate a fire-sprinkler plan-set vicinity map from any address — major/minor streets, an Area of Work box, north arrow, exportable to PNG and DXF." />
+  <meta name="theme-color" content="#0d1116" />
+  <link rel="manifest" href="../manifest.webmanifest" />
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+  <style>
+    .vm-page { max-width: 720px; margin: 0 auto; padding: 0 12px calc(28px + env(safe-area-inset-bottom, 0px)); }
+    .vm-addr { position: relative; }
+    .vm-suggest { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 40;
+      background: var(--surface); border: 1px solid var(--line-strong); border-radius: 12px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+    .vm-suggest button { display: block; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line);
+      color: var(--ink); font: 500 .92rem/1.35 Inter; padding: 12px 14px; cursor: pointer; }
+    .vm-suggest button:last-child { border-bottom: 0; }
+    .vm-suggest button:active { background: var(--surface-soft); }
+    .vm-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .vm-controls .field { margin-bottom: 12px; }
+    .vm-check { display: flex; align-items: center; gap: 10px; font: 600 .9rem Inter; color: var(--ink); padding: 6px 0; }
+    .vm-check input { width: 20px; height: 20px; }
+    .vm-generate { width: 100%; border: 0; border-radius: 14px; padding: 15px; font: 700 1.05rem 'Space Grotesk';
+      background: var(--grad-fire); color: #1a0d06; cursor: pointer; }
+    .vm-generate:disabled { opacity: .6; }
+    .vm-status { color: var(--muted); font: 500 .85rem/1.4 Inter; margin: 10px 2px; min-height: 1.1em; text-align: center; }
+    .vm-maptools { display: flex; gap: 8px; margin: 6px 0 4px; }
+    .vm-maptools button { flex: 1; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+      border-radius: 11px; padding: 12px; font: 600 .9rem Inter; cursor: pointer; }
+    .vm-maptools button:disabled { opacity: .5; }
+    .vm-hint { color: var(--muted); font: 500 .78rem/1.45 Inter; margin: 6px 2px 0; text-align: center; }
+    .vm-map { position: relative; background: #fff; border: 1px solid var(--line-strong); border-radius: 12px; overflow: hidden; touch-action: none; }
+    .vm-map svg { display: block; width: 100%; height: auto; }
+    .vm-map .vm-street { }
+    .vm-map .vm-label { cursor: move; }
+    .vm-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+      color: #8a949e; font: 700 .95rem Inter; padding: 20px; pointer-events: none; }
+    .vm-empty[hidden] { display: none; }
+    .vm-menu { position: absolute; z-index: 60; min-width: 210px; background: var(--surface); border: 1px solid var(--line-strong);
+      border-radius: 12px; box-shadow: 0 12px 34px rgba(0,0,0,.5); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+    .vm-menu .t { color: var(--muted); font: 800 .68rem Inter; letter-spacing: .05em; text-transform: uppercase; padding: 2px; }
+    .vm-menu input { background: var(--surface-soft); border: 1px solid var(--line); border-radius: 8px; color: var(--ink); font: 500 .92rem Inter; padding: 10px; }
+    .vm-menu button { background: var(--surface-soft); border: 1px solid var(--line); border-radius: 8px; color: var(--ink);
+      font: 600 .88rem Inter; padding: 11px; text-align: left; cursor: pointer; }
+    .vm-menu button:active { background: var(--surface); }
+  </style>
+</head>
+<body>
+  <header class="app-bar">
+    <a class="back" href="../index.html" aria-label="Back">‹</a>
+    <div><div class="title">Vicinity Map</div><div class="sub">Plan-set map from an address</div></div>
+  </header>
+
+  <main class="vm-page">
+    <div class="vm-controls">
+      <div class="field vm-addr">
+        <label>Project Address</label>
+        <input id="vmAddr" type="text" autocomplete="off" autocapitalize="words" placeholder="Start typing an address…" />
+        <div class="vm-suggest" id="vmSuggest" hidden></div>
+      </div>
+      <div class="vm-row">
+        <div class="field">
+          <label>Map Coverage</label>
+          <select id="vmCoverage">
+            <option value="0.5">~½ mile wide</option>
+            <option value="0.75" selected>~¾ mile wide</option>
+            <option value="1">~1 mile wide</option>
+            <option value="1.5">~1½ miles wide</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Area of Work</label>
+          <select id="vmWorkSize">
+            <option value="150">150 ft square</option>
+            <option value="220" selected>220 ft square</option>
+            <option value="300">300 ft square</option>
+            <option value="450">450 ft square</option>
+          </select>
+        </div>
+      </div>
+      <div class="vm-row">
+        <div class="field">
+          <label>Work Box Rotation</label>
+          <input id="vmRotation" type="number" inputmode="numeric" step="5" value="0" />
+        </div>
+        <label class="vm-check" style="align-self:end;padding-bottom:14px"><input id="vmLabels" type="checkbox" checked /> Label streets</label>
+      </div>
+      <button class="vm-generate" id="vmGenerate">Generate Vicinity Map</button>
+      <p class="vm-status" id="vmStatus"></p>
+    </div>
+
+    <div class="vm-maptools">
+      <button id="vmPng" disabled>Save PNG</button>
+      <button id="vmDxf" disabled>Save DXF</button>
+    </div>
+    <div class="vm-map" id="vmMap">
+      <svg id="vmSvg" viewBox="0 0 920 900" role="img" aria-label="Vicinity map"></svg>
+      <div class="vm-empty" id="vmEmpty">Pick an address and tap Generate — your map appears here.</div>
+    </div>
+    <p class="vm-hint">Tap a street to make it heavy/thin. Tap a label to rename or remove it. Drag the Area of Work box, its tag, or any street label to reposition. Map data © OpenStreetMap contributors.</p>
+  </main>
+
+  <script>
+  (function () {
+    "use strict";
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("../sw.js").catch(function () {});
+    var $ = function (id) { return document.getElementById(id); };
+    var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) { return ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" })[c]; }); };
+
+    var VW = 920, VH = 900, LABEL_W = 250, LABEL_H = 44;
+    var MAJOR = { motorway:1, trunk:1, primary:1, secondary:1, tertiary:1, motorway_link:1, trunk_link:1, primary_link:1, secondary_link:1, tertiary_link:1 };
+    var MINOR = { residential:1, unclassified:1, living_street:1 };
+
+    var S = { point: null, ways: [], overrides: {}, labelHidden: {}, labelText: {}, labelPos: {},
+      workOffset: { dx:0, dy:0 }, labelOffset: { dx:0, dy:0 }, drag: null, moved: false, suggestTimer: 0 };
+
+    // ---------- geocoding (Photon + Nominatim, ranked by exact house-number) ----------
+    function scoreCand(c, num, tokens) {
+      var s = 0;
+      if (c.house_number) { s += 3; if (num && String(c.house_number).trim() === num) s += 6; }
+      var lt = {}; String(c.label || "").toLowerCase().split(/[\s,]+/).forEach(function (t) { if (t.length > 1) lt[t] = 1; });
+      tokens.forEach(function (t) { if (lt[t]) s += 1; });
+      if (c.source === "nominatim") s += 1;
+      return s;
+    }
+    async function geocode(query) {
+      var numMatch = query.match(/^\s*(\d+)\b/);
+      var num = numMatch ? numMatch[1] : "";
+      var tokens = query.toLowerCase().split(/[\s,]+/).filter(function (t) { return t.length > 1; });
+      var cands = [];
+      try {
+        var nr = await fetch("https://nominatim.openstreetmap.org/search?q=" + encodeURIComponent(query) + "&format=json&limit=6&countrycodes=us&addressdetails=1");
+        (await nr.json()).forEach(function (row) {
+          var a = row.address || {};
+          cands.push({ label: String(row.display_name || "").slice(0, 120), lat: +row.lat, lon: +row.lon, house_number: a.house_number || "", source: "nominatim" });
+        });
+      } catch (e) {}
+      try {
+        var pr = await fetch("https://photon.komoot.io/api/?q=" + encodeURIComponent(query) + "&limit=6&lang=en");
+        (await pr.json()).features.forEach(function (f) {
+          var p = f.properties || {}, g = f.geometry || {};
+          if (!g.coordinates) return;
+          var street = ((p.housenumber || "") + " " + (p.street || "")).trim() || p.name || "";
+          var label = [street, p.city, p.state, p.postcode].filter(Boolean).join(", ");
+          if (label) cands.push({ label: label, lat: g.coordinates[1], lon: g.coordinates[0], house_number: p.housenumber || "", source: "photon" });
+        });
+      } catch (e) {}
+      cands.forEach(function (c) { c._s = scoreCand(c, num, tokens); });
+      cands.sort(function (a, b) { return b._s - a._s; });
+      var out = [], seen = [];
+      cands.forEach(function (c) {
+        if (out.length >= 6) return;
+        if (seen.some(function (p) { return Math.abs(c.lat - p[0]) < 1e-4 && Math.abs(c.lon - p[1]) < 1e-4; })) return;
+        seen.push([c.lat, c.lon]); out.push(c);
+      });
+      return out;
+    }
+
+    async function fetchSuggestions() {
+      var q = $("vmAddr").value.trim();
+      if (q.length < 4) { $("vmSuggest").hidden = true; return; }
+      var results = await geocode(q);
+      if (!results.length) { $("vmSuggest").hidden = true; return; }
+      $("vmSuggest").innerHTML = results.map(function (r, i) { return '<button type="button" data-i="' + i + '">' + esc(r.label) + "</button>"; }).join("");
+      $("vmSuggest").hidden = false;
+      [].forEach.call($("vmSuggest").children, function (btn) {
+        btn.onclick = function () {
+          var r = results[+btn.dataset.i];
+          S.point = { lat: r.lat, lon: r.lon };
+          $("vmAddr").value = r.label;
+          $("vmSuggest").hidden = true;
+        };
+      });
+    }
+
+    // ---------- OSM streets (Overpass, mirrored) ----------
+    var OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+    function halfExtents() {
+      var miles = +$("vmCoverage").value || 0.75;
+      var halfW = miles * 1609.34 / 2;
+      return { halfW: halfW, halfH: halfW * (VH / VW) };
+    }
+    async function fetchStreets() {
+      var ext = halfExtents(), lat = S.point.lat, lon = S.point.lon;
+      var mLat = 111320, mLon = 111320 * Math.cos(lat * Math.PI / 180);
+      var s = lat - ext.halfH / mLat, n = lat + ext.halfH / mLat, w = lon - ext.halfW / mLon, e = lon + ext.halfW / mLon;
+      var query = "[out:json][timeout:30];way[\"highway\"](" + s + "," + w + "," + n + "," + e + ");out geom;";
+      for (var i = 0; i < OVERPASS.length; i++) {
+        try {
+          var r = await fetch(OVERPASS[i], { method: "POST", body: "data=" + encodeURIComponent(query) });
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          var data = await r.json();
+          return (data.elements || []).filter(function (el) { return el.type === "way" && (el.geometry || []).length >= 2; })
+            .map(function (el) {
+              var t = el.tags || {};
+              return { id: el.id, highway: t.highway || "", name: t.name || "", pts: el.geometry.map(function (g) { return [g.lat, g.lon]; }) };
+            });
+        } catch (err) { if (i === OVERPASS.length - 1) throw err; }
+      }
+    }
+
+    // ---------- projection ----------
+    function projector() {
+      var ext = halfExtents(), lat = S.point.lat, lon = S.point.lon;
+      var mLat = 111320, mLon = 111320 * Math.cos(lat * Math.PI / 180);
+      var scale = VW / (2 * ext.halfW);
+      return {
+        scale: scale,
+        toSvg: function (la, lo) { return [(lo - lon) * mLon * scale + VW / 2, VH / 2 - (la - lat) * mLat * scale]; },
+      };
+    }
+
+    function wayKey(w) { return w.name ? "n:" + w.name : "w:" + w.id; }
+    function isMajor(w) { var k = wayKey(w); if (k in S.overrides) return S.overrides[k]; return !!MAJOR[w.highway]; }
+
+    // ---------- label placement ----------
+    function labelSpots(majors, project) {
+      var placed = [], byName = new Map();
+      majors.forEach(function (w) {
+        if (!w.name) return;
+        var pts = w.pts.map(function (p) { return project.toSvg(p[0], p[1]); });
+        var inView = pts.filter(function (p) { return p[0] >= 24 && p[0] <= VW - 24 && p[1] >= 34 && p[1] <= VH - 34; });
+        if (inView.length < 2) return;
+        var len = 0; for (var i = 0; i < inView.length - 1; i++) len += Math.hypot(inView[i+1][0]-inView[i][0], inView[i+1][1]-inView[i][1]);
+        var key = w.name.toUpperCase(), ex = byName.get(key);
+        if (!ex || len > ex.len) byName.set(key, { len: len, pts: inView });
+      });
+      var spots = [];
+      [].concat(Array.from(byName.entries())).sort(function (a, b) { return b[1].len - a[1].len; }).forEach(function (entry) {
+        var key = entry[0], pts = entry[1].pts;
+        if (S.labelHidden[key]) return;
+        var text = (key in S.labelText) ? S.labelText[key] : key;
+        var total = 0; for (var i = 0; i < pts.length - 1; i++) total += Math.hypot(pts[i+1][0]-pts[i][0], pts[i+1][1]-pts[i][1]);
+        var target = total / 2, acc = 0, mx = pts[0][0], my = pts[0][1], ang = 0;
+        for (var j = 0; j < pts.length - 1; j++) {
+          var d = Math.hypot(pts[j+1][0]-pts[j][0], pts[j+1][1]-pts[j][1]);
+          if (acc + d >= target && d > 0) { var t = (target - acc) / d; mx = pts[j][0] + (pts[j+1][0]-pts[j][0])*t; my = pts[j][1] + (pts[j+1][1]-pts[j][1])*t; ang = Math.atan2(pts[j+1][1]-pts[j][1], pts[j+1][0]-pts[j][0]) * 180 / Math.PI; break; }
+          acc += d;
+        }
+        if (ang > 90) ang -= 180; if (ang < -90) ang += 180;
+        var w = text.length * 15 + 30, h = 40;
+        var box = { x1: mx - w/2, y1: my - h, x2: mx + w/2, y2: my + h };
+        if (placed.some(function (b) { return box.x1 < b.x2 && box.x2 > b.x1 && box.y1 < b.y2 && box.y2 > b.y1; })) return;
+        placed.push(box);
+        var off = S.labelPos[key] || { dx:0, dy:0 };
+        spots.push({ text: text, key: key, bx: mx, by: my, mx: mx + off.dx, my: my + off.dy, ang: ang });
+      });
+      return spots;
+    }
+
+    // ---------- Area of Work geometry ----------
+    function workGeom(project) {
+      var a = project.toSvg(S.point.lat, S.point.lon), ax = a[0], ay = a[1];
+      var workFt = +$("vmWorkSize").value || 220;
+      var box = (workFt / 3.28084) * project.scale;
+      var rot = +$("vmRotation").value || 0;
+      var rectCx = ax + S.workOffset.dx, rectCy = ay + S.workOffset.dy;
+      var labelLeft = ax > VW - 300;
+      var baseLx = labelLeft ? ax - 130 - LABEL_W/2 : ax + 130 + LABEL_W/2;
+      var baseLy = ay - 130;
+      var lcx = baseLx + S.labelOffset.dx, lcy = baseLy + S.labelOffset.dy;
+      var dx = lcx - rectCx, dy = lcy - rectCy, dist = Math.hypot(dx, dy) || 1; dx /= dist; dy /= dist;
+      return { ax: ax, ay: ay, box: box, rot: rot, rectCx: rectCx, rectCy: rectCy, lcx: lcx, lcy: lcy,
+        leader: { x1: rectCx + dx*box*0.6, y1: rectCy + dy*box*0.6, x2: lcx - dx*(LABEL_W/2+6), y2: lcy - dy*(LABEL_H/2+6) } };
+    }
+
+    // ---------- render ----------
+    function render() {
+      if (!S.point || !S.ways.length) return;
+      var project = projector();
+      var majors = [], minors = [];
+      S.ways.forEach(function (w) {
+        var known = MAJOR[w.highway] || MINOR[w.highway];
+        if (!known && !(wayKey(w) in S.overrides)) return;
+        (isMajor(w) ? majors : minors).push(w);
+      });
+      var path = function (w) { return "M" + w.pts.map(function (p) { var s = project.toSvg(p[0], p[1]); return s[0].toFixed(1) + "," + s[1].toFixed(1); }).join(" L"); };
+      var parts = ['<rect width="' + VW + '" height="' + VH + '" fill="white"/>'];
+      minors.forEach(function (w) { parts.push('<path class="vm-street" data-key="' + esc(wayKey(w)) + '" d="' + path(w) + '" fill="none" stroke="#555" stroke-width="1.6"/>'); });
+      majors.forEach(function (w) { parts.push('<path class="vm-street" data-key="' + esc(wayKey(w)) + '" d="' + path(w) + '" fill="none" stroke="black" stroke-width="8" stroke-linecap="round"/>'); });
+      if ($("vmLabels").checked) {
+        labelSpots(majors, project).forEach(function (sp) {
+          parts.push('<text class="vm-label" data-label="' + esc(sp.key) + '" data-bx="' + sp.bx.toFixed(1) + '" data-by="' + sp.by.toFixed(1) + '" data-ang="' + sp.ang.toFixed(1) + '" x="' + sp.mx.toFixed(1) + '" y="' + sp.my.toFixed(1) + '" transform="rotate(' + sp.ang.toFixed(1) + ' ' + sp.mx.toFixed(1) + ' ' + sp.my.toFixed(1) + ')" dy="-11" text-anchor="middle" font-family="Arial, sans-serif" font-size="27" font-weight="bold" stroke="white" stroke-width="6" paint-order="stroke" fill="black">' + esc(sp.text) + "</text>");
+        });
+      }
+      var g = workGeom(project), half = g.box / 2;
+      parts.push('<line id="vmLeader" x1="' + g.leader.x1.toFixed(1) + '" y1="' + g.leader.y1.toFixed(1) + '" x2="' + g.leader.x2.toFixed(1) + '" y2="' + g.leader.y2.toFixed(1) + '" stroke="black" stroke-width="2"/>');
+      parts.push('<g data-drag="work"><rect id="vmWorkHit" x="' + (g.rectCx-half).toFixed(1) + '" y="' + (g.rectCy-half).toFixed(1) + '" width="' + g.box.toFixed(1) + '" height="' + g.box.toFixed(1) + '" fill="transparent" pointer-events="all" transform="rotate(' + g.rot + ' ' + g.rectCx.toFixed(1) + ' ' + g.rectCy.toFixed(1) + ')"/>'
+        + '<rect id="vmWorkRect" x="' + (g.rectCx-half).toFixed(1) + '" y="' + (g.rectCy-half).toFixed(1) + '" width="' + g.box.toFixed(1) + '" height="' + g.box.toFixed(1) + '" fill="none" stroke="black" stroke-width="3" stroke-dasharray="11 7" transform="rotate(' + g.rot + ' ' + g.rectCx.toFixed(1) + ' ' + g.rectCy.toFixed(1) + ')"/></g>');
+      parts.push('<g data-drag="label"><rect id="vmLabelBox" x="' + (g.lcx-LABEL_W/2).toFixed(1) + '" y="' + (g.lcy-LABEL_H/2).toFixed(1) + '" width="' + LABEL_W + '" height="' + LABEL_H + '" fill="white" stroke="black" stroke-width="3"/>'
+        + '<text id="vmLabelText" x="' + g.lcx.toFixed(1) + '" y="' + (g.lcy+9).toFixed(1) + '" text-anchor="middle" font-family="Arial, sans-serif" font-size="27" font-weight="bold">AREA OF WORK</text></g>');
+      var cx = VW - 78, cy = VH - 88, cr = 46;
+      parts.push('<circle cx="' + cx + '" cy="' + cy + '" r="' + cr + '" fill="white" stroke="black" stroke-width="2.5"/>'
+        + '<line x1="' + cx + '" y1="' + (cy+cr-5) + '" x2="' + cx + '" y2="' + (cy-cr+5) + '" stroke="black" stroke-width="3"/>'
+        + '<path d="M' + cx + ',' + (cy-cr+2) + ' L' + (cx-6) + ',' + (cy-cr+20) + ' L' + (cx+6) + ',' + (cy-cr+20) + ' Z" fill="black"/>'
+        + '<text x="' + cx + '" y="' + (cy-cr-10) + '" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="bold">N</text>');
+      parts.push('<text x="8" y="' + (VH-8) + '" font-family="Arial, sans-serif" font-size="13" fill="#666">Map data (c) OpenStreetMap contributors</text>');
+      $("vmSvg").innerHTML = parts.join("");
+      $("vmEmpty").hidden = true;
+      $("vmPng").disabled = false; $("vmDxf").disabled = false;
+    }
+
+    function positionWork() {
+      if (!S.point || !S.ways.length) return;
+      var g = workGeom(projector()), half = g.box / 2;
+      var set = function (id, attrs) { var el = $(id); if (el) for (var k in attrs) el.setAttribute(k, attrs[k]); };
+      var ra = { x: (g.rectCx-half).toFixed(1), y: (g.rectCy-half).toFixed(1), transform: "rotate(" + g.rot + " " + g.rectCx.toFixed(1) + " " + g.rectCy.toFixed(1) + ")" };
+      set("vmWorkHit", ra); set("vmWorkRect", ra);
+      set("vmLeader", { x1: g.leader.x1.toFixed(1), y1: g.leader.y1.toFixed(1), x2: g.leader.x2.toFixed(1), y2: g.leader.y2.toFixed(1) });
+      set("vmLabelBox", { x: (g.lcx-LABEL_W/2).toFixed(1), y: (g.lcy-LABEL_H/2).toFixed(1) });
+      set("vmLabelText", { x: g.lcx.toFixed(1), y: (g.lcy+9).toFixed(1) });
+    }
+
+    // ---------- pointer coordinate helper ----------
+    function svgPt(evt) {
+      var r = $("vmSvg").getBoundingClientRect();
+      return [(evt.clientX - r.left) * (VW / r.width), (evt.clientY - r.top) * (VH / r.height)];
+    }
+    function distToSeg(px, py, ax, ay, bx, by) {
+      var dx = bx - ax, dy = by - ay, l2 = dx*dx + dy*dy;
+      var t = l2 ? Math.max(0, Math.min(1, ((px-ax)*dx + (py-ay)*dy) / l2)) : 0;
+      return Math.hypot(px - (ax + t*dx), py - (ay + t*dy));
+    }
+    function nearestStreet(px, py) {
+      var project = projector(), best = null, bestD = 18;
+      S.ways.forEach(function (w) {
+        var known = MAJOR[w.highway] || MINOR[w.highway];
+        if (!known && !(wayKey(w) in S.overrides)) return;
+        var pts = w.pts.map(function (p) { return project.toSvg(p[0], p[1]); });
+        for (var i = 0; i < pts.length - 1; i++) {
+          var d = distToSeg(px, py, pts[i][0], pts[i][1], pts[i+1][0], pts[i+1][1]);
+          if (d < bestD) { bestD = d; best = w; }
+        }
+      });
+      return best;
+    }
+
+    // ---------- label edit/remove menu (tap) ----------
+    function closeMenu() { var m = $("vmMenu"); if (m) m.remove(); }
+    function openMenu(clientX, clientY, key, streetName) {
+      closeMenu();
+      var wrap = $("vmMap"), r = wrap.getBoundingClientRect();
+      var m = document.createElement("div");
+      m.className = "vm-menu"; m.id = "vmMenu";
+      m.style.left = Math.max(6, Math.min(clientX - r.left, r.width - 224)) + "px";
+      m.style.top = Math.max(6, Math.min(clientY - r.top, r.height - 40)) + "px";
+      var hidden = !!S.labelHidden[key], current = (key in S.labelText) ? S.labelText[key] : key;
+      var html = '<div class="t">' + esc(streetName || key) + "</div>";
+      if (hidden) { html += '<button data-a="show">Show label</button>'; }
+      else {
+        html += '<input id="vmMenuInput" type="text" value="' + esc(current) + '" />'
+          + '<button data-a="save">Save label</button><button data-a="remove">Remove label</button>';
+      }
+      if ((key in S.labelText) || hidden) html += '<button data-a="reset">Reset to street name</button>';
+      m.innerHTML = html;
+      wrap.appendChild(m);
+      var input = $("vmMenuInput"); if (input) { input.focus(); }
+      [].forEach.call(m.querySelectorAll("[data-a]"), function (b) {
+        b.onclick = function () {
+          var a = b.dataset.a;
+          if (a === "save" && input) { var v = input.value.trim(); if (v && v !== key) S.labelText[key] = v; else delete S.labelText[key]; delete S.labelHidden[key]; }
+          else if (a === "remove") S.labelHidden[key] = true;
+          else if (a === "show") delete S.labelHidden[key];
+          else if (a === "reset") { delete S.labelText[key]; delete S.labelHidden[key]; }
+          closeMenu(); render();
+        };
+      });
+    }
+
+    // ---------- interactions ----------
+    // Kinds: "streetLabel" (a road name) · "work" (AoW rectangle) · "workLabel"
+    // (the AREA OF WORK tag) · "tap" (empty/street — toggle nearest street weight).
+    var svg = $("vmSvg");
+    svg.addEventListener("pointerdown", function (evt) {
+      if (!S.ways.length) return;
+      var p = svgPt(evt), t = evt.target;
+      var label = t.closest("[data-label]"), handle = t.closest("[data-drag]");
+      if (label) {
+        var key = label.dataset.label;
+        S.drag = { kind: "streetLabel", key: key, el: label, bx: +label.dataset.bx, by: +label.dataset.by, ang: +label.dataset.ang,
+          px: p[0], py: p[1], start: S.labelPos[key] || { dx:0, dy:0 }, cx: evt.clientX, cy: evt.clientY };
+      } else if (handle) {
+        var kind = handle.dataset.drag === "work" ? "work" : "workLabel";
+        var base = kind === "work" ? S.workOffset : S.labelOffset;
+        S.drag = { kind: kind, px: p[0], py: p[1], start: { dx: base.dx, dy: base.dy } };
+      } else {
+        S.drag = { kind: "tap", px: p[0], py: p[1] };
+      }
+      S.moved = false;
+      try { svg.setPointerCapture(evt.pointerId); } catch (e) {}
+      evt.preventDefault();
+    });
+    svg.addEventListener("pointermove", function (evt) {
+      if (!S.drag) return;
+      var p = svgPt(evt), d = S.drag, ddx = p[0] - d.px, ddy = p[1] - d.py;
+      if (Math.abs(ddx) > 3 || Math.abs(ddy) > 3) S.moved = true;
+      if (!S.moved) return;
+      if (d.kind === "streetLabel") {
+        var nx = d.bx + d.start.dx + ddx, ny = d.by + d.start.dy + ddy;
+        d.el.setAttribute("x", nx.toFixed(1)); d.el.setAttribute("y", ny.toFixed(1));
+        d.el.setAttribute("transform", "rotate(" + d.ang + " " + nx.toFixed(1) + " " + ny.toFixed(1) + ")");
+        S.labelPos[d.key] = { dx: d.start.dx + ddx, dy: d.start.dy + ddy };
+      } else if (d.kind === "work") {
+        S.workOffset.dx = d.start.dx + ddx; S.workOffset.dy = d.start.dy + ddy; positionWork();
+      } else if (d.kind === "workLabel") {
+        S.labelOffset.dx = d.start.dx + ddx; S.labelOffset.dy = d.start.dy + ddy; positionWork();
+      }
+    });
+    var endDrag = function (evt) {
+      var d = S.drag; S.drag = null;
+      try { svg.releasePointerCapture(evt.pointerId); } catch (e) {}
+      if (!d || S.moved) return;
+      if (d.kind === "tap") {
+        var w = nearestStreet(d.px, d.py);
+        if (w) { S.overrides[wayKey(w)] = !isMajor(w); render(); }
+      } else if (d.kind === "streetLabel") {
+        var way = S.ways.find(function (x) { return (x.name || "").toUpperCase() === d.key; });
+        openMenu(d.cx, d.cy, d.key, way ? way.name : d.key);
+      }
+    };
+    svg.addEventListener("pointerup", endDrag);
+    svg.addEventListener("pointercancel", endDrag);
+    document.addEventListener("pointerdown", function (evt) { if ($("vmMenu") && !evt.target.closest("#vmMenu")) closeMenu(); }, true);
+
+    // ---------- exports ----------
+    function svgDoc() { return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + VW + " " + VH + '">' + $("vmSvg").innerHTML + "</svg>"; }
+    function download(blob, name) {
+      var url = URL.createObjectURL(blob), a = document.createElement("a");
+      a.href = url; a.download = name; document.body.appendChild(a); a.click();
+      setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
+    }
+    $("vmPng").onclick = function () {
+      $("vmStatus").textContent = "Rendering PNG…";
+      var img = new Image(), url = URL.createObjectURL(new Blob([svgDoc()], { type: "image/svg+xml;charset=utf-8" }));
+      img.onload = function () {
+        var c = document.createElement("canvas"); c.width = VW * 2; c.height = VH * 2;
+        var ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        c.toBlob(function (b) { download(b, "vicinity-map.png"); $("vmStatus").textContent = "PNG saved to your downloads."; }, "image/png");
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); $("vmStatus").textContent = "PNG render failed."; };
+      img.src = url;
+    };
+    $("vmDxf").onclick = function () { download(new Blob([buildDxf()], { type: "application/dxf" }), "vicinity-map.dxf"); $("vmStatus").textContent = "DXF saved (feet, origin at the address)."; };
+
+    function buildDxf() {
+      var project = projector(), out = [], p = function (c, v) { out.push(String(c)); out.push(String(v)); }, n = function (v) { return Number(v).toFixed(3); };
+      var pxToFt = 3.28084 / project.scale, a = project.toSvg(S.point.lat, S.point.lon), ax = a[0], ay = a[1];
+      p(0,"SECTION");p(2,"HEADER");p(9,"$ACADVER");p(1,"AC1009");p(9,"$INSUNITS");p(70,2);p(0,"ENDSEC");
+      p(0,"SECTION");p(2,"TABLES");
+      p(0,"TABLE");p(2,"LTYPE");p(70,2);
+      p(0,"LTYPE");p(2,"CONTINUOUS");p(70,0);p(3,"Solid");p(72,65);p(73,0);p(40,0);
+      p(0,"LTYPE");p(2,"DASHED");p(70,0);p(3,"Dashed");p(72,65);p(73,2);p(40,45);p(49,30);p(49,-15);
+      p(0,"ENDTAB");
+      p(0,"TABLE");p(2,"LAYER");p(70,5);
+      [["VMAP-MAJOR","CONTINUOUS"],["VMAP-MINOR","CONTINUOUS"],["VMAP-TEXT","CONTINUOUS"],["VMAP-WORK","DASHED"],["VMAP-NORTH","CONTINUOUS"]].forEach(function (L) { p(0,"LAYER");p(2,L[0]);p(70,0);p(62,7);p(6,L[1]); });
+      p(0,"ENDTAB");p(0,"ENDSEC");
+      p(0,"SECTION");p(2,"ENTITIES");
+      var mapWFt = (halfExtents().halfW * 2) * 3.28084, majW = mapWFt * 0.006, textH = mapWFt * 0.016;
+      var poly = function (ptsFt, layer, width) { p(0,"POLYLINE");p(8,layer);p(66,1);p(70,0); if (width){p(40,n(width));p(41,n(width));} ptsFt.forEach(function (q){p(0,"VERTEX");p(8,layer);p(10,n(q[0]));p(20,n(q[1]));p(30,0);}); p(0,"SEQEND"); };
+      var text = function (x, y, h, rot, val, layer) { p(0,"TEXT");p(8,layer);p(10,n(x));p(20,n(y));p(30,0);p(40,n(h));p(1,val); if (rot) p(50,n(rot)); p(72,1);p(11,n(x));p(21,n(y));p(31,0); };
+      var toFt = function (pt) { var s = project.toSvg(pt[0], pt[1]); return [(s[0]-ax)*pxToFt, (ay-s[1])*pxToFt]; };
+      var majors = [], minors = [];
+      S.ways.forEach(function (w) { var known = MAJOR[w.highway] || MINOR[w.highway]; if (!known && !(wayKey(w) in S.overrides)) return; (isMajor(w) ? majors : minors).push(w); });
+      minors.forEach(function (w) { poly(w.pts.map(toFt), "VMAP-MINOR", 0); });
+      majors.forEach(function (w) { poly(w.pts.map(toFt), "VMAP-MAJOR", majW); });
+      if ($("vmLabels").checked) labelSpots(majors, project).forEach(function (sp) {
+        text((sp.mx - VW/2) / project.scale * 3.28084, (VH/2 - sp.my) / project.scale * 3.28084 + textH*0.6, textH, -sp.ang, sp.text, "VMAP-TEXT");
+      });
+      var g = workGeom(project), workFt = +$("vmWorkSize").value || 220, rot = -(+$("vmRotation").value || 0) * Math.PI/180, half = workFt/2;
+      var wcx = (g.rectCx-ax)*pxToFt, wcy = (ay-g.rectCy)*pxToFt, lcx = (g.lcx-ax)*pxToFt, lcy = (ay-g.lcy)*pxToFt;
+      var corners = [[-half,-half],[half,-half],[half,half],[-half,half],[-half,-half]].map(function (c) { return [wcx + c[0]*Math.cos(rot) - c[1]*Math.sin(rot), wcy + c[0]*Math.sin(rot) + c[1]*Math.cos(rot)]; });
+      poly(corners, "VMAP-WORK", 0);
+      poly([[(g.leader.x1-ax)*pxToFt, (ay-g.leader.y1)*pxToFt], [(g.leader.x2-ax)*pxToFt, (ay-g.leader.y2)*pxToFt]], "VMAP-WORK", 0);
+      text(lcx, lcy, textH, 0, "AREA OF WORK", "VMAP-TEXT");
+      var mhw = mapWFt/2, mhh = mhw * (VH/VW), ncx = mhw*0.86, ncy = -mhh*0.82, ncr = mapWFt*0.03;
+      p(0,"CIRCLE");p(8,"VMAP-NORTH");p(10,n(ncx));p(20,n(ncy));p(30,0);p(40,n(ncr));
+      poly([[ncx, ncy-ncr],[ncx, ncy+ncr]], "VMAP-NORTH", 0);
+      text(ncx, ncy+ncr*1.35, textH, 0, "N", "VMAP-NORTH");
+      p(0,"ENDSEC");p(0,"EOF");
+      return out.join("\n");
+    }
+
+    // ---------- generate ----------
+    async function generate() {
+      if (!S.point) { $("vmStatus").textContent = "Pick an address from the suggestions first."; return; }
+      $("vmStatus").textContent = "Fetching streets from OpenStreetMap…";
+      $("vmGenerate").disabled = true;
+      try {
+        S.ways = await fetchStreets();
+        S.overrides = {}; S.labelHidden = {}; S.labelText = {}; S.labelPos = {};
+        S.workOffset = { dx:0, dy:0 }; S.labelOffset = { dx:0, dy:0 };
+        render();
+        $("vmStatus").textContent = S.ways.length + " streets loaded. Tap a street to change its weight.";
+      } catch (e) {
+        $("vmStatus").textContent = "Could not load streets — check your connection and try again.";
+      }
+      $("vmGenerate").disabled = false;
+    }
+
+    $("vmAddr").addEventListener("input", function () { S.point = null; clearTimeout(S.suggestTimer); S.suggestTimer = setTimeout(fetchSuggestions, 400); });
+    document.addEventListener("click", function (e) { if (!e.target.closest(".vm-addr")) $("vmSuggest").hidden = true; });
+    $("vmGenerate").addEventListener("click", generate);
+    $("vmCoverage").addEventListener("change", function () { if (S.ways.length) generate(); });
+    ["vmWorkSize","vmRotation","vmLabels"].forEach(function (id) { $(id).addEventListener("change", function () { if (S.ways.length) render(); }); });
+  })();
+  </script>
+</body>
+</html>
