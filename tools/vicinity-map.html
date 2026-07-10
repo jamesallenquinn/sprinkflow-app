@@ -40,11 +40,14 @@
     .vm-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
       color: #8a949e; font: 700 .95rem Inter; padding: 20px; pointer-events: none; }
     .vm-empty[hidden] { display: none; }
-    .vm-pan { position: absolute; left: 10px; bottom: 10px; display: grid; justify-items: center; gap: 5px; z-index: 30; }
+    /* Pan control sits BELOW the map (not over it) so the map screenshots clean. */
+    .vm-pan { display: flex; flex-direction: column; align-items: center; gap: 5px; margin: 12px auto 0; width: max-content; }
+    .vm-pan-label { color: var(--muted); font: 700 .74rem Inter; letter-spacing: .04em; text-transform: uppercase; }
+    .vm-pan-grid { display: grid; justify-items: center; gap: 5px; }
     .vm-pan-mid { display: flex; gap: 5px; }
-    .vm-pan button { width: 46px; height: 46px; border-radius: 10px; border: 1px solid rgba(0,0,0,.28);
-      background: rgba(255,255,255,.94); color: #16202a; font: 700 20px/1 Inter; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
-    .vm-pan button:active { background: #fff; }
+    .vm-pan button { width: 46px; height: 46px; border-radius: 10px; border: 1px solid var(--line-strong);
+      background: var(--surface); color: var(--ink); font: 700 20px/1 Inter; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+    .vm-pan button:active { background: var(--surface-soft); }
     .vm-pan button:disabled { opacity: .5; }
     .vm-menu { position: absolute; z-index: 60; min-width: 210px; background: var(--surface); border: 1px solid var(--line-strong);
       border-radius: 12px; box-shadow: 0 12px 34px rgba(0,0,0,.5); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
@@ -106,7 +109,10 @@
     <div class="vm-map" id="vmMap">
       <svg id="vmSvg" viewBox="0 0 920 900" role="img" aria-label="Vicinity map"></svg>
       <div class="vm-empty" id="vmEmpty">Pick an address and tap Generate — your map appears here.</div>
-      <div class="vm-pan" id="vmPan" hidden aria-label="Pan the map">
+    </div>
+    <div class="vm-pan" id="vmPan" hidden aria-label="Pan the map">
+      <span class="vm-pan-label">Pan the frame</span>
+      <div class="vm-pan-grid">
         <button type="button" data-pan="up" title="Pan north">&#8593;</button>
         <div class="vm-pan-mid">
           <button type="button" data-pan="left" title="Pan west">&#8592;</button>
