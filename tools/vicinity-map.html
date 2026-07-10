@@ -40,6 +40,12 @@
     .vm-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
       color: #8a949e; font: 700 .95rem Inter; padding: 20px; pointer-events: none; }
     .vm-empty[hidden] { display: none; }
+    .vm-pan { position: absolute; left: 10px; bottom: 10px; display: grid; justify-items: center; gap: 5px; z-index: 30; }
+    .vm-pan-mid { display: flex; gap: 5px; }
+    .vm-pan button { width: 46px; height: 46px; border-radius: 10px; border: 1px solid rgba(0,0,0,.28);
+      background: rgba(255,255,255,.94); color: #16202a; font: 700 20px/1 Inter; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+    .vm-pan button:active { background: #fff; }
+    .vm-pan button:disabled { opacity: .5; }
     .vm-menu { position: absolute; z-index: 60; min-width: 210px; background: var(--surface); border: 1px solid var(--line-strong);
       border-radius: 12px; box-shadow: 0 12px 34px rgba(0,0,0,.5); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
     .vm-menu .t { color: var(--muted); font: 800 .68rem Inter; letter-spacing: .05em; text-transform: uppercase; padding: 2px; }
@@ -100,6 +106,15 @@
     <div class="vm-map" id="vmMap">
       <svg id="vmSvg" viewBox="0 0 920 900" role="img" aria-label="Vicinity map"></svg>
       <div class="vm-empty" id="vmEmpty">Pick an address and tap Generate — your map appears here.</div>
+      <div class="vm-pan" id="vmPan" hidden aria-label="Pan the map">
+        <button type="button" data-pan="up" title="Pan north">&#8593;</button>
+        <div class="vm-pan-mid">
+          <button type="button" data-pan="left" title="Pan west">&#8592;</button>
+          <button type="button" data-pan="recenter" title="Back to the address">&#8982;</button>
+          <button type="button" data-pan="right" title="Pan east">&#8594;</button>
+        </div>
+        <button type="button" data-pan="down" title="Pan south">&#8595;</button>
+      </div>
     </div>
     <p class="vm-hint">Tap a street to make it heavy/thin. Tap a label to rename or remove it. Drag the Area of Work box, its tag, or any street label to reposition. Map data © OpenStreetMap contributors.</p>
   </main>
@@ -115,7 +130,7 @@
     var MAJOR = { motorway:1, trunk:1, primary:1, secondary:1, tertiary:1, motorway_link:1, trunk_link:1, primary_link:1, secondary_link:1, tertiary_link:1 };
     var MINOR = { residential:1, unclassified:1, living_street:1 };
 
-    var S = { point: null, ways: [], overrides: {}, labelHidden: {}, labelText: {}, labelPos: {},
+    var S = { point: null, center: null, ways: [], overrides: {}, labelHidden: {}, labelText: {}, labelPos: {},
       workOffset: { dx:0, dy:0 }, labelOffset: { dx:0, dy:0 }, drag: null, moved: false, suggestTimer: 0 };
 
     // ---------- geocoding (Photon + Nominatim, ranked by exact house-number) ----------
@@ -185,7 +200,7 @@
       return { halfW: halfW, halfH: halfW * (VH / VW) };
     }
     async function fetchStreets() {
-      var ext = halfExtents(), lat = S.point.lat, lon = S.point.lon;
+      var c = S.center || S.point, ext = halfExtents(), lat = c.lat, lon = c.lon;
       var mLat = 111320, mLon = 111320 * Math.cos(lat * Math.PI / 180);
       var s = lat - ext.halfH / mLat, n = lat + ext.halfH / mLat, w = lon - ext.halfW / mLon, e = lon + ext.halfW / mLon;
       var query = "[out:json][timeout:30];way[\"highway\"](" + s + "," + w + "," + n + "," + e + ");out geom;";
@@ -205,7 +220,7 @@
 
     // ---------- projection ----------
     function projector() {
-      var ext = halfExtents(), lat = S.point.lat, lon = S.point.lon;
+      var c = S.center || S.point, ext = halfExtents(), lat = c.lat, lon = c.lon;
       var mLat = 111320, mLon = 111320 * Math.cos(lat * Math.PI / 180);
       var scale = VW / (2 * ext.halfW);
       return {
@@ -254,7 +269,7 @@
 
     // ---------- Area of Work geometry ----------
     function workGeom(project) {
-      var a = project.toSvg(S.point.lat, S.point.lon), ax = a[0], ay = a[1];
+      var c = S.center || S.point, a = project.toSvg(c.lat, c.lon), ax = a[0], ay = a[1];
       var workFt = +$("vmWorkSize").value || 220;
       var box = (workFt / 3.28084) * project.scale;
       var rot = +$("vmRotation").value || 0;
@@ -449,7 +464,7 @@
 
     function buildDxf() {
       var project = projector(), out = [], p = function (c, v) { out.push(String(c)); out.push(String(v)); }, n = function (v) { return Number(v).toFixed(3); };
-      var pxToFt = 3.28084 / project.scale, a = project.toSvg(S.point.lat, S.point.lon), ax = a[0], ay = a[1];
+      var c0 = S.center || S.point, pxToFt = 3.28084 / project.scale, a = project.toSvg(c0.lat, c0.lon), ax = a[0], ay = a[1];
       p(0,"SECTION");p(2,"HEADER");p(9,"$ACADVER");p(1,"AC1009");p(9,"$INSUNITS");p(70,2);p(0,"ENDSEC");
       p(0,"SECTION");p(2,"TABLES");
       p(0,"TABLE");p(2,"LTYPE");p(70,2);
@@ -488,6 +503,7 @@
     // ---------- generate ----------
     async function generate() {
       if (!S.point) { $("vmStatus").textContent = "Pick an address from the suggestions first."; return; }
+      S.center = { lat: S.point.lat, lon: S.point.lon };
       $("vmStatus").textContent = "Fetching streets from OpenStreetMap…";
       $("vmGenerate").disabled = true;
       try {
@@ -495,16 +511,40 @@
         S.overrides = {}; S.labelHidden = {}; S.labelText = {}; S.labelPos = {};
         S.workOffset = { dx:0, dy:0 }; S.labelOffset = { dx:0, dy:0 };
         render();
-        $("vmStatus").textContent = S.ways.length + " streets loaded. Tap a street to change its weight.";
+        var pan = $("vmPan"); if (pan) pan.hidden = false;
+        $("vmStatus").textContent = S.ways.length + " streets loaded. Tap a street to change its weight, or pan to reframe.";
       } catch (e) {
         $("vmStatus").textContent = "Could not load streets — check your connection and try again.";
       }
       $("vmGenerate").disabled = false;
     }
 
+    // Pan the frame (dx/dy in {-1,0,1}: +x east, +y north). Refetches around the
+    // new center, keeping edits. For sites without a geocodable address: enter a
+    // nearby one, pan onto the site (the Area of Work box rides the center).
+    async function pan(dx, dy) {
+      if (!S.center || !S.ways.length) return;
+      var ext = halfExtents(), mLat = 111320, mLon = 111320 * Math.cos(S.center.lat * Math.PI / 180);
+      S.center = { lat: S.center.lat + (dy * ext.halfH * 0.9) / mLat, lon: S.center.lon + (dx * ext.halfW * 0.9) / mLon };
+      var btns = $("vmPan").querySelectorAll("button"); btns.forEach(function (b) { b.disabled = true; });
+      $("vmStatus").textContent = "Panning…";
+      try { S.ways = await fetchStreets(); render(); $("vmStatus").textContent = "Panned. Keep panning to your site, then drop the Area of Work on it."; }
+      catch (e) { $("vmStatus").textContent = "Could not pan — check your connection."; }
+      btns.forEach(function (b) { b.disabled = false; });
+    }
+    function recenter() { if (!S.point) return; S.center = { lat: S.point.lat, lon: S.point.lon }; fetchStreets().then(function (w) { S.ways = w; render(); }).catch(function () {}); }
+
     $("vmAddr").addEventListener("input", function () { S.point = null; clearTimeout(S.suggestTimer); S.suggestTimer = setTimeout(fetchSuggestions, 400); });
     document.addEventListener("click", function (e) { if (!e.target.closest(".vm-addr")) $("vmSuggest").hidden = true; });
     $("vmGenerate").addEventListener("click", generate);
+    var PAN_DIRS = { up: [0, 1], down: [0, -1], left: [-1, 0], right: [1, 0] };
+    $("vmPan").querySelectorAll("[data-pan]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var d = btn.dataset.pan;
+        if (d === "recenter") recenter();
+        else if (PAN_DIRS[d]) pan(PAN_DIRS[d][0], PAN_DIRS[d][1]);
+      });
+    });
     $("vmCoverage").addEventListener("change", function () { if (S.ways.length) generate(); });
     ["vmWorkSize","vmRotation","vmLabels"].forEach(function (id) { $(id).addEventListener("change", function () { if (S.ways.length) render(); }); });
   })();
