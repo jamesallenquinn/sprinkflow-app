@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Supply Safety Margin — SprinkFlow</title>
+  <meta name="theme-color" content="#0d1116" />
+  <link rel="manifest" href="../manifest.webmanifest" />
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <header class="app-bar">
+    <a class="back" href="../index.html" aria-label="Back">‹</a>
+    <div><div class="title">Supply Safety Margin</div><div class="sub">Supply pressure needed for your target margin</div></div>
+  </header>
+
+  <main class="tool-page">
+    <div class="field"><label for="demandPsi">System demand pressure <span class="unit">psi</span></label>
+      <input id="demandPsi" type="number" inputmode="decimal" step="any" min="0" placeholder="e.g. 49.126" />
+    </div>
+
+    <div class="row2">
+      <div class="field"><label for="marginPct">Safety margin <span class="unit">% of supply</span></label>
+        <input id="marginPct" type="number" inputmode="decimal" step="any" min="0" max="99.9" value="10" />
+      </div>
+      <div class="field"><label for="demandGpm">Demand flow <span class="unit">gpm, optional</span></label>
+        <input id="demandGpm" type="number" inputmode="decimal" step="any" min="0" placeholder="e.g. 256.05" />
+      </div>
+    </div>
+
+    <div class="result-card">
+      <div class="lbl">Required supply pressure</div>
+      <div class="big" id="rSupply">—</div>
+      <div class="result-row"><span>Cushion above demand</span><span class="v" id="rCushion">—</span></div>
+      <div class="result-row" id="rFlowRow" hidden><span>At demand flow</span><span class="v" id="rFlow">—</span></div>
+      <div class="result-verify" id="rCheck">—</div>
+    </div>
+    <style>.result-verify { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }</style>
+
+    <p class="hint" id="hint">The margin is a percentage of the <strong>supply</strong>, not the demand:
+      supply = demand ÷ (1 − margin). Adding 10% <em>of the demand</em> comes up short — it only
+      yields a 9.1% cushion of the resulting supply. Flow doesn't enter the math; the margin
+      applies to pressure at the demand flow point.</p>
+  </main>
+
+  <script>
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("../sw.js").catch(()=>{});
+
+    const $ = (id) => document.getElementById(id);
+    const DEFAULT_HINT = $("hint").innerHTML;
+
+    function num(id) {
+      const v = parseFloat($(id).value);
+      return Number.isFinite(v) ? v : null;
+    }
+
+    function setHint(text) {
+      if (text) { $("hint").textContent = text; }
+      else { $("hint").innerHTML = DEFAULT_HINT; }
+    }
+
+    function dash() {
+      $("rSupply").textContent = "—";
+      $("rCushion").textContent = "—";
+      $("rCheck").textContent = "—";
+      $("rFlowRow").hidden = true;
+    }
+
+    function recalc() {
+      const demand = num("demandPsi");
+      const margin = num("marginPct");
+      const gpm = num("demandGpm");
+
+      if (demand === null && margin === null) { dash(); setHint(""); return; }
+      if (demand === null || demand <= 0) {
+        dash(); setHint("Enter the system demand pressure (must be greater than 0 psi)."); return;
+      }
+      if (margin === null || margin < 0 || margin >= 100) {
+        dash(); setHint("Safety margin must be at least 0% and less than 100% (100% would need infinite supply)."); return;
+      }
+
+      // margin = (supply − demand) / supply  →  supply = demand / (1 − margin)
+      const supply = demand / (1 - margin / 100);
+      const cushion = supply - demand;
+      const checkPct = supply > 0 ? (cushion / supply) * 100 : 0;
+
+      $("rSupply").textContent = supply.toFixed(3) + " psi";
+      $("rCushion").textContent = "+" + cushion.toFixed(3) + " psi";
+      $("rCheck").textContent = cushion.toFixed(3) + " ÷ " + supply.toFixed(3) + " = " + checkPct.toFixed(1) + "% of the supply";
+      if (gpm !== null && gpm > 0) {
+        $("rFlowRow").hidden = false;
+        $("rFlow").textContent = supply.toFixed(3) + " psi @ " + gpm.toFixed(2) + " gpm";
+      } else {
+        $("rFlowRow").hidden = true;
+      }
+      setHint("");
+    }
+
+    for (const id of ["demandPsi", "marginPct", "demandGpm"]) {
+      $(id).addEventListener("input", recalc);
+    }
+    recalc();
+  </script>
+</body>
+</html>
