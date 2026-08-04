@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Learn Hydraulic Calcs — SprinkFlow</title>
-  <meta name="description" content="A progressive course on how fire sprinkler hydraulic calculations actually work — tree accumulation, sprinkler discharge, friction, loop balancing, solver behavior, and water supply." />
+  <meta name="description" content="An interactive course on how fire sprinkler hydraulic calculations actually work — drag, tap and solve a live four-head system from the remote sprinkler back to the water supply." />
   <meta name="theme-color" content="#0d1116" />
   <link rel="manifest" href="../manifest.webmanifest" />
   <link rel="icon" href="../assets/icon.svg" type="image/svg+xml" />
@@ -16,433 +16,839 @@
   <link rel="stylesheet" href="../styles.css" />
   <style>
     :root { --good:#3ddc97; --bad:#ff5a4f; --learn:#8b7cf6; }
-    body { overflow-x:hidden; }
-    .l-wrap { max-width:600px; margin:0 auto; padding:0 14px calc(28px + env(safe-area-inset-bottom,0px)); }
-    .src-badge { display:inline-flex; align-items:center; gap:7px; font:600 .74rem/1 Inter; letter-spacing:.02em;
-      color:var(--learn); background:rgba(139,124,246,.10); border:1px solid rgba(139,124,246,.35); border-radius:999px; padding:7px 12px; }
+    html, body { overflow-x:hidden; }
+    body { min-height:100dvh; }
+    .l-wrap { max-width:600px; margin:0 auto; padding:0 14px calc(20px + env(safe-area-inset-bottom,0px)); }
 
-    /* hero */
-    .hero { text-align:center; padding:24px 6px 4px; }
-    .hero .ic { font-size:48px; line-height:1; }
-    .hero h1 { font:700 1.8rem/1.1 'Space Grotesk'; margin:12px 0 6px; }
+    /* ============================ OVERVIEW ============================ */
+    .hero { text-align:center; padding:22px 6px 2px; }
+    .hero .ic { font-size:46px; line-height:1; }
+    .hero h1 { font:700 1.75rem/1.1 'Space Grotesk'; margin:10px 0 6px; }
     .hero h1 .grad { background:linear-gradient(120deg,#8b7cf6,#37b7e4); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
-    .hero p { color:var(--muted); margin:0 auto 16px; max-width:46ch; }
+    .hero p { color:var(--muted); margin:0 auto 14px; max-width:44ch; font-size:.95rem; line-height:1.55; }
+    .src-badge { display:inline-flex; align-items:center; gap:7px; font:600 .74rem/1 Inter; color:var(--learn);
+      background:rgba(139,124,246,.10); border:1px solid rgba(139,124,246,.35); border-radius:999px; padding:7px 12px; }
 
-    /* overall progress */
-    .prog { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:16px; margin:18px 0 6px; }
-    .prog .top { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
-    .prog .lbl { font:600 .72rem/1 Inter; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); }
-    .prog .val { font:700 1rem 'Space Grotesk'; color:var(--ink); }
+    .statrow { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:16px 0 4px; }
+    .stat { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:12px 8px; text-align:center; }
+    .stat .v { font:700 1.28rem/1 'Space Grotesk'; color:var(--ink); }
+    .stat .v.xp { color:var(--learn); } .stat .v.streak { color:var(--accent); } .stat .v.done { color:var(--good); }
+    .stat .k { font:600 .64rem/1 Inter; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin-top:6px; }
+
+    .prog { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:14px; margin:10px 0 4px; }
+    .prog .top { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:9px; }
+    .prog .lbl { font:600 .7rem/1 Inter; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); }
+    .prog .val { font:700 .95rem 'Space Grotesk'; color:var(--ink); }
     .prog .bar { height:9px; border-radius:999px; background:var(--surface-soft); overflow:hidden; border:1px solid var(--line); }
-    .prog .fill { height:100%; background:linear-gradient(120deg,#8b7cf6,#37b7e4); border-radius:999px; transition:width .4s ease; width:0; }
+    .prog .fill { height:100%; background:linear-gradient(120deg,#8b7cf6,#37b7e4); border-radius:999px; transition:width .5s cubic-bezier(.2,.85,.25,1); width:0; }
 
-    /* lesson list */
-    .lessons { display:grid; gap:12px; margin-top:14px; }
-    .lcard { width:100%; text-align:left; background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:16px; color:var(--ink);
-      cursor:pointer; display:flex; gap:14px; align-items:flex-start; transition:transform .08s, border-color .15s; font-family:Inter; }
-    .lcard:not([disabled]):active { transform:scale(.99); }
-    .lcard[disabled] { cursor:default; opacity:.62; }
-    .lcard .n { flex:none; width:38px; height:38px; border-radius:11px; display:grid; place-items:center; font:700 1.05rem 'Space Grotesk';
+    .lessons { display:grid; gap:11px; margin-top:14px; }
+    .lcard { width:100%; text-align:left; background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:15px; color:var(--ink);
+      cursor:pointer; display:flex; gap:13px; align-items:flex-start; transition:transform .08s, border-color .15s; font-family:Inter; }
+    .lcard:active { transform:scale(.99); }
+    .lcard.next { border-color:rgba(139,124,246,.5); box-shadow:0 0 0 1px rgba(139,124,246,.2); }
+    .lcard .n { flex:none; width:38px; height:38px; border-radius:12px; display:grid; place-items:center; font:700 1.05rem 'Space Grotesk';
       background:var(--surface-soft); border:1px solid var(--line-strong); color:var(--muted); }
     .lcard.done .n { background:var(--good); color:#06281b; border-color:var(--good); }
-    .lcard.open .n { background:rgba(139,124,246,.16); border-color:var(--learn); color:var(--learn); }
+    .lcard.next .n { background:rgba(139,124,246,.16); border-color:var(--learn); color:var(--learn); }
     .lcard .mid { flex:1; min-width:0; }
-    .lcard .t { display:block; font:700 1.04rem/1.25 'Space Grotesk'; }
-    .lcard .o { display:block; font:500 .86rem/1.4 Inter; color:var(--muted); margin-top:4px; }
-    .lcard .meta { font:600 .76rem Inter; color:var(--muted); margin-top:9px; display:flex; flex-wrap:wrap; gap:6px 12px; }
-    .lcard .state { flex:none; align-self:center; font:700 .8rem 'Space Grotesk'; padding:7px 11px; border-radius:999px; white-space:nowrap; }
+    .lcard .t { display:block; font:700 1.02rem/1.25 'Space Grotesk'; }
+    .lcard .o { display:block; font:500 .84rem/1.4 Inter; color:var(--muted); margin-top:4px; }
+    .lcard .lbar { height:5px; border-radius:999px; background:var(--surface-soft); overflow:hidden; margin-top:9px; }
+    .lcard .lbar i { display:block; height:100%; background:linear-gradient(120deg,#8b7cf6,#37b7e4); border-radius:999px; transition:width .4s; }
+    .lcard .meta { font:600 .72rem Inter; color:var(--muted); margin-top:7px; }
+    .lcard .state { flex:none; align-self:center; font:700 .78rem 'Space Grotesk'; padding:7px 10px; border-radius:999px; white-space:nowrap; }
     .lcard .state.go { background:rgba(139,124,246,.16); color:var(--learn); border:1px solid rgba(139,124,246,.4); }
     .lcard .state.ok { background:rgba(61,220,151,.14); color:var(--good); border:1px solid rgba(61,220,151,.4); }
-    .lcard .state.lock { background:var(--surface-soft); color:var(--muted); border:1px solid var(--line); }
 
-    .btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; border:0; border-radius:14px; padding:16px; font:700 1.05rem 'Space Grotesk'; cursor:pointer; }
-    .btn.primary { background:linear-gradient(120deg,#8b7cf6,#37b7e4); color:#0a0723; }
-    .btn.ghost { background:var(--surface); color:var(--ink); border:1px solid var(--line); font-weight:600; }
-    .btn + .btn { margin-top:10px; }
-    .btn-row { display:flex; gap:10px; margin-top:16px; }
-    .btn-row .btn { margin-top:0; }
+    .src-foot { text-align:center; margin-top:16px; font:500 .75rem/1.5 Inter; color:var(--muted); }
 
-    /* system diagram (the worked example, pinned through the lesson) */
-    .diagram { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:10px 10px 6px; margin-bottom:12px; }
-    .diagram svg { display:block; width:100%; height:auto; }
-    .diagram .pipe { stroke:var(--line-strong); stroke-width:3; stroke-linecap:round; }
-    .diagram .pipe.flow { stroke:#37b7e4; stroke-width:3.5; }
-    .diagram .head { fill:var(--surface-soft); stroke:var(--line-strong); stroke-width:2; }
-    .diagram .head.focus { fill:rgba(139,124,246,.30); stroke:var(--learn); stroke-width:2.5; }
-    .diagram .riser { fill:var(--surface-soft); stroke:var(--line-strong); stroke-width:2; }
-    .diagram .riser.focus { fill:rgba(139,124,246,.30); stroke:var(--learn); }
-    .diagram .nname { font:600 9px Inter; fill:var(--muted); }
-    .diagram .dlabel { font:700 10px Inter; fill:var(--learn); }
-    .diagram .cap { font:500 .78rem/1.45 Inter; color:var(--muted); text-align:center; padding:6px 4px 4px; }
+    /* ============================== STEP ============================== */
+    #screen-step { display:flex; flex-direction:column; min-height:calc(100dvh - 62px); }
+    .stepbar { display:flex; align-items:center; gap:9px; padding:8px 0 4px; }
+    .stepbar .x { background:none; border:0; color:var(--muted); font:600 1.3rem/1 Inter; cursor:pointer; padding:2px 6px 4px; }
+    .dots { display:flex; gap:5px; flex:1; }
+    .dot { flex:1; height:6px; border-radius:999px; background:var(--surface-soft); border:0; padding:0; cursor:pointer; transition:background .3s; }
+    .dot.done { background:var(--good); }
+    .dot.now { background:var(--learn); box-shadow:0 0 8px rgba(139,124,246,.7); }
+    .stepbar .xp { font:700 .8rem 'Space Grotesk'; color:var(--learn); white-space:nowrap; }
 
-    /* the calc sheet that builds itself */
-    .calcsheet { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:12px 12px 8px; margin-bottom:12px; overflow-x:auto; }
-    .calcsheet .cs-head { font:700 .64rem/1 Inter; letter-spacing:.08em; text-transform:uppercase; color:var(--learn); margin:0 2px 8px; }
-    .calcsheet table { width:100%; border-collapse:collapse; font:500 .78rem/1.35 Inter; color:var(--ink); }
-    .calcsheet th { font:700 .62rem/1 Inter; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); text-align:left; padding:4px 8px 6px 2px; border-bottom:1px solid var(--line); white-space:nowrap; }
-    .calcsheet td { padding:7px 8px 7px 2px; border-bottom:1px solid var(--line); white-space:nowrap; }
-    .calcsheet tr:last-child td { border-bottom:0; }
-    .calcsheet tr.new td { background:rgba(139,124,246,.10); }
-    .calcsheet tr.new td:first-child { border-radius:8px 0 0 8px; } .calcsheet tr.new td:last-child { border-radius:0 8px 8px 0; }
+    .stage { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:6px; margin-bottom:11px; }
+    .stage.empty { display:none; }
 
-    /* recommended-next chip on the overview */
-    .lcard .state.rec { background:rgba(55,183,228,.14); color:#37b7e4; border:1px solid rgba(55,183,228,.4); }
+    .headline { font:700 1.24rem/1.24 'Space Grotesk'; margin:0 0 6px; letter-spacing:-.02em; }
+    .task { font:500 .9rem/1.45 Inter; color:var(--muted); margin:0 0 12px; }
+    .task b { color:var(--ink); font-weight:600; }
 
-    /* lesson screen */
-    .crumb { display:flex; align-items:center; gap:10px; margin:8px 0 6px; }
-    .crumb button { background:none; border:0; color:var(--learn); font:600 .9rem Inter; cursor:pointer; padding:0; display:inline-flex; align-items:center; gap:4px; }
-    .crumb .pos { margin-left:auto; font:600 .8rem Inter; color:var(--muted); }
-    .qbar { height:7px; border-radius:999px; background:var(--surface-soft); border:1px solid var(--line); overflow:hidden; margin:4px 0 16px; }
-    .qbar .fill { height:100%; background:var(--learn); width:0; transition:width .3s ease; }
+    .labarea { flex:1 0 auto; }
 
-    .concept { background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--learn); border-radius:16px; padding:18px; margin-bottom:16px; }
-    .concept .eyebrow { font:600 .68rem/1 Inter; letter-spacing:.08em; text-transform:uppercase; color:var(--learn); }
-    .concept h2 { font:700 1.3rem/1.25 'Space Grotesk'; margin:8px 0 10px; }
-    .concept .body { font:500 .98rem/1.6 Inter; color:var(--ink); }
-    .concept .outcome { margin-top:12px; font:500 .88rem/1.5 Inter; color:var(--muted); }
-    .concept .outcome b { color:var(--ink); font-weight:600; }
+    /* readouts */
+    .reads { display:grid; gap:7px; margin-bottom:11px; }
+    .read { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:9px 11px; }
+    .read .rtop { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+    .read .rk { font:600 .74rem/1.2 Inter; color:var(--muted); }
+    .read .rv { font:700 1.12rem/1 'Space Grotesk'; color:var(--ink); font-variant-numeric:tabular-nums; transition:color .25s; }
+    .read .rv .u { font-size:.72rem; color:var(--muted); margin-left:3px; font-weight:600; }
+    .read.good .rv { color:var(--good); }
+    .read .rbar { height:5px; border-radius:999px; background:var(--surface-soft); overflow:hidden; margin-top:8px; }
+    .read .rbar i { display:block; height:100%; width:0; background:var(--learn); border-radius:999px; transition:width .28s cubic-bezier(.2,.85,.25,1), background .25s; }
+    .read.good .rbar i { background:var(--good); }
+    .note { font:500 .82rem/1.45 Inter; color:var(--muted); background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:8px 10px; margin-bottom:11px; }
 
-    /* teaching sections (lesson-first) */
-    .sections-head { font:700 .72rem/1 Inter; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); margin:20px 2px 10px; }
-    .section { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:12px; }
-    .section .s-eyebrow { font:700 .64rem/1 Inter; letter-spacing:.08em; text-transform:uppercase; color:var(--learn); }
-    .section h3 { font:700 1.08rem/1.3 'Space Grotesk'; margin:7px 0 8px; color:var(--ink); }
-    .section .s-body { font:500 .94rem/1.6 Inter; color:var(--ink); }
-    .section .s-formula { margin-top:11px; font:600 .9rem/1.45 'Space Grotesk'; color:var(--learn); background:var(--bg); border:1px solid var(--line-strong); border-radius:9px; padding:10px 12px; }
-    .section .s-example { margin-top:10px; font:500 .9rem/1.55 Inter; color:var(--muted); }
-    .section .s-example b { color:var(--ink); font-weight:600; }
-    .section ul.s-points { margin:12px 0 0; padding:0; list-style:none; display:grid; gap:7px; }
-    .section ul.s-points li { position:relative; padding-left:22px; font:500 .9rem/1.5 Inter; color:var(--ink); }
-    .section ul.s-points li::before { content:"▸"; position:absolute; left:4px; color:var(--learn); }
+    /* slider */
+    .ctrl { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:10px 13px 4px; margin-bottom:10px; }
+    .ctrl .ctop { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+    .ctrl .cl { font:600 .8rem Inter; color:var(--muted); }
+    .ctrl .cv { font:700 1.05rem 'Space Grotesk'; color:var(--learn); font-variant-numeric:tabular-nums; }
+    input[type=range] { -webkit-appearance:none; appearance:none; width:100%; height:34px; background:transparent; margin:0; }
+    input[type=range]::-webkit-slider-runnable-track { height:8px; border-radius:999px; background:linear-gradient(90deg,#8b7cf6 var(--pct,0%), var(--surface-soft) var(--pct,0%)); }
+    input[type=range]::-moz-range-track { height:8px; border-radius:999px; background:var(--surface-soft); }
+    input[type=range]::-moz-range-progress { height:8px; border-radius:999px; background:#8b7cf6; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:28px; height:28px; margin-top:-10px; border-radius:50%;
+      background:#f5f7f8; border:3px solid var(--learn); box-shadow:0 3px 10px rgba(0,0,0,.4); cursor:grab; }
+    input[type=range]::-moz-range-thumb { width:24px; height:24px; border-radius:50%; background:#f5f7f8; border:3px solid var(--learn); }
+    .goal { display:flex; align-items:center; gap:9px; font:600 .84rem Inter; color:var(--muted);
+      background:var(--surface); border:1px dashed var(--line-strong); border-radius:12px; padding:10px 12px; margin-bottom:11px; transition:all .25s; }
+    .goal .tick { width:19px; height:19px; border-radius:50%; border:2px solid var(--line-strong); flex:none; display:grid; place-items:center; font-size:.7rem; }
+    .goal.hit { color:var(--good); border-color:rgba(61,220,151,.5); background:rgba(61,220,151,.08); }
+    .goal.hit .tick { background:var(--good); border-color:var(--good); color:#06281b; }
 
-    .qcard { background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:20px 18px; margin-bottom:16px; box-shadow:0 8px 30px rgba(0,0,0,.25); }
-    .qcard .tag { font:600 .66rem/1 Inter; letter-spacing:.08em; text-transform:uppercase; color:var(--learn); display:inline-flex; align-items:center; gap:8px; }
-    .qcard .diff { padding:3px 8px; border-radius:999px; font:700 .62rem/1 'Space Grotesk'; letter-spacing:.04em; }
-    .diff-apprentice { background:rgba(61,220,151,.14); color:var(--good); }
-    .diff-designer { background:rgba(55,183,228,.14); color:#37b7e4; }
-    .diff-solver { background:rgba(139,124,246,.16); color:var(--learn); }
-    .qcard h2 { font:600 1.2rem/1.45 'Space Grotesk'; margin:11px 0 0; color:var(--ink); }
+    /* numeric */
+    .numrow { display:flex; gap:9px; margin-bottom:11px; }
+    .numrow input { flex:1; min-width:0; background:var(--surface); border:1px solid var(--line-strong); border-radius:13px; color:var(--ink);
+      font:700 1.4rem 'Space Grotesk'; padding:13px 14px; text-align:center; font-variant-numeric:tabular-nums; }
+    .numrow input:focus { outline:none; border-color:var(--learn); }
+    .numrow input.bad { border-color:var(--bad); animation:shake .35s; }
+    .numrow input.good { border-color:var(--good); }
+    @keyframes shake { 25%{transform:translateX(-6px)} 50%{transform:translateX(6px)} 75%{transform:translateX(-3px)} }
+    .numrow .unit { flex:none; align-self:center; font:600 .9rem Inter; color:var(--muted); }
+    .numrow .padbtn { flex:none; background:var(--surface); border:1px solid var(--line-strong); border-radius:13px; color:var(--learn);
+      font-size:1.3rem; padding:0 15px; cursor:pointer; }
+    .fchip { display:inline-block; font:600 .8rem/1.3 'Space Grotesk'; color:var(--learn); background:rgba(139,124,246,.10);
+      border:1px solid rgba(139,124,246,.32); border-radius:10px; padding:8px 11px; margin-bottom:10px; }
 
-    .choices { display:grid; gap:10px; }
-    .choice { display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:var(--surface); border:1px solid var(--line); color:var(--ink);
-      border-radius:14px; padding:14px; font:500 1rem/1.4 Inter; cursor:pointer; transition:transform .08s, border-color .15s, background .15s; }
+    /* tap / order */
+    .tapstat { font:600 .84rem Inter; color:var(--muted); margin-bottom:12px; text-align:center; }
+    .olist { display:grid; gap:9px; margin-bottom:12px; }
+    .oitem { display:flex; align-items:center; gap:11px; width:100%; text-align:left; background:var(--surface); border:1px solid var(--line);
+      color:var(--ink); border-radius:13px; padding:13px; font:500 .93rem/1.35 Inter; cursor:pointer; transition:transform .08s, border-color .2s, opacity .2s; }
+    .oitem:active { transform:scale(.985); }
+    .oitem .onum { flex:none; width:26px; height:26px; border-radius:8px; display:grid; place-items:center; font:700 .85rem 'Space Grotesk';
+      background:var(--surface-soft); border:1px solid var(--line-strong); color:var(--muted); }
+    .oitem.picked { border-color:var(--learn); opacity:.55; }
+    .oitem.picked .onum { background:var(--learn); border-color:var(--learn); color:#0a0723; }
+    .oitem.wrong { border-color:var(--bad); animation:shake .35s; }
+
+    /* iterate */
+    .iterlog { display:grid; gap:7px; margin-bottom:12px; }
+    .iterline { display:flex; align-items:center; gap:10px; font:500 .86rem/1.3 Inter; color:var(--muted);
+      background:var(--surface); border:1px solid var(--line); border-radius:11px; padding:10px 12px; animation:slideIn .3s ease-out; }
+    .iterline .i { flex:none; font:700 .74rem 'Space Grotesk'; color:var(--learn); background:rgba(139,124,246,.14); border-radius:6px; padding:3px 7px; }
+    .iterline.last { color:var(--ink); border-color:rgba(61,220,151,.4); background:rgba(61,220,151,.07); }
+    @keyframes slideIn { from{opacity:0; transform:translateY(-7px)} to{opacity:1; transform:none} }
+
+    /* reward */
+    .reward { background:linear-gradient(160deg, rgba(61,220,151,.12), var(--surface)); border:1px solid rgba(61,220,151,.4);
+      border-radius:16px; padding:15px; margin-bottom:12px; animation:pop .35s cubic-bezier(.2,1.2,.4,1); }
+    .reward .rh { font:700 .96rem Inter; color:var(--good); margin-bottom:6px; display:flex; align-items:center; gap:7px; }
+    .reward .rb { font:500 .92rem/1.55 Inter; color:var(--ink); }
+    @keyframes pop { from{opacity:0; transform:scale(.94)} to{opacity:1; transform:none} }
+
+    /* why-this-works disclosure */
+    .why { border:1px solid var(--line); border-radius:14px; background:var(--surface); margin-bottom:12px; overflow:hidden; }
+    .why summary { list-style:none; cursor:pointer; padding:11px 13px; font:600 .88rem Inter; color:var(--learn); display:flex; align-items:center; gap:8px; }
+    .why summary::-webkit-details-marker { display:none; }
+    .why summary .caret { margin-left:auto; transition:transform .2s; color:var(--muted); }
+    .why[open] summary .caret { transform:rotate(180deg); }
+    .why .wbody { padding:0 14px 14px; font:500 .92rem/1.6 Inter; color:var(--ink); }
+    .why .wf { margin-top:10px; font:600 .86rem/1.4 'Space Grotesk'; color:var(--learn); background:var(--bg); border:1px solid var(--line-strong); border-radius:9px; padding:9px 11px; }
+    .why ul { margin:11px 0 0; padding:0; list-style:none; display:grid; gap:6px; }
+    .why li { position:relative; padding-left:20px; font:500 .88rem/1.5 Inter; color:var(--muted); }
+    .why li::before { content:"▸"; position:absolute; left:3px; color:var(--learn); }
+
+    /* checkpoint (multiple choice) */
+    .qcard { background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--learn); border-radius:16px; padding:16px; margin-bottom:13px; }
+    .qcard .tag { font:600 .64rem/1 Inter; letter-spacing:.08em; text-transform:uppercase; color:var(--learn); }
+    .qcard h2 { font:600 1.08rem/1.45 'Space Grotesk'; margin:9px 0 0; color:var(--ink); }
+    .choices { display:grid; gap:9px; margin-bottom:12px; }
+    .choice { display:flex; align-items:center; gap:11px; width:100%; text-align:left; background:var(--surface); border:1px solid var(--line); color:var(--ink);
+      border-radius:13px; padding:13px; font:500 .95rem/1.4 Inter; cursor:pointer; transition:transform .08s, border-color .15s, background .15s; }
     .choice:not([disabled]):active { transform:scale(.985); }
-    .choice .badge { flex:none; width:30px; height:30px; border-radius:9px; display:grid; place-items:center; font:700 .95rem 'Space Grotesk'; background:var(--surface-soft); border:1px solid var(--line-strong); color:var(--muted); }
+    .choice .badge { flex:none; width:28px; height:28px; border-radius:8px; display:grid; place-items:center; font:700 .9rem 'Space Grotesk';
+      background:var(--surface-soft); border:1px solid var(--line-strong); color:var(--muted); }
     .choice.correct { border-color:var(--good); background:rgba(61,220,151,.12); }
     .choice.correct .badge { background:var(--good); color:#06281b; border-color:var(--good); }
     .choice.wrong { border-color:var(--bad); background:rgba(255,90,79,.12); }
     .choice.wrong .badge { background:var(--bad); color:#2a0a08; border-color:var(--bad); }
     .choice[disabled] { cursor:default; }
-
-    .explain { margin-top:14px; background:var(--surface-soft); border:1px solid var(--line-strong); border-left:4px solid var(--learn); border-radius:12px; padding:14px; }
-    .explain .head { font:700 .94rem Inter; margin-bottom:7px; }
+    .explain { background:var(--surface-soft); border:1px solid var(--line-strong); border-left:4px solid var(--learn); border-radius:12px; padding:13px; margin-bottom:12px; }
+    .explain .head { font:700 .9rem Inter; margin-bottom:6px; }
     .explain .head.ok { color:var(--good); } .explain .head.no { color:var(--bad); }
-    .explain .body { font:500 .94rem/1.55 Inter; color:var(--ink); }
-    .explain .calc { margin-top:10px; font:600 .86rem/1.4 'Space Grotesk'; color:var(--ink); background:var(--bg); border:1px solid var(--line); border-radius:9px; padding:9px 11px; }
-    .explain .teaches { margin-top:11px; display:flex; flex-wrap:wrap; gap:6px; }
-    .explain .chip { font:600 .72rem/1 Inter; color:var(--learn); background:rgba(139,124,246,.10); border:1px solid rgba(139,124,246,.3); border-radius:999px; padding:5px 9px; }
+    .explain .body { font:500 .9rem/1.55 Inter; color:var(--ink); }
+    .explain .calc { margin-top:9px; font:600 .84rem/1.4 'Space Grotesk'; color:var(--ink); background:var(--bg); border:1px solid var(--line); border-radius:9px; padding:8px 10px; }
 
-    /* results */
-    .result { text-align:center; background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:26px 20px; margin-top:6px; box-shadow:0 8px 30px rgba(0,0,0,.25); }
-    .result .ring { font:700 2.6rem/1 'Space Grotesk'; }
-    .result.pass .ring { color:var(--good); } .result.fail .ring { color:var(--bad); }
-    .result .ttl { font:700 1.25rem 'Space Grotesk'; margin:10px 0 6px; }
-    .result .msg { color:var(--muted); font:500 .95rem/1.55 Inter; max-width:42ch; margin:0 auto; }
+    /* action bar */
+    .actions { position:sticky; bottom:0; padding:10px 0 calc(8px + env(safe-area-inset-bottom,0px)); background:linear-gradient(to top, var(--bg) 66%, transparent); }
+    .btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; border:0; border-radius:14px; padding:14px; font:700 1.02rem 'Space Grotesk'; cursor:pointer; }
+    .btn.primary { background:linear-gradient(120deg,#8b7cf6,#37b7e4); color:#0a0723; }
+    .btn.primary[disabled] { background:var(--surface-soft); color:var(--muted); cursor:default; }
+    .btn.ghost { background:var(--surface); color:var(--ink); border:1px solid var(--line); font-weight:600; }
+    .btn.good { background:linear-gradient(120deg,#3ddc97,#37b7e4); color:#06281b; }
+    .stepbar .tool { flex:none; background:var(--surface); border:1px solid var(--line); border-radius:9px; padding:5px 8px;
+      font-size:.95rem; line-height:1; cursor:pointer; }
+    .stepbar .tool:active { transform:scale(.95); }
 
-    .src-foot { text-align:center; margin-top:18px; font:500 .76rem/1.5 Inter; color:var(--muted); }
+    /* ============================= RESULT ============================= */
+    .result { text-align:center; background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:26px 20px; margin-top:14px; }
+    .result .ring { font:700 2.5rem/1 'Space Grotesk'; }
+    .result.pass .ring { color:var(--good); } .result.fail .ring { color:var(--accent); }
+    .result .ttl { font:700 1.22rem 'Space Grotesk'; margin:9px 0 6px; }
+    .result .msg { color:var(--muted); font:500 .93rem/1.55 Inter; max-width:40ch; margin:0 auto; }
+    .result .xpgain { margin-top:14px; font:700 1rem 'Space Grotesk'; color:var(--learn); }
+
+    /* ========================== SHEETS / PAD ========================== */
+    .sheetbk { position:fixed; inset:0; z-index:60; background:rgba(5,8,11,.7); display:none; align-items:flex-end; justify-content:center; }
+    .sheetbk.show { display:flex; }
+    .sheet { width:100%; max-width:600px; max-height:88dvh; overflow-y:auto; background:var(--surface); border:1px solid var(--line);
+      border-radius:20px 20px 0 0; padding:16px 14px calc(18px + env(safe-area-inset-bottom,0px)); animation:up .26s cubic-bezier(.2,.9,.3,1); }
+    @keyframes up { from{transform:translateY(100%)} to{transform:none} }
+    .sheet .sh { display:flex; align-items:center; margin-bottom:12px; }
+    .sheet .sh h3 { font:700 1.05rem 'Space Grotesk'; margin:0; flex:1; }
+    .sheet .sh button { background:var(--surface-soft); border:1px solid var(--line); color:var(--muted); border-radius:9px; padding:6px 11px; font:600 .82rem Inter; cursor:pointer; }
+
+    .inlinecs { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:10px 12px; margin-bottom:12px; overflow-x:auto; }
+    .cs table { width:100%; border-collapse:collapse; font:500 .8rem/1.35 Inter; color:var(--ink); }
+    .cs th { font:700 .6rem/1 Inter; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); text-align:left; padding:4px 6px 6px 2px; border-bottom:1px solid var(--line); white-space:nowrap; }
+    .cs td { padding:8px 6px 8px 2px; border-bottom:1px solid var(--line); white-space:nowrap; font-variant-numeric:tabular-nums; }
+    .cs tr:last-child td { border-bottom:0; }
+    .cs tr.new td { background:rgba(139,124,246,.12); }
+    .cs .empty { color:var(--muted); font:500 .86rem Inter; text-align:center; padding:20px 0; }
+
+    .padtabs { display:flex; gap:7px; margin-bottom:12px; }
+    .padtabs button { flex:1; background:var(--surface-soft); border:1px solid var(--line); color:var(--muted); border-radius:10px; padding:9px; font:600 .82rem Inter; cursor:pointer; }
+    .padtabs button.on { color:#0a0723; background:linear-gradient(120deg,#8b7cf6,#37b7e4); border-color:transparent; }
+    .paddisp { background:var(--bg); border:1px solid var(--line-strong); border-radius:13px; padding:12px 14px; margin-bottom:11px; min-height:66px; }
+    .paddisp .expr { font:500 1rem/1.3 'Space Grotesk'; color:var(--muted); word-break:break-all; min-height:20px; }
+    .paddisp .res { font:700 1.7rem/1.2 'Space Grotesk'; color:var(--ink); text-align:right; font-variant-numeric:tabular-nums; }
+    .keys { display:grid; grid-template-columns:repeat(4,1fr); gap:7px; }
+    .keys button { background:var(--surface-soft); border:1px solid var(--line); color:var(--ink); border-radius:11px; padding:15px 0;
+      font:600 1.1rem 'Space Grotesk'; cursor:pointer; }
+    .keys button:active { transform:scale(.96); }
+    .keys button.op { color:var(--learn); }
+    .keys button.eq { background:linear-gradient(120deg,#8b7cf6,#37b7e4); color:#0a0723; }
+    .keys button.clr { color:var(--bad); }
+    .fcards { display:grid; gap:9px; }
+    .fcard { border:1px solid var(--line); border-radius:13px; background:var(--surface-soft); overflow:hidden; }
+    .fcard > .fh { width:100%; text-align:left; background:none; border:0; color:var(--ink); font:700 .92rem 'Space Grotesk'; padding:13px 14px; cursor:pointer; display:flex; gap:8px; align-items:center; }
+    .fcard > .fh .fe { font:600 .76rem Inter; color:var(--learn); margin-left:auto; }
+    .fcard.open > .fh { border-bottom:1px solid var(--line); }
+    .fbody { display:none; padding:12px 14px 14px; }
+    .fcard.open .fbody { display:block; }
+    .fin { display:flex; align-items:center; gap:9px; margin-bottom:8px; }
+    .fin label { flex:none; width:112px; font:600 .8rem Inter; color:var(--muted); }
+    .fin input, .fin select { flex:1; min-width:0; background:var(--bg); border:1px solid var(--line-strong); border-radius:9px; color:var(--ink);
+      font:600 .95rem 'Space Grotesk'; padding:10px 11px; }
+    .fin input:focus, .fin select:focus { outline:none; border-color:var(--learn); }
+    .fout { margin-top:10px; background:var(--bg); border:1px solid rgba(139,124,246,.35); border-radius:10px; padding:11px 13px;
+      font:700 1.15rem 'Space Grotesk'; color:var(--learn); text-align:center; font-variant-numeric:tabular-nums; }
+
+    /* xp toast + confetti */
+    .toast { position:fixed; left:50%; bottom:calc(84px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%); z-index:80; background:var(--surface); border:1px solid rgba(139,124,246,.5);
+      color:var(--learn); font:700 .92rem 'Space Grotesk'; padding:11px 18px; border-radius:999px; box-shadow:0 10px 30px rgba(0,0,0,.45);
+      opacity:0; pointer-events:none; transition:opacity .25s, transform .35s; }
+    .toast.show { opacity:1; transform:translateX(-50%) translateY(-6px); }
+    .conf { position:fixed; z-index:79; width:9px; height:9px; border-radius:2px; pointer-events:none; }
+
     .hidden { display:none !important; }
+    @media (prefers-reduced-motion:reduce){ *{animation-duration:.01ms!important; transition-duration:.01ms!important} }
   </style>
 </head>
 <body>
   <header class="app-bar">
     <a class="back" href="../index.html" aria-label="Back">‹</a>
-    <div><div class="title">Learn Hydraulic Calcs</div><div class="sub">How the numbers actually work</div></div>
+    <div><div class="title">Learn Hydraulic Calcs</div><div class="sub">Touch it, don't just read it</div></div>
   </header>
 
   <main class="l-wrap">
-    <!-- OVERVIEW -->
+    <!-- ============================ OVERVIEW ============================ -->
     <section id="screen-overview">
       <div class="hero">
         <div class="ic">📐</div>
         <h1>Learn <span class="grad">Hydraulic Calcs</span></h1>
-        <p>Follow one real four-head system from its most remote sprinkler back to the water supply — and build its calc sheet as you go. Explore the levels in any order; checkpoints earn each level's badge.</p>
-        <span class="src-badge">🎓 6 levels · one worked example · real numbers</span>
+        <p>One live four-head system. Drag it, tap it, solve it — from the most remote sprinkler back to the water supply.</p>
+        <span class="src-badge">⚡ 6 levels · 25 hands-on steps · ~30 seconds each</span>
+      </div>
+
+      <div class="statrow">
+        <div class="stat"><div class="v xp" id="sXp">0</div><div class="k">XP</div></div>
+        <div class="stat"><div class="v streak" id="sStreak">0</div><div class="k">Best streak</div></div>
+        <div class="stat"><div class="v done" id="sSteps">0</div><div class="k">Steps done</div></div>
       </div>
 
       <div class="prog">
-        <div class="top"><span class="lbl">Course progress</span><span class="val" id="progVal">0 of 6 levels passed</span></div>
+        <div class="top"><span class="lbl">Course progress</span><span class="val" id="progVal">0%</span></div>
         <div class="bar"><div class="fill" id="progFill"></div></div>
       </div>
 
       <div class="lessons" id="lessonList"></div>
-
-      <p class="src-foot">Your progress is saved on this device. Levels are open to explore — hit a level's passing score to earn its ✓ badge.</p>
+      <p class="src-foot">Progress saves on this device. Every step is short — stop any time, pick up where you left off.</p>
     </section>
 
-    <!-- LESSON -->
-    <section id="screen-lesson" class="hidden">
-      <div class="crumb">
-        <button id="backToCourse">‹ All levels</button>
-        <span class="pos" id="lessonPos"></span>
-      </div>
-      <div class="qbar"><div class="fill" id="qbarFill"></div></div>
-
-      <!-- the worked-example system, pinned through the lesson -->
-      <div class="diagram hidden" id="stepDiagram">
-        <svg viewBox="0 0 340 205" xmlns="http://www.w3.org/2000/svg" aria-label="Example sprinkler system diagram">
-          <line class="pipe" id="p-sup"  x1="14"  y1="176" x2="38"  y2="176" />
-          <line class="pipe" id="p-cm1"  x1="46"  y1="176" x2="120" y2="176" />
-          <line class="pipe" id="p-cm2"  x1="120" y1="176" x2="240" y2="176" />
-          <line class="pipe" id="p-bl2b" x1="120" y1="176" x2="120" y2="116" />
-          <line class="pipe" id="p-bl2a" x1="120" y1="116" x2="120" y2="56"  />
-          <line class="pipe" id="p-b1b"  x1="240" y1="176" x2="240" y2="116" />
-          <line class="pipe" id="p-b1a"  x1="240" y1="116" x2="240" y2="56"  />
-          <rect class="riser" id="n-riser" x="34" y="170" width="12" height="12" />
-          <circle class="head" id="n-h3" cx="120" cy="56"  r="7" />
-          <circle class="head" id="n-h4" cx="120" cy="116" r="7" />
-          <circle class="head" id="n-h1" cx="240" cy="56"  r="7" />
-          <circle class="head" id="n-h2" cx="240" cy="116" r="7" />
-          <text class="nname" x="106" y="45">H3</text>
-          <text class="nname" x="106" y="105">H4</text>
-          <text class="nname" x="228" y="59" text-anchor="end">H1</text>
-          <text class="nname" x="228" y="119" text-anchor="end">H2</text>
-          <text class="nname" x="28"  y="198">riser</text>
-          <text class="nname" x="150" y="192">cross main</text>
-          <text class="dlabel hidden" id="t-h1"    x="334" y="42" text-anchor="end"></text>
-          <text class="dlabel hidden" id="t-h2"    x="334" y="102" text-anchor="end"></text>
-          <text class="dlabel hidden" id="t-h3"    x="10"  y="60"  text-anchor="start"></text>
-          <text class="dlabel hidden" id="t-h4"    x="10"  y="120" text-anchor="start"></text>
-          <text class="dlabel hidden" id="t-riser" x="52"  y="166"></text>
-          <text class="dlabel hidden" id="t-cm"    x="130" y="166"></text>
-        </svg>
-        <div class="cap" id="diagramCap"></div>
+    <!-- ============================== STEP ============================== -->
+    <section id="screen-step" class="hidden">
+      <div class="stepbar">
+        <button class="x" id="closeStep" aria-label="Back to levels">✕</button>
+        <div class="dots" id="dots"></div>
+        <button class="tool" id="openPad" aria-label="Calc pad">🧮</button>
+        <button class="tool" id="openSheet" aria-label="Calc sheet">📋</button>
+        <span class="xp" id="stepXp">0 XP</span>
       </div>
 
-      <!-- the calc sheet that builds itself -->
-      <div class="calcsheet hidden" id="calcSheet">
-        <div class="cs-head">Calc sheet — building as you go</div>
-        <table>
-          <thead><tr><th>Node</th><th>P psi</th><th>+Q</th><th>ΣQ gpm</th><th>Pipe → next</th><th>Pf</th></tr></thead>
-          <tbody id="calcRows"></tbody>
-        </table>
+      <div class="stage" id="stage"></div>
+
+      <div class="labarea">
+        <h2 class="headline" id="headline">—</h2>
+        <p class="task" id="task">—</p>
+        <div id="labSlot"></div>
+        <div id="rewardSlot"></div>
+        <details class="why hidden" id="why">
+          <summary><span>💡</span> Why this works <span class="caret">▾</span></summary>
+          <div class="wbody" id="whyBody"></div>
+        </details>
       </div>
 
-      <!-- teaching bite -->
-      <div id="conceptView">
-        <div class="concept hidden" id="biteConcept">
-          <div class="eyebrow" id="conceptEyebrow">Level</div>
-          <h2 id="conceptTitle">—</h2>
-          <div class="body" id="conceptBody">—</div>
-          <div class="outcome" id="conceptOutcome"></div>
-        </div>
-        <div class="section" id="biteCard"></div>
-        <div class="btn-row">
-          <button class="btn ghost" id="bitePrevBtn">‹ Back</button>
-          <button class="btn primary" id="biteNextBtn">Check understanding →</button>
-        </div>
+      <div class="actions">
+        <button class="btn primary" id="mainBtn">Continue →</button>
       </div>
+    </section>
 
-      <!-- question -->
-      <div id="quizView" class="hidden">
-        <div class="qcard">
-          <div class="tag"><span id="qLevel">Level</span><span class="diff" id="qDiff">designer</span></div>
-          <h2 id="qText">—</h2>
-        </div>
-        <div class="choices" id="choices"></div>
-        <div class="explain hidden" id="explain">
-          <div class="head" id="explainHead"></div>
-          <div class="body" id="explainBody"></div>
-          <div class="calc hidden" id="explainCalc"></div>
-          <div class="teaches" id="explainTeaches"></div>
-        </div>
-        <div class="hidden" id="nextWrap" style="margin-top:16px"><button class="btn primary" id="nextBtn">Next →</button></div>
+    <!-- ============================= RESULT ============================= -->
+    <section id="screen-result" class="hidden">
+      <div class="result" id="resultCard">
+        <div class="ring" id="resultRing">🎉</div>
+        <div class="ttl" id="resultTitle">—</div>
+        <div class="msg" id="resultMsg">—</div>
+        <div class="xpgain" id="resultXp"></div>
       </div>
-
-      <!-- results -->
-      <div id="resultView" class="hidden">
-        <div class="result" id="resultCard">
-          <div class="ring" id="resultRing">0%</div>
-          <div class="ttl" id="resultTitle">—</div>
-          <div class="msg" id="resultMsg">—</div>
-        </div>
-        <div class="btn-row">
-          <button class="btn ghost" id="retryBtn">↻ Retry level</button>
-          <button class="btn primary" id="resultPrimaryBtn">Continue</button>
-        </div>
+      <div class="actions">
+        <button class="btn primary" id="resultNext">Next level →</button>
+        <button class="btn ghost" id="resultBack" style="margin-top:9px">All levels</button>
       </div>
     </section>
   </main>
 
+  <!-- calc sheet -->
+  <div class="sheetbk" id="sheetBk">
+    <div class="sheet">
+      <div class="sh"><h3>📋 Calc sheet</h3><button id="closeSheet">Done</button></div>
+      <div class="cs">
+        <table>
+          <thead><tr><th>Node</th><th>P psi</th><th>+Q</th><th>ΣQ gpm</th><th>Pipe → next</th><th>Pf</th></tr></thead>
+          <tbody id="calcRows"></tbody>
+        </table>
+        <div class="empty hidden" id="csEmpty">Rows appear as you work through the levels.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- calc pad -->
+  <div class="sheetbk" id="padBk">
+    <div class="sheet">
+      <div class="sh"><h3>🧮 Calc pad</h3><button id="closePad">Done</button></div>
+      <div class="padtabs">
+        <button id="tabF" class="on">Formulas</button>
+        <button id="tabK">Keypad</button>
+      </div>
+      <div id="padForms"><div class="fcards" id="fcards"></div></div>
+      <div id="padKeys" class="hidden">
+        <div class="paddisp"><div class="expr" id="padExpr">&nbsp;</div><div class="res" id="padRes">0</div></div>
+        <div class="keys" id="keys"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
   <script src="./learn-hydraulics-course.js"></script>
+  <script src="./learn-hydraulics-scenes.js"></script>
+  <script src="./learn-hydraulics-labs.js"></script>
   <script>
   (function () {
     "use strict";
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("../sw.js").catch(function () {});
-    var C = window.HydraulicCourse;
+
+    var C = window.HydraulicCourse, LB = window.HydraulicLabs, SC = window.HydraulicScenes, M = LB.model;
     var $ = function (id) { return document.getElementById(id); };
     var letters = ["A", "B", "C", "D", "E"];
-    var STORE = "learnHydraulicResults";
+    var STORE = "learnHydraulicResults";      // quiz results — unchanged, keeps old progress
+    var PSTORE = "learnHydraulicPlay";        // xp / streak / completed steps
 
     function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" })[c]; }); }
+    function buzz(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {} }
+
+    /* ------------------------------------------------------------ storage */
     function loadResults() { try { var v = JSON.parse(localStorage.getItem(STORE) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
     function saveResult(r) {
-      var all = loadResults().filter(function (x) { return x.questionId !== r.questionId; });   // keep latest per question (matches engine)
+      var all = loadResults().filter(function (x) { return x.questionId !== r.questionId; });
       all.push(r);
       try { localStorage.setItem(STORE, JSON.stringify(all)); } catch (e) {}
     }
+    function loadPlay() {
+      try {
+        var v = JSON.parse(localStorage.getItem(PSTORE) || "{}");
+        var xp = typeof v.xp === "number" && isFinite(v.xp) ? v.xp : 0;
+        return { xp: xp, streak: v.streak || 0, best: v.best || 0, steps: v.steps || {} };
+      } catch (e) { return { xp: 0, streak: 0, best: 0, steps: {} }; }
+    }
+    function savePlay(p) { try { localStorage.setItem(PSTORE, JSON.stringify(p)); } catch (e) {} }
+    var play = loadPlay();
 
-    // ---- state ----
-    var lesson = null, sectionIndex = 0, pendingQ = null, locked = false;
+    function award(n, why) {
+      n = typeof n === "number" && isFinite(n) ? n : 10;
+      play.xp += n;
+      savePlay(play);
+      $("stepXp").textContent = play.xp + " XP";
+      toast("+" + n + " XP" + (why ? " · " + why : ""));
+    }
+    function bumpStreak(ok) {
+      play.streak = ok ? play.streak + 1 : 0;
+      if (play.streak > play.best) play.best = play.streak;
+      savePlay(play);
+    }
+
+    var toastT = null;
+    function toast(msg) {
+      var t = $("toast");
+      t.textContent = msg; t.classList.add("show");
+      clearTimeout(toastT);
+      toastT = setTimeout(function () { t.classList.remove("show"); }, 1500);
+    }
+    function confetti() {
+      if (window.matchMedia("(prefers-reduced-motion:reduce)").matches) return;
+      var colors = ["#8b7cf6", "#37b7e4", "#3ddc97", "#ffb03a"];
+      for (var i = 0; i < 22; i++) (function (i) {
+        var d = document.createElement("div");
+        d.className = "conf";
+        d.style.background = colors[i % colors.length];
+        d.style.left = (46 + Math.random() * 8) + "vw";
+        d.style.top = "48vh";
+        document.body.appendChild(d);
+        var dx = (Math.random() - 0.5) * 340, dy = -120 - Math.random() * 190, rot = Math.random() * 720 - 360;
+        d.animate(
+          [{ transform: "translate(0,0) rotate(0)", opacity: 1 },
+           { transform: "translate(" + dx + "px," + (dy + 420) + "px) rotate(" + rot + "deg)", opacity: 0 }],
+          { duration: 1000 + Math.random() * 500, easing: "cubic-bezier(.2,.7,.5,1)" }
+        ).onfinish = function () { d.remove(); };
+      })(i);
+    }
+
+    /* --------------------------------------------------------------- state */
+    var lesson = null, si = 0, phase = "lab", scene = null, sceneName = null;
+    var labState = null, pendingQ = null, qLocked = false, wrongCount = 0;
 
     function show(name) {
-      $("screen-overview").classList.add("hidden");
-      $("screen-lesson").classList.add("hidden");
-      $("screen-" + name).classList.remove("hidden");
+      ["overview", "step", "result"].forEach(function (n) { $("screen-" + n).classList.toggle("hidden", n !== name); });
       window.scrollTo(0, 0);
     }
 
-    // ---- overview ----
+    /* ------------------------------------------------------------ overview */
+    function lessonStepStats(l) {
+      var done = 0;
+      l.sections.forEach(function (s) { if (play.steps[s.id]) done++; });
+      return { done: done, total: l.sections.length };
+    }
+
     function renderOverview() {
+      play = loadPlay();
       var cp = C.courseProgress(loadResults());
-      var passedCount = cp.lessons.filter(function (l) { return l.passed; }).length;
-      var recIndex = -1;   // first unpassed level = "Up next" (soft guidance, no locks)
-      cp.lessons.some(function (l, i) { if (!l.passed) { recIndex = i; return true; } return false; });
-      $("progVal").textContent = passedCount + " of " + C.lessons.length + " levels passed";
-      $("progFill").style.width = Math.round((passedCount / C.lessons.length) * 100) + "%";
+      var totalSteps = 0, doneSteps = 0;
+      C.lessons.forEach(function (l) { var st = lessonStepStats(l); totalSteps += st.total; doneSteps += st.done; });
+      $("sXp").textContent = play.xp;
+      $("sStreak").textContent = play.best;
+      $("sSteps").textContent = doneSteps + "/" + totalSteps;
+      var pct = totalSteps ? Math.round(doneSteps / totalSteps * 100) : 0;
+      $("progVal").textContent = pct + "%";
+      $("progFill").style.width = pct + "%";
+
+      var nextIdx = -1;
+      C.lessons.some(function (l, i) { var st = lessonStepStats(l); if (st.done < st.total) { nextIdx = i; return true; } return false; });
 
       $("lessonList").innerHTML = C.lessons.map(function (l, i) {
-        var lp = cp.lessons[i];
-        var cls = lp.passed ? "done" : "open";
-        var stateHtml;
-        if (lp.passed) stateHtml = '<span class="state ok">✓ ' + lp.scorePercent + '%</span>';
-        else if (i === recIndex) stateHtml = '<span class="state rec">★ Up next</span>';
-        else stateHtml = '<span class="state go">' + (lp.answered > 0 ? "↻ Retry" : "▶ Start") + '</span>';
-        var meta = '<span>' + l.sections.length + ' steps</span><span>' + l.questions.length + ' checkpoints</span><span>Badge ≥ ' + l.unlockScore + '%</span>';
+        var st = lessonStepStats(l), lp = cp.lessons[i];
+        var complete = st.done === st.total;
+        var cls = complete ? "done" : (i === nextIdx ? "next" : "");
+        var state = complete
+          ? '<span class="state ok">✓ Done</span>'
+          : '<span class="state go">' + (st.done ? "Resume" : "Start") + '</span>';
         return '<button class="lcard ' + cls + '" data-id="' + l.id + '">' +
-          '<span class="n">' + (lp.passed ? "✓" : (i + 1)) + '</span>' +
+          '<span class="n">' + (complete ? "✓" : (i + 1)) + '</span>' +
           '<span class="mid"><span class="t">' + esc(l.title) + '</span>' +
           '<span class="o">' + esc(l.outcome) + '</span>' +
-          '<span class="meta">' + meta + '</span></span>' +
-          stateHtml + '</button>';
+          '<span class="lbar"><i style="width:' + Math.round(st.done / st.total * 100) + '%"></i></span>' +
+          '<span class="meta">' + st.done + ' of ' + st.total + ' steps' +
+            (lp.answered ? ' · checkpoints ' + lp.correct + '/' + lp.answered : '') + '</span></span>' +
+          state + '</button>';
       }).join("");
-
       [].forEach.call($("lessonList").children, function (b) {
         b.onclick = function () { openLesson(b.dataset.id); };
       });
       show("overview");
     }
 
-    // ---- lesson (step-by-step: teach one step, then its 1-2 checkpoints) ----
-    function answeredSet() { var d = {}; loadResults().forEach(function (r) { d[r.questionId] = 1; }); return d; }
-    function biteCheckIds() { return (lesson.sections[sectionIndex] && lesson.sections[sectionIndex].checkQuestionIds) || []; }
-    function nextCheckpointId() { var d = answeredSet(), ids = biteCheckIds(); for (var i = 0; i < ids.length; i++) if (!d[ids[i]]) return ids[i]; return null; }
-
+    /* ---------------------------------------------------------- lesson flow */
     function openLesson(id) {
       lesson = C.getLessonById(id);
       if (!lesson) return;
-      sectionIndex = 0;
-      renderBite();
+      // resume at the first step not yet completed
+      si = 0;
+      for (var i = 0; i < lesson.sections.length; i++) { if (!play.steps[lesson.sections[i].id]) { si = i; break; } si = i; }
+      startStep();
     }
 
-    function renderBite() {
-      var sects = lesson.sections, s = sects[sectionIndex];
-      var idx = C.lessons.indexOf(lesson) + 1;
-      $("lessonPos").textContent = "Level " + idx + " of " + C.lessons.length;
-      if (sectionIndex === 0) {
-        $("biteConcept").classList.remove("hidden");
-        $("conceptEyebrow").textContent = "Level " + idx + " · " + sects.length + " steps · badge ≥ " + lesson.unlockScore + "%";
-        $("conceptTitle").textContent = lesson.title;
-        $("conceptBody").textContent = lesson.concept;
-        $("conceptOutcome").innerHTML = "<b>By the end:</b> " + esc(lesson.outcome);
-      } else {
-        $("biteConcept").classList.add("hidden");
-      }
-      var pts = (s.keyPoints || []).map(function (p) { return "<li>" + esc(p) + "</li>"; }).join("");
-      var nChecks = biteCheckIds().length;
-      $("biteCard").innerHTML =
-        '<div class="s-eyebrow">Step ' + (sectionIndex + 1) + ' of ' + sects.length +
-          (nChecks ? ' · ' + nChecks + ' checkpoint' + (nChecks === 1 ? '' : 's') : '') + '</div>' +
-        '<h3>' + esc(s.title) + '</h3>' +
-        '<div class="s-body">' + esc(s.body) + '</div>' +
-        (s.formula ? '<div class="s-formula">' + esc(s.formula) + '</div>' : '') +
-        (s.example ? '<div class="s-example"><b>Example:</b> ' + esc(s.example) + '</div>' : '') +
-        (pts ? '<ul class="s-points">' + pts + '</ul>' : '');
-      renderDiagram(s.diagram);
-      renderCalcSheet();
-      $("biteNextBtn").textContent = nextCheckpointId() ? "Check understanding →" : (sectionIndex < sects.length - 1 ? "Continue →" : "Finish level →");
-      $("bitePrevBtn").style.visibility = sectionIndex === 0 ? "hidden" : "visible";
-      $("qbarFill").style.width = Math.round((sectionIndex / sects.length) * 100) + "%";
-      $("conceptView").classList.remove("hidden");
-      $("quizView").classList.add("hidden");
-      $("resultView").classList.add("hidden");
-      show("lesson");
+    function section() { return lesson.sections[si]; }
+    function lab() { return LB.forSection(section().id); }
+
+    function answeredSet() { var d = {}; loadResults().forEach(function (r) { d[r.questionId] = 1; }); return d; }
+    function nextCheckpointId() {
+      var ids = section().checkQuestionIds || [], d = answeredSet();
+      for (var i = 0; i < ids.length; i++) if (!d[ids[i]]) return ids[i];
+      return null;
     }
 
-    // ---- worked-example diagram + self-building calc sheet ----
-    var DIAG_PIPES = ["p-sup", "p-cm1", "p-cm2", "p-bl2a", "p-bl2b", "p-b1a", "p-b1b"];
-    var DIAG_NODES = ["n-riser", "n-h1", "n-h2", "n-h3", "n-h4"];
-    var DIAG_LABELS = ["t-h1", "t-h2", "t-h3", "t-h4", "t-riser", "t-cm"];
-
-    function renderDiagram(cfg) {
-      var box = $("stepDiagram");
-      if (!cfg) { box.classList.add("hidden"); return; }
-      box.classList.remove("hidden");
-      DIAG_PIPES.forEach(function (id) { $(id).classList.remove("flow"); });
-      DIAG_NODES.forEach(function (id) { $(id).classList.remove("focus"); });
-      DIAG_LABELS.forEach(function (id) { $(id).classList.add("hidden"); $(id).textContent = ""; });
-      (cfg.flow || []).forEach(function (id) { var el = $(id); if (el) el.classList.add("flow"); });
-      (cfg.focus || []).forEach(function (id) { var el = $(id); if (el) el.classList.add("focus"); });
-      Object.keys(cfg.labels || {}).forEach(function (id) {
-        var el = $(id);
-        if (el) { el.textContent = cfg.labels[id]; el.classList.remove("hidden"); }
+    function renderDots() {
+      $("dots").innerHTML = lesson.sections.map(function (s, i) {
+        var cls = i === si ? "now" : (play.steps[s.id] ? "done" : "");
+        return '<button class="dot ' + cls + '" data-i="' + i + '" aria-label="Step ' + (i + 1) + '"></button>';
+      }).join("");
+      [].forEach.call($("dots").children, function (b) {
+        b.onclick = function () { si = parseInt(b.dataset.i, 10); startStep(); };
       });
-      $("diagramCap").textContent = cfg.caption || "";
+      $("stepXp").textContent = play.xp + " XP";
     }
 
-    function renderCalcSheet() {
-      var box = $("calcSheet");
-      var rows = [];
-      for (var i = 0; i <= sectionIndex && i < lesson.sections.length; i++) {
-        if (lesson.sections[i].calcRow) rows.push({ r: lesson.sections[i].calcRow, isNew: i === sectionIndex });
+    function mountScene(name) {
+      var host = $("stage");
+      if (!name) { host.classList.add("empty"); scene = null; sceneName = null; return; }
+      host.classList.remove("empty");
+      if (sceneName !== name) { scene = SC.create(name, host, onSceneTap); sceneName = name; }
+      return scene;
+    }
+
+    function renderWhy(s) {
+      var pts = (s.keyPoints || []).map(function (p) { return "<li>" + esc(p) + "</li>"; }).join("");
+      $("whyBody").innerHTML =
+        '<div>' + esc(s.body) + '</div>' +
+        (s.formula ? '<div class="wf">' + esc(s.formula) + '</div>' : '') +
+        (s.example ? '<div style="margin-top:10px;color:var(--muted);font-size:.88rem"><b style="color:var(--ink)">Example:</b> ' + esc(s.example) + '</div>' : '') +
+        (pts ? '<ul>' + pts + '</ul>' : '');
+      $("why").classList.remove("hidden");
+      $("why").open = false;
+    }
+
+    function startStep() {
+      phase = "lab";
+      wrongCount = 0;
+      $("rewardSlot").innerHTML = "";
+      renderDots();
+      renderWhy(section());
+      renderLab();
+      show("step");
+    }
+
+    /* -------------------------------------------------------------- the lab */
+    function readoutsHtml(list) {
+      return '<div class="reads">' + (list || []).map(function (r) {
+        return '<div class="read' + (r.tone === "good" ? " good" : "") + '">' +
+          '<div class="rtop"><span class="rk">' + esc(r.label) + '</span>' +
+          '<span class="rv">' + esc(String(r.value)) + (r.unit ? '<span class="u">' + esc(r.unit) + '</span>' : '') + '</span></div>' +
+          (r.bar != null ? '<div class="rbar"><i style="width:' + Math.max(0, Math.min(100, r.bar * 100)).toFixed(1) + '%"></i></div>' : '') +
+          '</div>';
+      }).join("") + '</div>';
+    }
+
+    function setMain(text, enabled, cls) {
+      var b = $("mainBtn");
+      b.textContent = text;
+      b.disabled = !enabled;
+      b.className = "btn " + (cls || "primary");
+    }
+
+    function renderLab() {
+      var s = section(), L = lab();
+      $("headline").textContent = L ? L.headline : s.title;
+      $("task").textContent = L ? L.task : "Read this one, then continue.";
+      var slot = $("labSlot");
+      slot.innerHTML = "";
+      mountScene(L ? L.scene : null);
+
+      if (!L || L.kind === "read") {
+        if (L && L.sceneFor && scene) scene.update(L.sceneFor());
+        if (L && L.showSheet) slot.innerHTML = '<div class="cs inlinecs" id="inlineCs"></div>';
+        if (L && L.showSheet) renderCalcSheet($("inlineCs"));
+        setMain("Got it →", true);
+        $("mainBtn").onclick = function () { completeLab(); };
+        return;
       }
-      if (!rows.length) { box.classList.add("hidden"); return; }
-      box.classList.remove("hidden");
-      $("calcRows").innerHTML = rows.map(function (x) {
-        return '<tr' + (x.isNew ? ' class="new"' : '') + '><td>' + esc(x.r.node) + '</td><td>' + esc(x.r.p) +
-          '</td><td>' + esc(x.r.qAdd) + '</td><td>' + esc(x.r.qTotal) + '</td><td>' + esc(x.r.pipe) +
-          '</td><td>' + esc(x.r.pf) + '</td></tr>';
-      }).join("");
+      if (L.kind === "tap") return labTap(L, slot);
+      if (L.kind === "order") return labOrder(L, slot);
+      if (L.kind === "numeric") return labNumeric(L, slot);
+      if (L.kind === "slider") return labSlider(L, slot);
+      if (L.kind === "iterate") return labIterate(L, slot);
+      setMain("Continue →", true);
+      $("mainBtn").onclick = function () { completeLab(); };
     }
 
-    function startCheckpointOrAdvance() { if (nextCheckpointId()) renderCheckpoint(); else advanceBite(); }
+    /* --- tap ------------------------------------------------------------- */
+    var tapGot = [];
+    function labTap(L, slot) {
+      tapGot = [];
+      labState = { kind: "tap", L: L };
+      slot.innerHTML = '<div class="tapstat" id="tapStat"></div>';
+      paintTap(L);
+      setMain("Tap the diagram", false);
+    }
+    function paintTap(L) {
+      if (scene) scene.update(L.sceneFor(tapGot));
+      var el = $("tapStat");
+      if (el) el.textContent = tapGot.length + " of " + L.targets.length + (L.ordered ? " · in order" : "");
+      if (tapGot.length === L.targets.length) {
+        setMain("Nice — continue →", true, "good");
+        $("mainBtn").onclick = function () { completeLab(); };
+      }
+    }
+    function onSceneTap(key) {
+      if (!labState || labState.kind !== "tap") return;
+      var L = labState.L;
+      if (tapGot.indexOf(key) >= 0) return;
+      var want = L.ordered ? L.targets[tapGot.length] : null;
+      var valid = L.ordered ? key === want : L.targets.indexOf(key) >= 0;
+      if (!valid) { buzz(40); toast(L.ordered ? "Not that one — follow the water" : "That's not part of it"); return; }
+      tapGot.push(key);
+      buzz(12);
+      if (scene.pop) scene.pop(key);
+      paintTap(L);
+    }
 
+    /* --- order ----------------------------------------------------------- */
+    function labOrder(L, slot) {
+      labState = { kind: "order" };
+      if (scene && L.sceneFor) scene.update(L.sceneFor());
+      var shuffled = L.items.map(function (t, i) { return { t: t, i: i }; });
+      for (var i = shuffled.length - 1; i > 0; i--) {   // deterministic-ish shuffle is fine; just don't leave it sorted
+        var j = Math.floor(Math.random() * (i + 1)), tmp = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = tmp;
+      }
+      if (shuffled.every(function (x, k) { return x.i === k; })) shuffled.reverse();
+      slot.innerHTML = '<div class="olist" id="olist">' + shuffled.map(function (x) {
+        return '<button class="oitem" data-i="' + x.i + '"><span class="onum"></span><span>' + esc(x.t) + '</span></button>';
+      }).join("") + '</div>';
+      var picked = 0;
+      [].forEach.call($("olist").children, function (b) {
+        b.onclick = function () {
+          if (b.classList.contains("picked")) return;
+          if (parseInt(b.dataset.i, 10) !== picked) {
+            b.classList.add("wrong"); buzz(40);
+            setTimeout(function () { b.classList.remove("wrong"); }, 400);
+            toast("Not next — think about where the calc starts");
+            return;
+          }
+          picked++;
+          b.classList.add("picked");
+          b.querySelector(".onum").textContent = picked;
+          buzz(12);
+          if (picked === L.items.length) { setMain("Nice — continue →", true, "good"); $("mainBtn").onclick = function () { completeLab(); }; }
+        };
+      });
+      setMain("Put them in order", false);
+    }
+
+    /* --- numeric --------------------------------------------------------- */
+    function labNumeric(L, slot) {
+      labState = { kind: "numeric" };
+      if (scene && L.sceneFor) scene.update(L.sceneFor());
+      slot.innerHTML =
+        (L.formula ? '<div class="fchip">' + esc(L.formula) + '</div>' : '') +
+        '<div class="numrow">' +
+          '<input id="numIn" type="text" inputmode="decimal" placeholder="?" autocomplete="off" />' +
+          '<span class="unit">' + esc(L.unit || "") + '</span>' +
+          '<button class="padbtn" id="numPad" aria-label="Open calc pad">🧮</button>' +
+        '</div>' +
+        '<div id="numMsg"></div>';
+      $("numPad").onclick = function () { openPad(L.formula); };
+      $("numIn").addEventListener("keydown", function (e) { if (e.key === "Enter") checkNumeric(L); });
+      $("numIn").addEventListener("input", function () { $("numIn").className = ""; setMain("Check answer", !!$("numIn").value.trim()); });
+      setMain("Check answer", false);
+      $("mainBtn").onclick = function () { checkNumeric(L); };
+    }
+    function checkNumeric(L) {
+      var raw = $("numIn").value.trim().replace(/,/g, "");
+      var v = parseFloat(raw);
+      var ans = typeof L.answer === "function" ? L.answer() : L.answer;
+      if (isNaN(v)) { $("numIn").className = "bad"; return; }
+      if (Math.abs(v - ans) <= (L.tol || 0.1)) {
+        $("numIn").className = "good";
+        $("numIn").disabled = true;
+        $("numMsg").innerHTML = "";
+        bumpStreak(true);
+        completeLab(wrongCount === 0 ? 15 : 8);
+        return;
+      }
+      wrongCount++;
+      buzz(50);
+      bumpStreak(false);
+      $("numIn").className = "bad";
+      setTimeout(function () { $("numIn").className = ""; }, 400);
+      if (wrongCount === 1) {
+        $("numMsg").innerHTML = '<div class="note">Not quite. ' +
+          (v > ans ? "You're high — try again." : "You're low — try again.") +
+          ' The calc pad has this formula ready.</div>';
+      } else {
+        $("numMsg").innerHTML = '<div class="note">The answer is <b style="color:var(--ink)">' + ans + ' ' + esc(L.unit || "") + '</b>' +
+          (L.pad ? ' &nbsp;·&nbsp; <span style="color:var(--learn)">' + esc(L.pad.replace(/\*/g, "×").replace(/sqrt/g, "√")) + '</span>' : '') +
+          '. Type it in to move on.</div>';
+      }
+    }
+
+    /* --- slider ---------------------------------------------------------- */
+    function labSlider(L, slot) {
+      labState = { kind: "slider" };
+      var vals = {};
+      L.controls.forEach(function (c) { vals[c.key] = c.val; });
+      slot.innerHTML =
+        (L.formula ? '<div class="fchip">' + esc(L.formula) + '</div>' : '') +
+        L.controls.map(function (c) {
+          return '<div class="ctrl">' +
+            '<div class="ctop"><span class="cl">' + esc(c.label) + '</span><span class="cv" id="cv-' + c.key + '"></span></div>' +
+            '<input type="range" id="cr-' + c.key + '" min="' + c.min + '" max="' + c.max + '" step="' + c.step + '" value="' + c.val + '" />' +
+            '</div>';
+        }).join("") +
+        '<div id="sliderReads"></div>' +
+        '<div class="note hidden" id="sliderNote"></div>' +
+        (L.goal ? '<div class="goal" id="sliderGoal"><span class="tick">○</span><span>' + esc(L.goal) + '</span></div>' : '');
+
+      var hitOnce = false;
+      function paint() {
+        L.controls.forEach(function (c) {
+          var el = $("cr-" + c.key);
+          var pct = (vals[c.key] - c.min) / (c.max - c.min) * 100;
+          el.style.setProperty("--pct", pct + "%");
+          $("cv-" + c.key).textContent = c.choices
+            ? c.choices[Math.round(vals[c.key])]
+            : vals[c.key].toFixed(c.dec != null ? c.dec : 1) + (c.unit ? " " + c.unit : "");
+        });
+        var out = L.compute(vals);
+        $("sliderReads").innerHTML = readoutsHtml(out.readouts);
+        if (out.note) { $("sliderNote").textContent = out.note; $("sliderNote").classList.remove("hidden"); }
+        else $("sliderNote").classList.add("hidden");
+        if (scene && out.scene) scene.update(out.scene);
+        var g = $("sliderGoal");
+        if (g) {
+          g.classList.toggle("hit", !!out.ok);
+          g.querySelector(".tick").textContent = out.ok ? "✓" : "○";
+        }
+        if (out.ok && !hitOnce) {
+          hitOnce = true;
+          buzz(18);
+          setMain("Nice — continue →", true, "good");
+          $("mainBtn").onclick = function () { completeLab(); };
+        }
+      }
+      L.controls.forEach(function (c) {
+        $("cr-" + c.key).addEventListener("input", function (e) { vals[c.key] = parseFloat(e.target.value); paint(); });
+      });
+      setMain(L.goal ? "Try it" : "Continue →", !L.goal);
+      if (!L.goal) $("mainBtn").onclick = function () { completeLab(); };
+      paint();
+    }
+
+    /* --- iterate --------------------------------------------------------- */
+    function labIterate(L, slot) {
+      labState = { kind: "iterate" };
+      var idx = 0, n = L.iterations.length;
+      slot.innerHTML = '<div id="iterReads"></div><div class="iterlog" id="iterLog"></div>';
+      function paint() {
+        var it = L.iterations[idx];
+        var out = L.sceneFor(it, idx, n);
+        if (scene && out.scene) scene.update(out.scene);
+        $("iterReads").innerHTML = readoutsHtml(out.readouts);
+        var line = document.createElement("div");
+        line.className = "iterline" + (idx === n - 1 ? " last" : "");
+        line.innerHTML = '<span class="i">#' + (idx + 1) + '</span><span>' + esc(it.label) + '</span>';
+        $("iterLog").appendChild(line);
+        $("iterLog").scrollTop = 999;
+      }
+      function step() {
+        paint();
+        buzz(10);
+        idx++;
+        if (idx >= n) { setMain("Converged — continue →", true, "good"); $("mainBtn").onclick = function () { completeLab(); }; confetti(); }
+        else setMain("Run iteration " + (idx + 1) + " →", true);
+      }
+      setMain("Run iteration 1 →", true);
+      $("mainBtn").onclick = step;
+      if (scene) scene.update(L.sceneFor(L.iterations[0], 0, n).scene);
+    }
+
+    /* ------------------------------------------------------- reward + next */
+    function completeLab(xp) {
+      if (typeof xp !== "number") xp = 0;      // guards against being used directly as a click handler
+      var s = section(), L = lab();
+      var first = !play.steps[s.id];
+      play.steps[s.id] = 1;
+      savePlay(play);
+      if (first) award(xp || 10, "step done");
+      else $("stepXp").textContent = play.xp + " XP";
+
+      if (L && L.reward) {
+        phase = "reward";
+        $("labSlot").innerHTML = "";
+        $("rewardSlot").innerHTML =
+          '<div class="reward"><div class="rh"><span>✓</span> Here\'s the point</div><div class="rb">' + esc(L.reward) + '</div></div>';
+        renderDots();
+        var more = nextCheckpointId();
+        setMain(more ? "Checkpoint →" : (si < lesson.sections.length - 1 ? "Next step →" : "Finish level →"), true);
+        $("mainBtn").onclick = afterReward;
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        afterReward();
+      }
+    }
+
+    function afterReward() {
+      if (nextCheckpointId()) renderCheckpoint();
+      else advance();
+    }
+
+    function advance() {
+      if (si < lesson.sections.length - 1) { si++; startStep(); }
+      else finishLesson();
+    }
+
+    /* --------------------------------------------------------- checkpoints */
     function renderCheckpoint() {
+      phase = "quiz";
       pendingQ = nextCheckpointId();
-      if (!pendingQ) { advanceBite(); return; }
       var q = C.getQuestionById(pendingQ);
-      var ids = biteCheckIds(), d = answeredSet();
-      var answered = ids.filter(function (id) { return d[id]; }).length;
-      $("conceptView").classList.add("hidden");
-      $("resultView").classList.add("hidden");
-      $("quizView").classList.remove("hidden");
-      $("qLevel").textContent = "Checkpoint " + (answered + 1) + " of " + ids.length;
-      $("qDiff").textContent = q.difficulty;
-      $("qDiff").className = "diff diff-" + q.difficulty;
-      $("qText").textContent = q.prompt;
-      $("explain").classList.add("hidden");
-      $("nextWrap").classList.add("hidden");
-      $("choices").innerHTML = q.choices.map(function (txt, i) {
-        return '<button class="choice" data-i="' + i + '"><span class="badge">' + letters[i] + '</span><span>' + esc(txt) + '</span></button>';
-      }).join("");
-      [].forEach.call($("choices").children, function (b) { b.onclick = function () { pickCheckpoint(parseInt(b.dataset.i, 10)); }; });
-      locked = false;
+      if (!q) { advance(); return; }
+      $("stage").classList.add("empty");
+      $("headline").textContent = "Quick checkpoint";
+      $("task").textContent = "";
+      $("rewardSlot").innerHTML = "";
+      $("labSlot").innerHTML =
+        '<div class="qcard"><div class="tag">' + esc(q.difficulty) + '</div><h2>' + esc(q.prompt) + '</h2></div>' +
+        '<div class="choices" id="choices">' + q.choices.map(function (t, i) {
+          return '<button class="choice" data-i="' + i + '"><span class="badge">' + letters[i] + '</span><span>' + esc(t) + '</span></button>';
+        }).join("") + '</div><div id="qExplain"></div>';
+      [].forEach.call($("choices").children, function (b) {
+        b.onclick = function () { pickCheckpoint(q, parseInt(b.dataset.i, 10)); };
+      });
+      qLocked = false;
+      setMain("Pick an answer", false);
       window.scrollTo(0, 0);
     }
 
-    function pickCheckpoint(choice) {
-      if (locked) return;
-      locked = true;
-      var q = C.getQuestionById(pendingQ);
+    function pickCheckpoint(q, choice) {
+      if (qLocked) return;
+      qLocked = true;
       saveResult(C.gradeAnswer(q.id, choice));
       var correct = choice === q.answerIndex;
       [].forEach.call($("choices").children, function (b) {
@@ -451,72 +857,190 @@
         if (i === q.answerIndex) b.classList.add("correct");
         else if (i === choice) b.classList.add("wrong");
       });
-      $("explainHead").className = "head " + (correct ? "ok" : "no");
-      $("explainHead").textContent = correct ? "✓ Correct" : "✗ Correct answer: " + letters[q.answerIndex];
-      $("explainBody").textContent = q.explanation;
-      if (q.calculationNote) { $("explainCalc").textContent = "🧮  " + q.calculationNote; $("explainCalc").classList.remove("hidden"); }
-      else $("explainCalc").classList.add("hidden");
-      $("explainTeaches").innerHTML = (q.teaches || []).map(function (t) { return '<span class="chip">' + esc(t) + '</span>'; }).join("");
-      $("explain").classList.remove("hidden");
-      var lastBite = sectionIndex >= lesson.sections.length - 1;
-      $("nextBtn").textContent = nextCheckpointId() ? "Next checkpoint →" : (lastBite ? "See results →" : "Continue →");
-      $("nextWrap").classList.remove("hidden");
+      bumpStreak(correct);
+      if (correct) { award(15, play.streak > 2 ? play.streak + " in a row!" : "correct"); buzz(18); }
+      else buzz(60);
+      $("qExplain").innerHTML =
+        '<div class="explain"><div class="head ' + (correct ? "ok" : "no") + '">' +
+        (correct ? "✓ Correct" : "✗ Answer: " + letters[q.answerIndex]) + '</div>' +
+        '<div class="body">' + esc(q.explanation) + '</div>' +
+        (q.calculationNote ? '<div class="calc">🧮 ' + esc(q.calculationNote) + '</div>' : '') + '</div>';
+      var more = nextCheckpointId();
+      setMain(more ? "Next checkpoint →" : (si < lesson.sections.length - 1 ? "Next step →" : "Finish level →"), true, correct ? "good" : "primary");
+      $("mainBtn").onclick = function () { if (nextCheckpointId()) renderCheckpoint(); else advance(); };
     }
 
-    function continueAfterFeedback() {
-      locked = false;
-      if (nextCheckpointId()) renderCheckpoint();
-      else advanceBite();
-    }
-
-    function advanceBite() {
-      if (sectionIndex < lesson.sections.length - 1) { sectionIndex++; renderBite(); }
-      else finishLesson();
-    }
-
-    function goToPrevBite() { if (sectionIndex > 0) { sectionIndex--; renderBite(); } }
-
-    function retryLesson() {
-      var qids = {}; lesson.questions.forEach(function (q) { qids[q.id] = 1; });
-      var kept = loadResults().filter(function (r) { return !qids[r.questionId]; });
-      try { localStorage.setItem(STORE, JSON.stringify(kept)); } catch (e) {}
-      sectionIndex = 0;
-      renderBite();
-    }
-
+    /* --------------------------------------------------------------- result */
     function finishLesson() {
       var lp = C.lessonProgress(lesson.id, loadResults());
-      var idx = C.lessons.indexOf(lesson);
-      var nextLesson = C.lessons[idx + 1];
-      $("qbarFill").style.width = "100%";
-      $("quizView").classList.add("hidden");
-      $("conceptView").classList.add("hidden");
-      $("stepDiagram").classList.add("hidden");
-      $("calcSheet").classList.add("hidden");
-      $("resultView").classList.remove("hidden");
-      $("resultRing").textContent = lp.scorePercent + "%";
-      $("resultCard").className = "result " + (lp.passed ? "pass" : "fail");
-      if (lp.passed) {
-        $("resultTitle").textContent = "Badge earned! 🎉";
-        $("resultMsg").textContent = "You scored " + lp.scorePercent + "% (" + lp.correct + " of " + lp.answered + "). " +
-          (nextLesson ? "Up next: “" + nextLesson.title + ".”" : "That was the final level — you’ve followed the whole calc, end to end.");
-        $("resultPrimaryBtn").textContent = nextLesson ? "Next level →" : "Back to levels";
-        $("resultPrimaryBtn").onclick = function () { if (nextLesson) openLesson(nextLesson.id); else renderOverview(); };
-      } else {
-        $("resultTitle").textContent = "Not quite — keep going";
-        $("resultMsg").textContent = "You scored " + lp.scorePercent + "%. This level's badge takes " + lesson.unlockScore + "%. Review the explanations and retry — or keep exploring and come back.";
-        $("resultPrimaryBtn").textContent = "Back to levels";
-        $("resultPrimaryBtn").onclick = renderOverview;
-      }
-      window.scrollTo(0, 0);
+      var idx = C.lessons.indexOf(lesson), nextLesson = C.lessons[idx + 1];
+      var passed = lp.answered === 0 || lp.passed;
+      $("resultCard").className = "result " + (passed ? "pass" : "fail");
+      $("resultRing").textContent = passed ? "🎉" : "💪";
+      $("resultTitle").textContent = passed ? "Level complete" : "Level walked — checkpoints need work";
+      $("resultMsg").textContent = (lp.answered
+        ? "Checkpoints: " + lp.correct + " of " + lp.answered + " (" + lp.scorePercent + "%). "
+        : "") + (nextLesson ? "Up next: " + nextLesson.title + "." : "That's the whole calc, end to end — remote head to safety margin.");
+      $("resultXp").textContent = play.xp + " XP total · best streak " + play.best;
+      $("resultNext").textContent = nextLesson ? "Next level →" : "Back to levels";
+      $("resultNext").onclick = function () { if (nextLesson) openLesson(nextLesson.id); else renderOverview(); };
+      if (passed) confetti();
+      show("result");
     }
 
-    $("biteNextBtn").onclick = startCheckpointOrAdvance;
-    $("bitePrevBtn").onclick = goToPrevBite;
-    $("nextBtn").onclick = continueAfterFeedback;
-    $("retryBtn").onclick = retryLesson;
-    $("backToCourse").onclick = renderOverview;
+    /* ----------------------------------------------------------- calc sheet */
+    function renderCalcSheet(target) {
+      var rows = [];
+      C.lessons.forEach(function (l) {
+        l.sections.forEach(function (s) {
+          if (s.calcRow && play.steps[s.id]) rows.push({ r: s.calcRow, isNew: lesson && section() && s.id === section().id });
+        });
+      });
+      var body = rows.map(function (x) {
+        return '<tr' + (x.isNew ? ' class="new"' : '') + '><td>' + esc(x.r.node) + '</td><td>' + esc(x.r.p) +
+          '</td><td>' + esc(x.r.qAdd) + '</td><td>' + esc(x.r.qTotal) + '</td><td>' + esc(x.r.pipe) +
+          '</td><td>' + esc(x.r.pf) + '</td></tr>';
+      }).join("");
+      if (target) {
+        target.innerHTML = rows.length
+          ? '<table><thead><tr><th>Node</th><th>P psi</th><th>+Q</th><th>ΣQ gpm</th><th>Pipe → next</th><th>Pf</th></tr></thead><tbody>' + body + '</tbody></table>'
+          : '<div class="empty">Rows appear as you finish the steps that calculate them.</div>';
+        return;
+      }
+      $("csEmpty").classList.toggle("hidden", rows.length > 0);
+      $("calcRows").innerHTML = body;
+    }
 
+    /* -------------------------------------------------------------- calc pad */
+    // Tiny recursive-descent evaluator — no eval(), digits/operators/sqrt only.
+    function evalExpr(src) {
+      var s = String(src).replace(/×/g, "*").replace(/÷/g, "/").replace(/√/g, "sqrt").replace(/\s+/g, "");
+      var i = 0;
+      function primary() {
+        if (s[i] === "(") { i++; var v = expr(); if (s[i] === ")") i++; return v; }
+        if (s.substr(i, 4) === "sqrt") { i += 4; return Math.sqrt(primary()); }
+        if (s[i] === "-") { i++; return -primary(); }
+        var st = i;
+        while (i < s.length && /[0-9.]/.test(s[i])) i++;
+        return st === i ? NaN : parseFloat(s.slice(st, i));
+      }
+      function power() { var b = primary(); if (s[i] === "^") { i++; return Math.pow(b, power()); } return b; }
+      function term() { var v = power(); for (;;) { if (s[i] === "*") { i++; v *= power(); } else if (s[i] === "/") { i++; v /= power(); } else return v; } }
+      function expr() { var v = term(); for (;;) { if (s[i] === "+") { i++; v += term(); } else if (s[i] === "-") { i++; v -= term(); } else return v; } }
+      var r = expr();
+      return isFinite(r) ? r : NaN;
+    }
+
+    var padExpr = "";
+    var KEYS = ["7","8","9","÷","4","5","6","×","1","2","3","−","0",".","(",")","√","^","C","="];
+    function buildKeys() {
+      $("keys").innerHTML = KEYS.map(function (k) {
+        var cls = k === "=" ? "eq" : (k === "C" ? "clr" : (/[0-9.]/.test(k) ? "" : "op"));
+        return '<button class="' + cls + '" data-k="' + k + '">' + k + '</button>';
+      }).join("");
+      [].forEach.call($("keys").children, function (b) {
+        b.onclick = function () {
+          var k = b.dataset.k;
+          if (k === "C") { padExpr = ""; $("padRes").textContent = "0"; }
+          else if (k === "=") { var v = evalExpr(padExpr); $("padRes").textContent = isNaN(v) ? "—" : (Math.round(v * 1000) / 1000); buzz(8); }
+          else { padExpr += (k === "−" ? "-" : k) + (k === "√" ? "(" : ""); }
+          $("padExpr").textContent = padExpr || " ";
+          if (k !== "=" && k !== "C") { var lv = evalExpr(padExpr); if (!isNaN(lv)) $("padRes").textContent = Math.round(lv * 1000) / 1000; }
+        };
+      });
+    }
+
+    var FORMS = [
+      { id: "qkp", title: "Sprinkler discharge", eq: "Q = K × √P",
+        fields: [{ k: "K", label: "K-factor", v: "5.6" }, { k: "P", label: "Pressure (psi)", v: "" }],
+        calc: function (f) { return f.K && f.P !== "" ? M.qFromP(+f.K, +f.P).toFixed(2) + " gpm" : null; } },
+      { id: "pqk", title: "Pressure for a flow", eq: "P = (Q ÷ K)²",
+        fields: [{ k: "Q", label: "Flow (gpm)", v: "" }, { k: "K", label: "K-factor", v: "5.6" }],
+        calc: function (f) { return f.Q !== "" && f.K ? M.pFromQ(+f.K, +f.Q).toFixed(2) + " psi" : null; } },
+      { id: "dens", title: "Density × area", eq: "min flow = density × area",
+        fields: [{ k: "D", label: "Density (gpm/ft²)", v: "0.10" }, { k: "A", label: "Area (ft²)", v: "130" }],
+        calc: function (f) { return f.D !== "" && f.A !== "" ? (+f.D * +f.A).toFixed(1) + " gpm" : null; } },
+      { id: "hw", title: "Friction loss", eq: "Hazen-Williams",
+        fields: [{ k: "Q", label: "Flow (gpm)", v: "" }, { k: "S", label: "Pipe size", v: "1", type: "size" },
+                 { k: "L", label: "Length (ft)", v: "" }, { k: "C", label: "C-factor", v: "120" }],
+        calc: function (f) {
+          if (f.Q === "" || f.L === "") return null;
+          var d = M.ID[f.S] || 1.049;
+          return M.pf(+f.Q, d, +f.C || 120, +f.L).toFixed(2) + " psi  (ID " + d.toFixed(3) + '")';
+        } },
+      { id: "elev", title: "Elevation pressure", eq: "psi = 0.433 × ft",
+        fields: [{ k: "F", label: "Rise (ft)", v: "" }],
+        calc: function (f) { return f.F !== "" ? M.elevPsi(+f.F).toFixed(2) + " psi" : null; } },
+      { id: "avail", title: "Available supply", eq: "P at a given demand",
+        fields: [{ k: "S", label: "Static (psi)", v: "" }, { k: "R", label: "Residual (psi)", v: "" },
+                 { k: "T", label: "Test flow (gpm)", v: "" }, { k: "Q", label: "Demand (gpm)", v: "" }],
+        calc: function (f) {
+          if (f.S === "" || f.R === "" || !+f.T || f.Q === "") return null;
+          return M.availPressure(+f.S, +f.R, +f.T, +f.Q).toFixed(1) + " psi";
+        } }
+    ];
+
+    function buildForms() {
+      $("fcards").innerHTML = FORMS.map(function (F) {
+        return '<div class="fcard" data-id="' + F.id + '">' +
+          '<button class="fh">' + esc(F.title) + '<span class="fe">' + esc(F.eq) + '</span></button>' +
+          '<div class="fbody">' + F.fields.map(function (f) {
+            if (f.type === "size") {
+              return '<div class="fin"><label>' + esc(f.label) + '</label><select data-f="' + f.k + '">' +
+                M.SIZES.map(function (s) { return '<option value="' + s + '"' + (s === f.v ? " selected" : "") + '>' + s + '"</option>'; }).join("") +
+                '</select></div>';
+            }
+            return '<div class="fin"><label>' + esc(f.label) + '</label>' +
+              '<input type="text" inputmode="decimal" data-f="' + f.k + '" value="' + f.v + '" placeholder="—" /></div>';
+          }).join("") + '<div class="fout">—</div></div></div>';
+      }).join("");
+      [].forEach.call($("fcards").children, function (card, ci) {
+        var F = FORMS[ci];
+        card.querySelector(".fh").onclick = function () {
+          var open = card.classList.contains("open");
+          [].forEach.call($("fcards").children, function (c) { c.classList.remove("open"); });
+          if (!open) card.classList.add("open");
+        };
+        function recalc() {
+          var vals = {};
+          [].forEach.call(card.querySelectorAll("[data-f]"), function (inp) { vals[inp.dataset.f] = inp.value.trim(); });
+          var out = F.calc(vals);
+          card.querySelector(".fout").textContent = out || "—";
+        }
+        [].forEach.call(card.querySelectorAll("[data-f]"), function (inp) {
+          inp.addEventListener("input", recalc);
+          inp.addEventListener("change", recalc);
+        });
+      });
+    }
+
+    function openPad(hintFormula) {
+      $("padBk").classList.add("show");
+      // open the formula card the current step is actually about
+      var want = null, h = String(hintFormula || "");
+      if (/Q\s*=\s*K/.test(h)) want = "qkp";
+      else if (/P\s*=\s*\(Q/.test(h)) want = "pqk";
+      else if (/0\.433/.test(h)) want = "elev";
+      else if (/4\.52|Hazen/i.test(h)) want = "hw";
+      else if (/density/i.test(h)) want = "dens";
+      else if (/P_static|P_avail/.test(h)) want = "avail";
+      [].forEach.call($("fcards").children, function (c) { c.classList.toggle("open", c.dataset.id === want); });
+    }
+
+    /* --------------------------------------------------------------- wiring */
+    $("closeStep").onclick = renderOverview;
+    $("resultBack").onclick = renderOverview;
+    $("openSheet").onclick = function () { renderCalcSheet(null); $("sheetBk").classList.add("show"); };
+    $("closeSheet").onclick = function () { $("sheetBk").classList.remove("show"); };
+    $("sheetBk").onclick = function (e) { if (e.target === $("sheetBk")) $("sheetBk").classList.remove("show"); };
+    $("openPad").onclick = function () { var L = lab(); openPad(L && L.formula); };
+    $("closePad").onclick = function () { $("padBk").classList.remove("show"); };
+    $("padBk").onclick = function (e) { if (e.target === $("padBk")) $("padBk").classList.remove("show"); };
+    $("tabF").onclick = function () { $("tabF").classList.add("on"); $("tabK").classList.remove("on"); $("padForms").classList.remove("hidden"); $("padKeys").classList.add("hidden"); };
+    $("tabK").onclick = function () { $("tabK").classList.add("on"); $("tabF").classList.remove("on"); $("padKeys").classList.remove("hidden"); $("padForms").classList.add("hidden"); };
+
+    buildKeys();
+    buildForms();
     renderOverview();
   })();
   </script>
