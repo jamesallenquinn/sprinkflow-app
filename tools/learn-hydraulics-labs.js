@@ -434,8 +434,7 @@
         var err = Math.abs(ha - hb);
         return {
           readouts: [
-            { label: "Loss through A", value: fmt2(ha), unit: "psi" },
-            { label: "Loss through B", value: fmt2(hb), unit: "psi" },
+            { label: "Loss through A  /  through B", value: fmt2(ha) + "  /  " + fmt2(hb), unit: "psi" },
             { label: "Gap", value: fmt2(err), unit: "psi", bar: 1 - Math.min(1, err / 4), tone: err <= LOOP_TOL ? "good" : "" }
           ],
           note: err <= LOOP_TOL ? "Balanced — both routes hand node B the same pressure." : (ha > hb ? "Path A is losing more — ease off it." : "Path B is losing more — send it less."),
