@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Hazen-Williams — SprinkFlow</title>
+  <meta name="theme-color" content="#0d1116" />
+  <link rel="manifest" href="../manifest.webmanifest" />
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <header class="app-bar">
+    <a class="back" href="../index.html" aria-label="Back">‹</a>
+    <div><div class="title">Hazen-Williams</div><div class="sub">Pipe friction loss — psi per foot</div></div>
+  </header>
+
+  <main class="tool-page">
+    <div class="field"><label>Pipe type</label>
+      <select id="pipeType"></select>
+    </div>
+
+    <div class="field" id="sizeField"><label>Nominal size</label>
+      <select id="pipeSize"></select>
+    </div>
+
+    <div class="field" id="customField" hidden><label>Internal diameter (in)</label>
+      <input id="customId" type="number" inputmode="decimal" step="any" placeholder="e.g. 2.067" />
+    </div>
+
+    <div class="field"><label>C factor</label>
+      <input id="cFactor" type="number" inputmode="numeric" step="1" value="120" />
+    </div>
+
+    <div class="field"><label>Flow (gpm)</label>
+      <input id="flow" type="number" inputmode="decimal" step="any" placeholder="e.g. 150" />
+    </div>
+
+    <div class="field"><label>Length (ft) — optional, adds total loss</label>
+      <input id="lengthFt" type="number" inputmode="decimal" step="any" placeholder="e.g. 100" />
+    </div>
+
+    <div class="result-card">
+      <div class="lbl">Friction Loss</div>
+      <div class="big" id="rPsiFt">—</div>
+      <div class="result-row"><span>Total over length</span><span class="v" id="rTotal">—</span></div>
+      <div class="result-row"><span>Velocity</span><span class="v" id="rVel">—</span></div>
+    </div>
+
+    <pre id="mathBlock" class="hw-math">p = 4.52 × Q^1.85 / (C^1.85 × d^4.87)</pre>
+    <button class="btn btn-ghost" id="copyMath" type="button" disabled>Copy Formula &amp; Math</button>
+    <p class="hint">NFPA 13 form: p in psi/ft, Q in gpm, C = roughness coefficient, d = actual internal diameter (in). Straight-pipe friction only — fittings and elevation not included. C defaults are for wet systems; use C=100 for dry/preaction steel.</p>
+  </main>
+
+  <style>
+    /* .field sets display:grid, which outranks the [hidden] UA rule */
+    .field[hidden] { display: none; }
+    .hw-math {
+      background: var(--surface, rgba(13,17,22,0.62));
+      border: 1px solid var(--line, rgba(255,255,255,0.12));
+      border-radius: 13px;
+      color: var(--ink, #e8edf2);
+      font: 500 0.78rem/1.65 Consolas, "SFMono-Regular", ui-monospace, monospace;
+      margin: 14px 0 10px;
+      overflow-x: auto;
+      padding: 12px 14px;
+      white-space: pre;
+    }
+    .btn { margin-bottom: 6px; }
+  </style>
+  <script>
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("../sw.js").catch(()=>{});
+    // Standard sprinkler-trade internal diameters (in). C defaults per NFPA 13
+    // Table 23.4.4.7.1 (wet systems).
+    const TYPES = [
+      { id:"sch40", label:'Schedule 40 Black Steel (C=120)', c:120, sizes:[
+        ['1"',1.049],['1-1/4"',1.380],['1-1/2"',1.610],['2"',2.067],['2-1/2"',2.469],
+        ['3"',3.068],['3-1/2"',3.548],['4"',4.026],['5"',5.047],['6"',6.065],
+        ['8"',7.981],['10"',10.020],['12"',11.938]]},
+      { id:"sch10", label:'Schedule 10 Black Steel (C=120)', c:120, sizes:[
+        ['1"',1.097],['1-1/4"',1.442],['1-1/2"',1.682],['2"',2.157],['2-1/2"',2.635],
+        ['3"',3.260],['3-1/2"',3.760],['4"',4.260],['5"',5.295],['6"',6.357],['8"',8.249]]},
+      { id:"cpvc", label:'CPVC SDR 13.5 (C=150)', c:150, sizes:[
+        ['3/4"',0.874],['1"',1.101],['1-1/4"',1.394],['1-1/2"',1.598],
+        ['2"',2.003],['2-1/2"',2.423],['3"',2.950]]},
+      { id:"ductile", label:'Cement-Lined Ductile Iron (C=140)', c:140, sizes:[
+        ['4"',4.28],['6"',6.40],['8"',8.51],['10"',10.62],['12"',12.72]]},
+      { id:"custom", label:"Custom internal diameter", c:120, sizes:null },
+    ];
+    const $ = (id) => document.getElementById(id);
+    const FORMULA = "p = 4.52 × Q^1.85 / (C^1.85 × d^4.87)";
+    let mathText = null;
+
+    $("pipeType").innerHTML = TYPES.map((t,i)=>`<option value="${i}">${t.label}</option>`).join("");
+    function currentType(){ return TYPES[Number($("pipeType").value)] || TYPES[0]; }
+    function fillSizes(){
+      const t = currentType();
+      $("sizeField").hidden = !t.sizes;
+      $("customField").hidden = !!t.sizes;
+      $("cFactor").value = String(t.c);
+      if (!t.sizes) return;
+      const keep = $("pipeSize").selectedOptions[0]?.dataset.nom;
+      $("pipeSize").innerHTML = t.sizes.map(([n,d],i)=>`<option value="${i}" data-nom="${n}">${n} (ID ${d.toFixed(3)}")</option>`).join("");
+      let idx = t.sizes.findIndex(([n])=>n===keep);
+      if (idx < 0) idx = Math.max(0, t.sizes.findIndex(([n])=>n==='2"'));
+      $("pipeSize").value = String(idx);
+    }
+    // Trim trailing-zero noise but keep enough digits to check the math by hand.
+    function r(v,dec=4){ return String(Number(v.toFixed(dec))); }
+    function update(){
+      const t = currentType();
+      let d, dLabel;
+      if (t.sizes) {
+        const size = t.sizes[Number($("pipeSize").value)];
+        if (size) { d = size[1]; dLabel = size[0] + " " + t.label.replace(/ \(C=\d+\)$/,""); }
+      } else {
+        const v = parseFloat($("customId").value);
+        if (Number.isFinite(v) && v > 0) { d = v; dLabel = 'custom pipe, ID ' + v + '"'; }
+      }
+      const c = parseFloat($("cFactor").value);
+      const q = parseFloat($("flow").value);
+      const len = parseFloat($("lengthFt").value);
+      const ok = d > 0 && Number.isFinite(c) && c > 0 && Number.isFinite(q) && q > 0;
+      if (!ok) {
+        mathText = null;
+        $("rPsiFt").textContent = "—"; $("rTotal").textContent = "—"; $("rVel").textContent = "—";
+        $("mathBlock").textContent = FORMULA;
+        $("copyMath").disabled = true;
+        return;
+      }
+      const qPow = Math.pow(q,1.85), cPow = Math.pow(c,1.85), dPow = Math.pow(d,4.87);
+      const p = 4.52*qPow/(cPow*dPow);
+      const hasLen = Number.isFinite(len) && len > 0;
+      const total = hasLen ? p*len : null;
+      const vel = 0.4085*q/(d*d);
+      $("rPsiFt").textContent = p.toFixed(4) + " psi/ft";
+      $("rTotal").textContent = hasLen ? total.toFixed(2) + " psi (" + r(len,2) + " ft)" : "—";
+      $("rVel").textContent = vel.toFixed(1) + " ft/s";
+      const lines = [
+        "Hazen-Williams friction loss (NFPA 13 form)", FORMULA, "",
+        "Q = " + r(q,2) + " gpm",
+        "C = " + r(c,2),
+        "d = " + d.toFixed(3) + " in (" + dLabel + ")", "",
+        "p = 4.52 × " + r(q,2) + "^1.85 / (" + r(c,2) + "^1.85 × " + d.toFixed(3) + "^4.87)",
+        "p = 4.52 × " + r(qPow,2) + " / (" + r(cPow,2) + " × " + r(dPow,2) + ")",
+        "p = " + p.toFixed(4) + " psi/ft",
+      ];
+      if (hasLen) lines.push("", "Total = " + p.toFixed(4) + " psi/ft × " + r(len,2) + " ft = " + total.toFixed(2) + " psi");
+      mathText = lines.join("\n");
+      $("mathBlock").textContent = mathText;
+      $("copyMath").disabled = false;
+    }
+    $("pipeType").addEventListener("change", ()=>{ fillSizes(); update(); });
+    document.querySelectorAll("input,select").forEach(el=>{ if (el.id!=="pipeType") el.addEventListener("input", update); });
+    $("copyMath").addEventListener("click", async ()=>{
+      if (!mathText) return;
+      try {
+        await navigator.clipboard.writeText(mathText);
+        $("copyMath").textContent = "Copied!";
+      } catch {
+        $("copyMath").textContent = "Copy failed — long-press the math to select it";
+      }
+      setTimeout(()=>{ $("copyMath").textContent = "Copy Formula & Math"; }, 1800);
+    });
+    fillSizes();
+    update();
+  </script>
+  <script src="./sprinkflow-auth.js"></script>
+</body>
+</html>

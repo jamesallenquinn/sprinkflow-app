@@ -2891,28 +2891,55 @@
       addOptions(commodity, 40, 45, common45);
     }
 
-    addOptions("Cartoned Expanded Group A", 20, 25, [{ k: 14, p: 50, o: "Upright/pendent" }, { k: 16.8, p: 35, o: "Upright/pendent" }]);
-    addOptions("Cartoned Expanded Group A", 20, 30, [{ k: 14, p: 50, o: "Upright/pendent" }, { k: 16.8, p: 35, o: "Upright/pendent" }]);
-    addOptions("Cartoned Expanded Group A", 25, 30, [{ k: 14, p: 50, o: "Upright/pendent" }, { k: 16.8, p: 35, o: "Upright/pendent" }]);
-    addOptions("Cartoned Expanded Group A", 25, 32, [{ k: 14, p: 60 }, { k: 16.8, p: 42, o: "Upright/pendent" }]);
+    // NFPA 13 2022/2025 Table 23.3.1 ceiling-only ESFR for cartoned expanded Group A plastics
+    // (same criteria as exposed nonexpanded: low rows all four K-factors, high rows K22.4@75 / K25.2@60).
+    // 2019 retains its legacy K14/K16.8 rows in the else branch.
+    if (uses2022StorageTables(inputs.edition)) {
+      const cartExpLow = [{ k: 14, p: 50, o: "Upright/pendent" }, { k: 16.8, p: 35, o: "Upright/pendent" }, { k: 22.4, p: 35 }, { k: 25.2, p: 35 }];
+      const cartExpHigh = [{ k: 22.4, p: 75 }, { k: 25.2, p: 60 }];
+      addOptions("Cartoned Expanded Group A", 20, 25, cartExpLow);
+      addOptions("Cartoned Expanded Group A", 25, 30, cartExpLow);
+      addOptions("Cartoned Expanded Group A", 30, 35, cartExpHigh);
+      addOptions("Cartoned Expanded Group A", 35, 40, cartExpHigh);
+    } else {
+      addOptions("Cartoned Expanded Group A", 20, 25, [{ k: 14, p: 50, o: "Upright/pendent" }, { k: 16.8, p: 35, o: "Upright/pendent" }]);
+      addOptions("Cartoned Expanded Group A", 20, 30, [{ k: 14, p: 50, o: "Upright/pendent" }, { k: 16.8, p: 35, o: "Upright/pendent" }]);
+      addOptions("Cartoned Expanded Group A", 25, 30, [{ k: 14, p: 50, o: "Upright/pendent" }, { k: 16.8, p: 35, o: "Upright/pendent" }]);
+      addOptions("Cartoned Expanded Group A", 25, 32, [{ k: 14, p: 60 }, { k: 16.8, p: 42, o: "Upright/pendent" }]);
+    }
 
-    const exposed20Base = [{ k: 14, p: 50 }, { k: 16.8, p: 35 }];
-    addOptions("Exposed Nonexpanded Group A", 20, 25, exposed20Base);
-    addOptions("Exposed Nonexpanded Group A", 20, 30, exposed20Base);
-    addOptions("Exposed Nonexpanded Group A", 20, 35, [{ k: 14, p: 75 }, { k: 16.8, p: 52 }]);
-    addOptions("Exposed Nonexpanded Group A", 20, 40, [{ k: 16.8, p: 52 }]);
-    addOptions("Exposed Nonexpanded Group A", 20, 45, [{ k: 14, p: null, ir: true }, { k: 16.8, p: null, ir: true }]);
-    addOptions("Exposed Nonexpanded Group A", 25, 30, exposed20Base);
-    addOptions("Exposed Nonexpanded Group A", 25, 32, [{ k: 14, p: 60 }, { k: 16.8, p: 42 }]);
-    addOptions("Exposed Nonexpanded Group A", 25, 35, [{ k: 14, p: 75 }, { k: 16.8, p: 52 }]);
-    addOptions("Exposed Nonexpanded Group A", 25, 40, [{ k: 16.8, p: 52 }, { k: 22.4, p: 50 }, { k: 25.2, p: 50 }]);
-    addOptions("Exposed Nonexpanded Group A", 25, 45, [{ k: 14, p: null, ir: true }, { k: 16.8, p: null, ir: true }]);
-    addOptions("Exposed Nonexpanded Group A", 30, 35, [{ k: 14, p: 75 }, { k: 16.8, p: 52 }]);
-    addOptions("Exposed Nonexpanded Group A", 30, 40, [{ k: 16.8, p: 52 }, { k: 22.4, p: 50 }, { k: 25.2, p: 50 }]);
-    addOptions("Exposed Nonexpanded Group A", 30, 45, [{ k: 14, p: null, ir: true }, { k: 16.8, p: null, ir: true }]);
-    addOptions("Exposed Nonexpanded Group A", 35, 40, [{ k: 16.8, p: 52 }, { k: 22.4, p: 50 }, { k: 25.2, p: 50 }]);
-    addOptions("Exposed Nonexpanded Group A", 35, 45, [{ k: 14, p: null, ir: true }, { k: 16.8, p: null, ir: true }]);
-    addOptions("Exposed Nonexpanded Group A", 40, 45, [{ k: 14, p: null, ir: true }, { k: 16.8, p: null, ir: true }]);
+    // NFPA 13 2022/2025 Table 23.3.1 ceiling-only ESFR for exposed nonexpanded Group A plastics.
+    // Low rows (ceiling <= 30 ft): all four K-factors. High rows (ceiling 35-40 ft): K22.4 @ 75 /
+    // K25.2 @ 60 only. Storage 40 / ceiling 45 requires in-rack sprinklers (K14/K16.8, NA ceiling).
+    // 2019 (Table 23.6.1) retains its own legacy rows in the else branch.
+    if (uses2022StorageTables(inputs.edition)) {
+      const exposedLow = [{ k: 14, p: 50 }, { k: 16.8, p: 35 }, { k: 22.4, p: 35 }, { k: 25.2, p: 35 }];
+      const exposedHigh = [{ k: 22.4, p: 75 }, { k: 25.2, p: 60 }];
+      const exposedInRack = [{ k: 14, p: null, ir: true }, { k: 16.8, p: null, ir: true }];
+      addOptions("Exposed Nonexpanded Group A", 20, 25, exposedLow);
+      addOptions("Exposed Nonexpanded Group A", 25, 30, exposedLow);
+      addOptions("Exposed Nonexpanded Group A", 30, 35, exposedHigh);
+      addOptions("Exposed Nonexpanded Group A", 35, 40, exposedHigh);
+      addOptions("Exposed Nonexpanded Group A", 40, 45, exposedInRack);
+    } else {
+      const exposed20Base = [{ k: 14, p: 50 }, { k: 16.8, p: 35 }];
+      addOptions("Exposed Nonexpanded Group A", 20, 25, exposed20Base);
+      addOptions("Exposed Nonexpanded Group A", 20, 30, exposed20Base);
+      addOptions("Exposed Nonexpanded Group A", 20, 35, [{ k: 14, p: 75 }, { k: 16.8, p: 52 }]);
+      addOptions("Exposed Nonexpanded Group A", 20, 40, [{ k: 16.8, p: 52 }]);
+      addOptions("Exposed Nonexpanded Group A", 20, 45, [{ k: 14, p: null, ir: true }, { k: 16.8, p: null, ir: true }]);
+      addOptions("Exposed Nonexpanded Group A", 25, 30, exposed20Base);
+      addOptions("Exposed Nonexpanded Group A", 25, 32, [{ k: 14, p: 60 }, { k: 16.8, p: 42 }]);
+      addOptions("Exposed Nonexpanded Group A", 25, 35, [{ k: 14, p: 75 }, { k: 16.8, p: 52 }]);
+      addOptions("Exposed Nonexpanded Group A", 25, 40, [{ k: 16.8, p: 52 }, { k: 22.4, p: 50 }, { k: 25.2, p: 50 }]);
+      addOptions("Exposed Nonexpanded Group A", 25, 45, [{ k: 14, p: null, ir: true }, { k: 16.8, p: null, ir: true }]);
+      addOptions("Exposed Nonexpanded Group A", 30, 35, [{ k: 14, p: 75 }, { k: 16.8, p: 52 }]);
+      addOptions("Exposed Nonexpanded Group A", 30, 40, [{ k: 16.8, p: 52 }, { k: 22.4, p: 50 }, { k: 25.2, p: 50 }]);
+      addOptions("Exposed Nonexpanded Group A", 30, 45, [{ k: 14, p: null, ir: true }, { k: 16.8, p: null, ir: true }]);
+      addOptions("Exposed Nonexpanded Group A", 35, 40, [{ k: 16.8, p: 52 }, { k: 22.4, p: 50 }, { k: 25.2, p: 50 }]);
+      addOptions("Exposed Nonexpanded Group A", 35, 45, [{ k: 14, p: null, ir: true }, { k: 16.8, p: null, ir: true }]);
+      addOptions("Exposed Nonexpanded Group A", 40, 45, [{ k: 14, p: null, ir: true }, { k: 16.8, p: null, ir: true }]);
+    }
 
     const exposedExpandedRackNotes = [
       "Section 23.4 exposed expanded Group A plastic rack branch",
@@ -2958,34 +2985,59 @@
       }
     };
 
-    addOptions("Cartoned Expanded Group A", 20, 25, [
-      { k: 14, p: 50, o: "Upright/pendent" },
-      { k: 16.8, p: 35, o: "Upright/pendent" },
-    ]);
-    addOptions("Cartoned Expanded Group A", 20, 30, [
-      { k: 14, p: 50, o: "Upright/pendent" },
-      { k: 16.8, p: 35, o: "Upright/pendent" },
-    ]);
-    addOptions("Cartoned Expanded Group A", 25, 30, [
-      { k: 14, p: 50, o: "Upright/pendent" },
-      { k: 16.8, p: 35, o: "Upright/pendent" },
-    ]);
-    addOptions("Cartoned Expanded Group A", 25, 32, [
-      { k: 14, p: 60 },
-      { k: 16.8, p: 42, o: "Upright/pendent" },
-    ]);
+    // NFPA 13 2022/2025 Table 23.3.1 ceiling-only ESFR for cartoned expanded Group A plastics
+    // (same criteria as exposed nonexpanded: low rows all four K-factors, high rows K22.4@75 / K25.2@60).
+    // 2019 retains its legacy K14/K16.8 rows in the else branch.
+    if (uses2022StorageTables(inputs.edition)) {
+      const cartExpLow = [{ k: 14, p: 50, o: "Upright/pendent" }, { k: 16.8, p: 35, o: "Upright/pendent" }, { k: 22.4, p: 35 }, { k: 25.2, p: 35 }];
+      const cartExpHigh = [{ k: 22.4, p: 75 }, { k: 25.2, p: 60 }];
+      addOptions("Cartoned Expanded Group A", 20, 25, cartExpLow);
+      addOptions("Cartoned Expanded Group A", 25, 30, cartExpLow);
+      addOptions("Cartoned Expanded Group A", 30, 35, cartExpHigh);
+      addOptions("Cartoned Expanded Group A", 35, 40, cartExpHigh);
+    } else {
+      addOptions("Cartoned Expanded Group A", 20, 25, [
+        { k: 14, p: 50, o: "Upright/pendent" },
+        { k: 16.8, p: 35, o: "Upright/pendent" },
+      ]);
+      addOptions("Cartoned Expanded Group A", 20, 30, [
+        { k: 14, p: 50, o: "Upright/pendent" },
+        { k: 16.8, p: 35, o: "Upright/pendent" },
+      ]);
+      addOptions("Cartoned Expanded Group A", 25, 30, [
+        { k: 14, p: 50, o: "Upright/pendent" },
+        { k: 16.8, p: 35, o: "Upright/pendent" },
+      ]);
+      addOptions("Cartoned Expanded Group A", 25, 32, [
+        { k: 14, p: 60 },
+        { k: 16.8, p: 42, o: "Upright/pendent" },
+      ]);
+    }
 
-    addOptions("Exposed Nonexpanded Group A", 20, 25, [{ k: 14, p: 50 }, { k: 16.8, p: 35 }]);
-    addOptions("Exposed Nonexpanded Group A", 20, 30, [{ k: 14, p: 50 }, { k: 16.8, p: 35 }]);
-    addOptions("Exposed Nonexpanded Group A", 20, 35, [{ k: 14, p: 75 }, { k: 16.8, p: 52 }]);
-    addOptions("Exposed Nonexpanded Group A", 20, 40, [{ k: 16.8, p: 52 }]);
-    addOptions("Exposed Nonexpanded Group A", 25, 30, [{ k: 14, p: 50 }, { k: 16.8, p: 35 }]);
-    addOptions("Exposed Nonexpanded Group A", 25, 32, [{ k: 14, p: 60 }, { k: 16.8, p: 42 }]);
-    addOptions("Exposed Nonexpanded Group A", 25, 35, [{ k: 14, p: 75 }, { k: 16.8, p: 52 }]);
-    addOptions("Exposed Nonexpanded Group A", 25, 40, [{ k: 22.4, p: 50 }, { k: 25.2, p: 50 }]);
-    addOptions("Exposed Nonexpanded Group A", 30, 35, [{ k: 14, p: 75 }, { k: 16.8, p: 52 }]);
-    addOptions("Exposed Nonexpanded Group A", 30, 40, [{ k: 16.8, p: 52 }, { k: 22.4, p: 50 }, { k: 25.2, p: 50 }]);
-    addOptions("Exposed Nonexpanded Group A", 35, 40, [{ k: 16.8, p: 52 }, { k: 22.4, p: 50 }, { k: 25.2, p: 50 }]);
+    // NFPA 13 2022/2025 Table 23.3.1 ceiling-only ESFR for exposed nonexpanded Group A plastics.
+    // Low rows (ceiling <= 30 ft): all four K-factors at the table minimums.
+    // High rows (ceiling 35-40 ft): K22.4 @ 75 / K25.2 @ 60 only (K14/K16.8 not permitted).
+    // 2019 (Table 23.4.2) retains its own legacy rows in the else branch.
+    if (uses2022StorageTables(inputs.edition)) {
+      const exposedLow = [{ k: 14, p: 50 }, { k: 16.8, p: 35 }, { k: 22.4, p: 35 }, { k: 25.2, p: 35 }];
+      const exposedHigh = [{ k: 22.4, p: 75 }, { k: 25.2, p: 60 }];
+      addOptions("Exposed Nonexpanded Group A", 20, 25, exposedLow);
+      addOptions("Exposed Nonexpanded Group A", 25, 30, exposedLow);
+      addOptions("Exposed Nonexpanded Group A", 30, 35, exposedHigh);
+      addOptions("Exposed Nonexpanded Group A", 35, 40, exposedHigh);
+    } else {
+      addOptions("Exposed Nonexpanded Group A", 20, 25, [{ k: 14, p: 50 }, { k: 16.8, p: 35 }]);
+      addOptions("Exposed Nonexpanded Group A", 20, 30, [{ k: 14, p: 50 }, { k: 16.8, p: 35 }]);
+      addOptions("Exposed Nonexpanded Group A", 20, 35, [{ k: 14, p: 75 }, { k: 16.8, p: 52 }]);
+      addOptions("Exposed Nonexpanded Group A", 20, 40, [{ k: 16.8, p: 52 }]);
+      addOptions("Exposed Nonexpanded Group A", 25, 30, [{ k: 14, p: 50 }, { k: 16.8, p: 35 }]);
+      addOptions("Exposed Nonexpanded Group A", 25, 32, [{ k: 14, p: 60 }, { k: 16.8, p: 42 }]);
+      addOptions("Exposed Nonexpanded Group A", 25, 35, [{ k: 14, p: 75 }, { k: 16.8, p: 52 }]);
+      addOptions("Exposed Nonexpanded Group A", 25, 40, [{ k: 22.4, p: 50 }, { k: 25.2, p: 50 }]);
+      addOptions("Exposed Nonexpanded Group A", 30, 35, [{ k: 14, p: 75 }, { k: 16.8, p: 52 }]);
+      addOptions("Exposed Nonexpanded Group A", 30, 40, [{ k: 16.8, p: 52 }, { k: 22.4, p: 50 }, { k: 25.2, p: 50 }]);
+      addOptions("Exposed Nonexpanded Group A", 35, 40, [{ k: 16.8, p: 52 }, { k: 22.4, p: 50 }, { k: 25.2, p: 50 }]);
+    }
 
     if (uses2022StorageTables(inputs.edition)) add("Exposed Expanded Group A", 25, 30, 25.2, 30, "Pendent", "Vertical barriers required by Section 23.4");
     add("Exposed Expanded Group A", 25, 40, 25.2, 60, "Pendent", uses2022StorageTables(inputs.edition) ? "Vertical barriers required by Section 23.4; closed array for palletized/solid pile" : "Applies to closed array storage only");

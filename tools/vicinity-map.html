@@ -24,6 +24,14 @@
     .vm-controls .field { margin-bottom: 12px; }
     .vm-check { display: flex; align-items: center; gap: 10px; font: 600 .9rem Inter; color: var(--ink); padding: 6px 0; }
     .vm-check input { width: 20px; height: 20px; }
+    /* North-arrow picker: each button IS the arrow, drawn by the same generator the map uses. */
+    .vm-arrows { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .vm-arrow { display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer;
+      background: #f3f5f7; border: 1px solid var(--line-strong); border-radius: 12px; padding: 8px 4px 7px; }
+    .vm-arrow svg { display: block; width: 100%; height: auto; max-height: 66px; }
+    .vm-arrow span { color: #3b444d; font: 600 .68rem/1.15 Inter; text-align: center; }
+    .vm-arrow.active { border-color: var(--accent, #ff7a29); box-shadow: 0 0 0 2px rgba(255,122,41,.35); background: #fff; }
+    .vm-arrow:active { background: #fff; }
     .vm-generate { width: 100%; border: 0; border-radius: 14px; padding: 15px; font: 700 1.05rem 'Space Grotesk';
       background: var(--grad-fire); color: #1a0d06; cursor: pointer; }
     .vm-generate:disabled { opacity: .6; }
@@ -98,6 +106,10 @@
         </div>
         <label class="vm-check" style="align-self:end;padding-bottom:14px"><input id="vmLabels" type="checkbox" checked /> Label streets</label>
       </div>
+      <div class="field">
+        <label>North Arrow</label>
+        <div class="vm-arrows" id="vmArrows"></div>
+      </div>
       <button class="vm-generate" id="vmGenerate">Generate Vicinity Map</button>
       <p class="vm-status" id="vmStatus"></p>
     </div>
@@ -138,6 +150,66 @@
 
     var S = { point: null, center: null, ways: [], overrides: {}, labelHidden: {}, labelText: {}, labelPos: {},
       workOffset: { dx:0, dy:0 }, labelOffset: { dx:0, dy:0 }, drag: null, moved: false, suggestTimer: 0 };
+
+    // ---------- north arrow styles ----------
+    // id -> {name, svg(cx, cy, r) -> markup}. The same geometry is mirrored in the
+    // DXF exporter (dxfNorthArrow) — keep both in sync when adding a style. This
+    // matches the desktop app's VICINITY_ARROWS (duplicated tool: edit both).
+    var VICINITY_ARROWS = {
+      classic: {
+        name: "Classic",
+        svg: function (cx, cy, r) {
+          return '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="white" stroke="black" stroke-width="' + (r * 0.048) + '"/>'
+            + '<line x1="' + cx + '" y1="' + (cy + r - r * 0.115) + '" x2="' + cx + '" y2="' + (cy - r + r * 0.115) + '" stroke="black" stroke-width="' + (r * 0.058) + '"/>'
+            + '<line x1="' + (cx - r + r * 0.115) + '" y1="' + cy + '" x2="' + (cx + r - r * 0.115) + '" y2="' + cy + '" stroke="black" stroke-width="' + (r * 0.027) + '"/>'
+            + '<path d="M' + cx + ',' + (cy - r + r * 0.038) + ' L' + (cx - r * 0.135) + ',' + (cy - r + r * 0.42) + ' L' + (cx + r * 0.135) + ',' + (cy - r + r * 0.42) + ' Z" fill="black"/>'
+            + '<text x="' + cx + '" y="' + (cy - r - r * 0.23) + '" text-anchor="middle" font-family="Arial, sans-serif" font-size="' + (r * 0.65) + '" font-weight="bold">N</text>';
+        },
+      },
+      compass: {
+        name: "Compass rose",
+        svg: function (cx, cy, r) {
+          var R = r * 0.92, w = r * 0.22;   // long points, half-width at center
+          var pt = function (dx1, dy1, dx2, dy2, dx3, dy3, fill) {
+            return '<path d="M' + (cx + dx1) + ',' + (cy + dy1) + ' L' + (cx + dx2) + ',' + (cy + dy2) + ' L' + (cx + dx3) + ',' + (cy + dy3) + ' Z" fill="' + fill + '" stroke="black" stroke-width="' + (r * 0.03) + '"/>';
+          };
+          return '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="white" stroke="black" stroke-width="' + (r * 0.048) + '"/>'
+            + '<circle cx="' + cx + '" cy="' + cy + '" r="' + (r * 0.52) + '" fill="none" stroke="black" stroke-width="' + (r * 0.024) + '"/>'
+            + pt(0, -R, -w, 0, w, 0, "black")          // N — filled
+            + pt(0, R, -w, 0, w, 0, "white")           // S
+            + pt(-R, 0, 0, -w, 0, w, "white")          // W
+            + pt(R, 0, 0, -w, 0, w, "white")           // E
+            + '<circle cx="' + cx + '" cy="' + cy + '" r="' + (r * 0.07) + '" fill="black"/>'
+            + '<text x="' + cx + '" y="' + (cy - r - r * 0.23) + '" text-anchor="middle" font-family="Arial, sans-serif" font-size="' + (r * 0.65) + '" font-weight="bold">N</text>';
+        },
+      },
+      bold: {
+        name: "Bold arrow",
+        svg: function (cx, cy, r) {
+          var headW = r * 0.62, headTop = cy - r * 0.92, headBase = cy + r * 0.05;
+          var shaftW = r * 0.2, shaftBot = cy + r * 0.95;
+          return '<path d="M' + cx + ',' + headTop + ' L' + (cx - headW) + ',' + headBase + ' L' + (cx - shaftW) + ',' + headBase + ' L' + (cx - shaftW) + ',' + shaftBot + ' L' + (cx + shaftW) + ',' + shaftBot + ' L' + (cx + shaftW) + ',' + headBase + ' L' + (cx + headW) + ',' + headBase + ' Z"'
+            + ' fill="black" stroke="black" stroke-width="' + (r * 0.02) + '" stroke-linejoin="miter"/>'
+            + '<text x="' + cx + '" y="' + (cy - r - r * 0.23) + '" text-anchor="middle" font-family="Arial, sans-serif" font-size="' + (r * 0.72) + '" font-weight="bold">N</text>';
+        },
+      },
+      split: {
+        name: "Half-shaded",
+        svg: function (cx, cy, r) {
+          var tipY = cy - r + r * 0.1, baseY = cy + r * 0.62, w = r * 0.42;
+          return '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="white" stroke="black" stroke-width="' + (r * 0.048) + '"/>'
+            + '<path d="M' + cx + ',' + tipY + ' L' + (cx + w) + ',' + baseY + ' L' + cx + ',' + (cy + r * 0.28) + ' Z" fill="black"/>'
+            + '<path d="M' + cx + ',' + tipY + ' L' + (cx - w) + ',' + baseY + ' L' + cx + ',' + (cy + r * 0.28) + ' Z" fill="white" stroke="black" stroke-width="' + (r * 0.035) + '"/>'
+            + '<text x="' + cx + '" y="' + (cy - r - r * 0.23) + '" text-anchor="middle" font-family="Arial, sans-serif" font-size="' + (r * 0.65) + '" font-weight="bold">N</text>';
+        },
+      },
+    };
+
+    function arrowStyle() {
+      var saved = null;
+      try { saved = localStorage.getItem("vicinityArrowStyle"); } catch (e) {}
+      return VICINITY_ARROWS[saved] ? saved : "classic";
+    }
 
     // ---------- geocoding (Photon + Nominatim, ranked by exact house-number) ----------
     function scoreCand(c, num, tokens) {
@@ -315,10 +387,7 @@
       parts.push('<g data-drag="label"><rect id="vmLabelBox" x="' + (g.lcx-LABEL_W/2).toFixed(1) + '" y="' + (g.lcy-LABEL_H/2).toFixed(1) + '" width="' + LABEL_W + '" height="' + LABEL_H + '" fill="white" stroke="black" stroke-width="3"/>'
         + '<text id="vmLabelText" x="' + g.lcx.toFixed(1) + '" y="' + (g.lcy+9).toFixed(1) + '" text-anchor="middle" font-family="Arial, sans-serif" font-size="27" font-weight="bold">AREA OF WORK</text></g>');
       var cx = VW - 78, cy = VH - 88, cr = 46;
-      parts.push('<circle cx="' + cx + '" cy="' + cy + '" r="' + cr + '" fill="white" stroke="black" stroke-width="2.5"/>'
-        + '<line x1="' + cx + '" y1="' + (cy+cr-5) + '" x2="' + cx + '" y2="' + (cy-cr+5) + '" stroke="black" stroke-width="3"/>'
-        + '<path d="M' + cx + ',' + (cy-cr+2) + ' L' + (cx-6) + ',' + (cy-cr+20) + ' L' + (cx+6) + ',' + (cy-cr+20) + ' Z" fill="black"/>'
-        + '<text x="' + cx + '" y="' + (cy-cr-10) + '" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="bold">N</text>');
+      parts.push(VICINITY_ARROWS[arrowStyle()].svg(cx, cy, cr));
       parts.push('<text x="8" y="' + (VH-8) + '" font-family="Arial, sans-serif" font-size="13" fill="#666">Map data (c) OpenStreetMap contributors</text>');
       $("vmSvg").innerHTML = parts.join("");
       $("vmEmpty").hidden = true;
@@ -498,10 +567,47 @@
       poly(corners, "VMAP-WORK", 0);
       poly([[(g.leader.x1-ax)*pxToFt, (ay-g.leader.y1)*pxToFt], [(g.leader.x2-ax)*pxToFt, (ay-g.leader.y2)*pxToFt]], "VMAP-WORK", 0);
       text(lcx, lcy, textH, 0, "AREA OF WORK", "VMAP-TEXT");
+      // North arrow (matches the selected on-screen style) at the NE corner. DXF is
+      // y-up, so every vertical term is mirrored against the SVG generators above.
       var mhw = mapWFt/2, mhh = mhw * (VH/VW), ncx = mhw*0.86, ncy = -mhh*0.82, ncr = mapWFt*0.03;
-      p(0,"CIRCLE");p(8,"VMAP-NORTH");p(10,n(ncx));p(20,n(ncy));p(30,0);p(40,n(ncr));
-      poly([[ncx, ncy-ncr],[ncx, ncy+ncr]], "VMAP-NORTH", 0);
-      text(ncx, ncy+ncr*1.35, textH, 0, "N", "VMAP-NORTH");
+      var circle = function (x, y, r) { p(0,"CIRCLE");p(8,"VMAP-NORTH");p(10,n(x));p(20,n(y));p(30,0);p(40,n(r)); };
+      var solid = function (a, b, c, d) {   // filled triangle/quad (d optional; DXF wants 3rd/4th swapped)
+        var q = d || c;
+        p(0,"SOLID");p(8,"VMAP-NORTH");
+        p(10,n(a[0]));p(20,n(a[1]));p(30,0);
+        p(11,n(b[0]));p(21,n(b[1]));p(31,0);
+        p(12,n(q[0]));p(22,n(q[1]));p(32,0);
+        p(13,n(c[0]));p(23,n(c[1]));p(33,0);
+      };
+      var style = arrowStyle();
+      if (style === "compass") {
+        var cR = ncr*0.92, cw = ncr*0.22;
+        circle(ncx, ncy, ncr);
+        circle(ncx, ncy, ncr*0.52);
+        solid([ncx, ncy+cR], [ncx-cw, ncy], [ncx+cw, ncy]);                            // N point filled (y-up)
+        poly([[ncx, ncy-cR],[ncx-cw, ncy],[ncx+cw, ncy],[ncx, ncy-cR]], "VMAP-NORTH", 0);  // S point outline
+        poly([[ncx-cR, ncy],[ncx, ncy+cw],[ncx, ncy-cw],[ncx-cR, ncy]], "VMAP-NORTH", 0);  // W
+        poly([[ncx+cR, ncy],[ncx, ncy+cw],[ncx, ncy-cw],[ncx+cR, ncy]], "VMAP-NORTH", 0);  // E
+        text(ncx, ncy+ncr*1.35, textH, 0, "N", "VMAP-NORTH");
+      } else if (style === "bold") {
+        var headW = ncr*0.62, headTop = ncy + ncr*0.92, headBase = ncy - ncr*0.05;
+        var shaftW = ncr*0.2, shaftBot = ncy - ncr*0.95;
+        solid([ncx, headTop], [ncx-headW, headBase], [ncx+headW, headBase]);
+        solid([ncx-shaftW, headBase], [ncx+shaftW, headBase], [ncx-shaftW, shaftBot], [ncx+shaftW, shaftBot]);
+        text(ncx, ncy+ncr*1.35, textH, 0, "N", "VMAP-NORTH");
+      } else if (style === "split") {
+        var tipY = ncy + ncr - ncr*0.1, baseY = ncy - ncr*0.62, sw = ncr*0.42, notchY = ncy - ncr*0.28;
+        circle(ncx, ncy, ncr);
+        solid([ncx, tipY], [ncx+sw, baseY], [ncx, notchY]);                            // right half filled
+        poly([[ncx, tipY],[ncx-sw, baseY],[ncx, notchY],[ncx, tipY]], "VMAP-NORTH", 0);   // left half outline
+        text(ncx, ncy+ncr*1.35, textH, 0, "N", "VMAP-NORTH");
+      } else {   // classic
+        circle(ncx, ncy, ncr);
+        poly([[ncx, ncy-ncr],[ncx, ncy+ncr]], "VMAP-NORTH", 0);
+        poly([[ncx-ncr+ncr*0.115, ncy],[ncx+ncr-ncr*0.115, ncy]], "VMAP-NORTH", 0);
+        solid([ncx, ncy+ncr-ncr*0.038], [ncx-ncr*0.135, ncy+ncr-ncr*0.42], [ncx+ncr*0.135, ncy+ncr-ncr*0.42]);
+        text(ncx, ncy+ncr*1.35, textH, 0, "N", "VMAP-NORTH");
+      }
       p(0,"ENDSEC");p(0,"EOF");
       return out.join("\n");
     }
@@ -551,6 +657,27 @@
         else if (PAN_DIRS[d]) pan(PAN_DIRS[d][0], PAN_DIRS[d][1]);
       });
     });
+    // North-arrow picker: one preview button per style, drawn with the same SVG
+    // generators the map uses, so the preview IS the arrow.
+    (function initArrowPicker() {
+      var box = $("vmArrows");
+      if (!box) return;
+      var current = arrowStyle();
+      box.innerHTML = Object.keys(VICINITY_ARROWS).map(function (id) {
+        var def = VICINITY_ARROWS[id];
+        return '<button type="button" class="vm-arrow' + (id === current ? " active" : "") + '" data-arrow="' + id + '" title="' + esc(def.name) + '">'
+          + '<svg viewBox="0 0 76 90" aria-hidden="true">' + def.svg(38, 52, 26) + "</svg>"
+          + "<span>" + esc(def.name) + "</span></button>";
+      }).join("");
+      box.querySelectorAll(".vm-arrow").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          try { localStorage.setItem("vicinityArrowStyle", btn.dataset.arrow); } catch (e) {}
+          box.querySelectorAll(".vm-arrow").forEach(function (b) { b.classList.toggle("active", b === btn); });
+          if (S.point && S.ways.length) render();
+        });
+      });
+    })();
+
     $("vmCoverage").addEventListener("change", function () { if (S.ways.length) generate(); });
     ["vmWorkSize","vmRotation","vmLabels"].forEach(function (id) { $(id).addEventListener("change", function () { if (S.ways.length) render(); }); });
   })();
