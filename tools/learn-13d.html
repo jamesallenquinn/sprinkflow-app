@@ -1,0 +1,1372 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Zero to 13D Designer — SprinkFlow</title>
+  <meta name="description" content="A hands-on beginner course in fire sprinkler design. Start by dragging real sprinklers onto a real ceiling, then learn K-factor, head types, NFPA 13 vs 13R vs 13D, and where 13D lets you skip heads." />
+  <meta name="theme-color" content="#0d1116" />
+  <link rel="manifest" href="../manifest.webmanifest" />
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="../assets/logo.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+  <style>
+    /* page-local tokens (same pattern as learn-hydraulics.html) */
+    :root { --l13: #37b7e4; --l13-2: #3ddc97; --l13-bad: #ff5a4f; --l13-grad: linear-gradient(120deg, #37b7e4, #3ddc97); }
+
+    body { overflow-x: hidden; }
+    .w13 { max-width: 600px; margin: 0 auto; padding: 0 14px calc(30px + env(safe-area-inset-bottom, 0px)); }
+    .hidden { display: none !important; }
+
+    /* ---------- shared bits ---------- */
+    .badge13 { display: inline-flex; align-items: center; gap: 7px; font: 600 .74rem/1 Inter; letter-spacing: .02em;
+      color: var(--l13); background: rgba(55,183,228,.10); border: 1px solid rgba(55,183,228,.35); border-radius: 999px; padding: 7px 12px; }
+    .btn13 { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; border: 0; border-radius: 14px;
+      padding: 15px; font: 700 1.02rem 'Space Grotesk'; cursor: pointer; font-family: 'Space Grotesk', sans-serif; }
+    .btn13.primary { background: var(--l13-grad); color: #05242e; }
+    .btn13.ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--line); font-weight: 600; }
+    .btn13[disabled] { opacity: .45; cursor: default; }
+    .btn13.sm { padding: 11px 14px; font-size: .88rem; width: auto; }
+    .row13 { display: flex; gap: 10px; margin-top: 14px; }
+    .row13 .btn13 { margin-top: 0; }
+
+    /* ---------- overview ---------- */
+    .hero13 { text-align: center; padding: 22px 6px 2px; }
+    .hero13 .ic { font-size: 46px; line-height: 1; }
+    .hero13 h1 { font: 700 1.75rem/1.1 'Space Grotesk'; margin: 12px 0 6px; }
+    .hero13 h1 .grad { background: var(--l13-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero13 p { color: var(--muted); margin: 0 auto 15px; max-width: 42ch; font: 500 .95rem/1.5 Inter; }
+
+    .prog13 { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 15px; margin: 16px 0 4px; }
+    .prog13 .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 9px; gap: 10px; }
+    .prog13 .lbl { font: 600 .7rem/1 Inter; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+    .prog13 .val { font: 700 1rem 'Space Grotesk'; color: var(--ink); }
+    .prog13 .bar { height: 9px; border-radius: 999px; background: var(--surface-soft); overflow: hidden; border: 1px solid var(--line); }
+    .prog13 .fill { height: 100%; background: var(--l13-grad); border-radius: 999px; transition: width .45s ease; width: 0; }
+
+    .trophy { display: flex; align-items: center; gap: 12px; background: linear-gradient(120deg, rgba(55,183,228,.16), rgba(61,220,151,.16));
+      border: 1px solid rgba(61,220,151,.45); border-radius: 16px; padding: 14px; margin-top: 12px; cursor: pointer; width: 100%; text-align: left; color: var(--ink); font-family: Inter; }
+    .trophy .tt { display: block; font: 700 1rem 'Space Grotesk'; }
+    .trophy .ts { display: block; font: 500 .8rem/1.4 Inter; color: var(--muted); margin-top: 2px; }
+    .trophy .em { font-size: 28px; line-height: 1; flex: none; }
+
+    /* level map — a path you climb */
+    .map { position: relative; margin-top: 16px; display: grid; gap: 10px; }
+    .map::before { content: ""; position: absolute; left: 33px; top: 22px; bottom: 22px; width: 2px; background: var(--line); border-radius: 2px; }
+    .lvl { position: relative; z-index: 1; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line);
+      border-radius: 18px; padding: 14px; color: var(--ink); cursor: pointer; display: flex; gap: 13px; align-items: center;
+      font-family: Inter; transition: transform .08s, border-color .15s; }
+    .lvl:active { transform: scale(.99); }
+    .lvl .node { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 1.15rem;
+      background: var(--surface-soft); border: 2px solid var(--line-strong); }
+    .lvl.done .node { background: var(--l13-2); border-color: var(--l13-2); color: #06281b; font: 700 1.15rem 'Space Grotesk'; }
+    .lvl.next { border-color: rgba(55,183,228,.5); }
+    .lvl.next .node { border-color: var(--l13); background: rgba(55,183,228,.16); }
+    .lvl .mid { flex: 1; min-width: 0; }
+    .lvl .t { display: block; font: 700 1.02rem/1.25 'Space Grotesk'; }
+    .lvl .o { display: block; font: 500 .84rem/1.4 Inter; color: var(--muted); margin-top: 3px; }
+    .lvl .st { flex: none; align-self: center; font: 700 .74rem 'Space Grotesk'; padding: 6px 10px; border-radius: 999px; white-space: nowrap; }
+    .lvl .st.ok { background: rgba(61,220,151,.14); color: var(--l13-2); border: 1px solid rgba(61,220,151,.4); }
+    .lvl .st.go { background: rgba(55,183,228,.14); color: var(--l13); border: 1px solid rgba(55,183,228,.4); }
+    .lvl .st.idle { background: var(--surface-soft); color: var(--muted); border: 1px solid var(--line); }
+    .foot13 { text-align: center; margin-top: 16px; font: 500 .76rem/1.5 Inter; color: var(--muted); }
+    .foot13 a { color: var(--l13); }
+
+    /* ---------- California Fire Code amendment toggle ---------- */
+    .catog { display: flex; align-items: center; gap: 13px; width: 100%; text-align: left; color: var(--ink); font-family: Inter;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin-top: 14px; cursor: pointer; }
+    .catog[aria-checked="true"] { border-color: rgba(255,176,58,.5); background: linear-gradient(120deg, rgba(255,176,58,.10), rgba(255,90,47,.07)); }
+    .catog .em { font-size: 24px; line-height: 1; flex: none; }
+    .catog .mid { flex: 1; min-width: 0; }
+    .catog .t { display: block; font: 700 .96rem 'Space Grotesk'; }
+    .catog .s { display: block; font: 500 .8rem/1.4 Inter; color: var(--muted); margin-top: 2px; }
+    .catog .sw { flex: none; width: 50px; height: 30px; border-radius: 999px; background: var(--surface-soft);
+      border: 1px solid var(--line-strong); position: relative; transition: background .18s, border-color .18s; }
+    .catog .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%;
+      background: var(--muted); transition: transform .18s, background .18s; }
+    .catog[aria-checked="true"] .sw { background: rgba(255,176,58,.28); border-color: var(--accent); }
+    .catog[aria-checked="true"] .sw::after { transform: translateX(20px); background: var(--accent); }
+
+    .cabadge { display: inline-flex; align-items: center; gap: 4px; font: 700 .62rem/1 Inter; letter-spacing: .08em;
+      color: var(--accent); background: rgba(255,176,58,.13); border: 1px solid rgba(255,176,58,.45);
+      border-radius: 999px; padding: 5px 8px; margin-left: 8px; vertical-align: middle; text-transform: uppercase; }
+    .room .cabadge { margin-left: 6px; }
+    .canote { margin-top: 12px; border-left: 3px solid var(--accent); background: rgba(255,176,58,.08);
+      border-radius: 0 10px 10px 0; padding: 9px 12px; font: 500 .82rem/1.5 Inter; color: var(--muted); }
+    .canote b { color: var(--accent); font-weight: 700; }
+
+    /* ---------- level runner ---------- */
+    .crumb13 { display: flex; align-items: center; gap: 10px; margin: 8px 0 6px; }
+    .crumb13 button { background: none; border: 0; color: var(--l13); font: 600 .9rem Inter; cursor: pointer; padding: 0; display: inline-flex; align-items: center; gap: 4px; }
+    .crumb13 .pos { margin-left: auto; font: 600 .78rem Inter; color: var(--muted); }
+    .pips { display: flex; gap: 4px; margin: 4px 0 15px; }
+    .pips i { flex: 1; height: 6px; border-radius: 999px; background: var(--surface-soft); border: 1px solid var(--line); transition: background .25s; }
+    .pips i.on { background: var(--l13); border-color: var(--l13); }
+    .pips i.at { background: var(--l13-2); border-color: var(--l13-2); }
+
+    .beat { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 20px 18px; }
+    .beat.tint { border-left: 4px solid var(--l13); }
+    .beat .eyebrow { font: 700 .64rem/1 Inter; letter-spacing: .09em; text-transform: uppercase; color: var(--l13); }
+    .beat h2 { font: 700 1.5rem/1.2 'Space Grotesk'; margin: 9px 0 0; }
+    .beat .p { font: 500 1rem/1.55 Inter; color: var(--ink); margin-top: 10px; }
+    .beat .p.sm { font-size: .93rem; color: var(--muted); }
+    .pills { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
+    .pills span { font: 600 .78rem/1 Inter; color: var(--l13); background: rgba(55,183,228,.10);
+      border: 1px solid rgba(55,183,228,.3); border-radius: 999px; padding: 7px 11px; }
+
+    /* art */
+    .art { margin: 14px 0 2px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 10px; }
+    .art svg { display: block; width: 100%; height: auto; }
+    .art .l { stroke: var(--line-strong); fill: none; stroke-width: 2; stroke-linecap: round; }
+    .art .lm { stroke: var(--line); fill: none; stroke-width: 1.5; }
+    .art .w { stroke: var(--l13); fill: none; stroke-width: 2.5; stroke-linecap: round; }
+    .art .wf { fill: rgba(55,183,228,.18); stroke: var(--l13); stroke-width: 1.5; }
+    .art .gf { fill: rgba(61,220,151,.18); stroke: var(--l13-2); stroke-width: 1.5; }
+    .art .rf { fill: rgba(255,90,79,.16); stroke: var(--l13-bad); stroke-width: 1.5; }
+    .art .sf { fill: var(--surface-soft); stroke: var(--line-strong); stroke-width: 1.5; }
+    .art .dot { fill: var(--l13); }
+    .art .dotg { fill: var(--l13-2); }
+    .art .tx { font: 600 10px Inter; fill: var(--muted); }
+    .art .txa { font: 700 11px Inter; fill: var(--l13); }
+    .art .dash { stroke-dasharray: 4 4; }
+
+    /* quiz */
+    .choices13 { display: grid; gap: 9px; margin-top: 14px; }
+    .ch { display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line);
+      color: var(--ink); border-radius: 14px; padding: 13px; font: 500 .97rem/1.4 Inter; cursor: pointer; transition: transform .08s, border-color .15s, background .15s; }
+    .ch:not([disabled]):active { transform: scale(.985); }
+    .ch .bd { flex: none; width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; font: 700 .9rem 'Space Grotesk';
+      background: var(--surface-soft); border: 1px solid var(--line-strong); color: var(--muted); }
+    .ch.right { border-color: var(--l13-2); background: rgba(61,220,151,.12); }
+    .ch.right .bd { background: var(--l13-2); color: #06281b; border-color: var(--l13-2); }
+    .ch.nope { border-color: var(--l13-bad); background: rgba(255,90,79,.10); opacity: .8; }
+    .ch.nope .bd { background: var(--l13-bad); color: #2a0a08; border-color: var(--l13-bad); }
+    .ch[disabled] { cursor: default; }
+    @keyframes shake13 { 0%,100% { transform: translateX(0) } 25% { transform: translateX(-5px) } 75% { transform: translateX(5px) } }
+    .shake { animation: shake13 .3s; }
+
+    .fb { margin-top: 13px; background: var(--surface-soft); border: 1px solid var(--line-strong); border-left: 4px solid var(--l13-2);
+      border-radius: 12px; padding: 13px; }
+    .fb.no { border-left-color: var(--l13-bad); }
+    .fb .h { font: 700 .92rem Inter; color: var(--l13-2); margin-bottom: 6px; }
+    .fb.no .h { color: var(--l13-bad); }
+    .fb .b { font: 500 .92rem/1.55 Inter; color: var(--ink); }
+
+    /* ---------- spacing lab ---------- */
+    .lab { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 16px 14px 14px; }
+    .lab .lhead { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .lab .lname { font: 700 1.2rem 'Space Grotesk'; }
+    .lab .ldim { font: 600 .82rem Inter; color: var(--muted); }
+    .lab .lbrief { font: 500 .92rem/1.5 Inter; color: var(--muted); margin-top: 7px; }
+    .canvas-wrap { margin-top: 12px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: var(--bg); }
+    canvas.plan { display: block; width: 100%; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+    canvas.plan:active { cursor: grabbing; }
+    .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+    .chip { font: 600 .76rem/1 Inter; padding: 8px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-soft); color: var(--muted); white-space: nowrap; }
+    .chip.ok { color: var(--l13-2); background: rgba(61,220,151,.12); border-color: rgba(61,220,151,.4); }
+    .chip.no { color: var(--l13-bad); background: rgba(255,90,79,.12); border-color: rgba(255,90,79,.4); }
+    .labtools { display: flex; gap: 8px; margin-top: 11px; }
+    .labtools .btn13 { flex: 1; }
+    .win { margin-top: 12px; border-radius: 14px; padding: 13px; background: rgba(61,220,151,.13); border: 1px solid rgba(61,220,151,.45); }
+    .win .h { font: 700 1rem 'Space Grotesk'; color: var(--l13-2); }
+    .win .b { font: 500 .88rem/1.5 Inter; color: var(--ink); margin-top: 4px; }
+    @keyframes pop13 { 0% { transform: scale(.9); opacity: 0 } 60% { transform: scale(1.03) } 100% { transform: scale(1); opacity: 1 } }
+    .pop { animation: pop13 .35s ease-out; }
+
+    /* ---------- k-factor + deflector ---------- */
+    .readout { text-align: center; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 16px 12px; margin-top: 13px; }
+    .readout .big { font: 700 2.3rem/1 'Space Grotesk'; color: var(--ink); }
+    .readout .big.hit { color: var(--l13-2); }
+    .readout .unit { font-size: 1rem; color: var(--muted); font-weight: 600; }
+    .readout .eq { font: 600 .88rem/1.5 'Space Grotesk'; color: var(--l13); margin-top: 8px; }
+    .readout .tgt { font: 500 .82rem Inter; color: var(--muted); margin-top: 6px; }
+    input[type="range"].sl { -webkit-appearance: none; appearance: none; width: 100%; height: 34px; background: transparent; margin-top: 12px; cursor: pointer; }
+    input[type="range"].sl::-webkit-slider-runnable-track { height: 10px; border-radius: 999px; background: var(--surface-soft); border: 1px solid var(--line-strong); }
+    input[type="range"].sl::-webkit-slider-thumb { -webkit-appearance: none; width: 30px; height: 30px; border-radius: 50%;
+      background: var(--l13-grad); border: 3px solid var(--surface); margin-top: -11px; }
+    input[type="range"].sl::-moz-range-track { height: 10px; border-radius: 999px; background: var(--surface-soft); border: 1px solid var(--line-strong); }
+    input[type="range"].sl::-moz-range-thumb { width: 26px; height: 26px; border-radius: 50%; background: var(--l13); border: 3px solid var(--surface); }
+    .slrow { display: flex; justify-content: space-between; font: 600 .72rem Inter; color: var(--muted); margin-top: -4px; }
+    .kchips { display: flex; gap: 8px; margin-top: 12px; justify-content: center; }
+
+    /* ---------- parts hotspot ---------- */
+    .hotwrap { margin-top: 13px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 8px; }
+    .hotwrap svg { display: block; width: 100%; height: auto; max-height: 300px; }
+    .hot { cursor: pointer; }
+    .hot .hit { fill: transparent; stroke: transparent; stroke-width: 14; }
+    .hot.found .body { stroke: var(--l13-2) !important; }
+    .hot.found .fillp { fill: rgba(61,220,151,.28) !important; }
+    .ask { text-align: center; font: 700 1.05rem 'Space Grotesk'; margin-top: 12px; }
+    .ask .n { color: var(--l13); }
+    .foundlist { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; justify-content: center; }
+    .foundlist span { font: 600 .76rem/1 Inter; padding: 7px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-soft); color: var(--muted); }
+    .foundlist span.got { color: var(--l13-2); background: rgba(61,220,151,.12); border-color: rgba(61,220,151,.4); }
+
+    /* ---------- omit sorter ---------- */
+    .rooms { display: grid; gap: 9px; margin-top: 13px; }
+    .room { background: var(--surface-soft); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+    .room .rt { font: 700 .98rem 'Space Grotesk'; }
+    .room .rd { font: 500 .8rem Inter; color: var(--muted); margin-top: 2px; }
+    .room .ra { display: flex; gap: 8px; margin-top: 10px; }
+    .room .ra button { flex: 1; border-radius: 11px; padding: 10px; font: 700 .84rem 'Space Grotesk'; cursor: pointer;
+      background: var(--surface); border: 1px solid var(--line); color: var(--ink); }
+    .room .ra button.pick { border-color: var(--l13); background: rgba(55,183,228,.14); color: var(--l13); }
+    .room.right { border-color: rgba(61,220,151,.45); }
+    .room.wrong { border-color: rgba(255,90,79,.45); }
+    .room .rw { font: 500 .84rem/1.5 Inter; color: var(--ink); margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line); }
+    .room .rw b.y { color: var(--l13-2); } .room .rw b.n { color: var(--l13-bad); }
+
+    /* ---------- level complete + finale ---------- */
+    .done13 { text-align: center; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 28px 20px; }
+    .done13 .em { font-size: 52px; line-height: 1; }
+    .done13 h2 { font: 700 1.45rem 'Space Grotesk'; margin: 12px 0 6px; }
+    .done13 p { color: var(--muted); font: 500 .95rem/1.55 Inter; max-width: 40ch; margin: 0 auto; }
+
+    .cert { position: relative; text-align: center; border-radius: 22px; padding: 30px 20px; overflow: hidden;
+      background: linear-gradient(150deg, rgba(55,183,228,.16), rgba(61,220,151,.14)); border: 1px solid rgba(61,220,151,.5); }
+    .cert .em { font-size: 60px; line-height: 1; }
+    .cert .k { font: 600 .7rem/1 Inter; letter-spacing: .16em; text-transform: uppercase; color: var(--l13); margin-top: 12px; }
+    .cert h2 { font: 700 2rem/1.1 'Space Grotesk'; margin: 10px 0 8px; }
+    .cert h2 .grad { background: var(--l13-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .cert .sub { color: var(--muted); font: 500 .93rem/1.5 Inter; max-width: 36ch; margin: 0 auto; }
+    .cert .stats { display: flex; gap: 10px; margin-top: 18px; }
+    .cert .stat { flex: 1; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 8px; }
+    .cert .stat b { display: block; font: 700 1.3rem 'Space Grotesk'; color: var(--ink); }
+    .cert .stat span { font: 600 .68rem/1.3 Inter; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+    #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 50; }
+
+    .nextcourse { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line);
+      border-radius: 16px; padding: 14px; margin-top: 14px; color: var(--ink); text-decoration: none; }
+    .nextcourse .em { font-size: 26px; flex: none; }
+    .nextcourse .t { display: block; font: 700 .98rem 'Space Grotesk'; }
+    .nextcourse .s { display: block; font: 500 .8rem/1.4 Inter; color: var(--muted); margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <header class="app-bar">
+    <a class="back" href="../index.html" aria-label="Back">‹</a>
+    <div><div class="title">Zero to 13D Designer</div><div class="sub">Beginner fire sprinkler design</div></div>
+  </header>
+
+  <canvas id="confetti" class="hidden"></canvas>
+
+  <main class="w13">
+    <!-- ================= OVERVIEW ================= -->
+    <section id="sc-map">
+      <div class="hero13">
+        <div class="ic">🏠</div>
+        <h1>Zero to <span class="grad">13D Designer</span></h1>
+        <p>Never touched a sprinkler plan? Good. You start by dragging real heads onto a real ceiling — the theory comes after.</p>
+        <span class="badge13">🎓 9 levels · hands-on first · NFPA 13D</span>
+      </div>
+
+      <button class="catog" id="caTog" role="switch" aria-checked="false">
+        <span class="em">🐻</span>
+        <span class="mid">
+          <span class="t">California Fire Code amendments</span>
+          <span class="s" id="caSub">Designing in California? Turn this on.</span>
+        </span>
+        <span class="sw" aria-hidden="true"></span>
+      </button>
+
+      <div class="prog13">
+        <div class="top"><span class="lbl">Course progress</span><span class="val" id="pVal">0%</span></div>
+        <div class="bar"><div class="fill" id="pFill"></div></div>
+      </div>
+
+      <button class="trophy hidden" id="trophyBtn">
+        <span class="em">🏆</span>
+        <span><span class="tt">13D Designer</span><span class="ts">You finished the course — tap to see your badge again.</span></span>
+      </button>
+
+      <div class="map" id="levelMap"></div>
+
+      <p class="foot13">Progress saves on this device. Teaching follows the SprinkFlow beginner 13D outline — always verify against the code edition your jurisdiction adopted.</p>
+    </section>
+
+    <!-- ================= LEVEL RUNNER ================= -->
+    <section id="sc-level" class="hidden">
+      <div class="crumb13">
+        <button id="toMap">‹ All levels</button>
+        <span class="pos" id="lvlPos"></span>
+      </div>
+      <div class="pips" id="pips"></div>
+      <div id="beatHost"></div>
+      <div class="row13" id="navRow">
+        <button class="btn13 ghost" id="prevBtn" style="flex:0 0 34%">‹ Back</button>
+        <button class="btn13 primary" id="nextBtn">Continue →</button>
+      </div>
+    </section>
+
+    <!-- ================= LEVEL COMPLETE ================= -->
+    <section id="sc-done" class="hidden">
+      <div class="done13 pop">
+        <div class="em" id="dEm">✅</div>
+        <h2 id="dTitle">Level complete</h2>
+        <p id="dMsg">Nice.</p>
+      </div>
+      <div class="row13">
+        <button class="btn13 ghost" id="dMapBtn" style="flex:0 0 40%">All levels</button>
+        <button class="btn13 primary" id="dNextBtn">Next level →</button>
+      </div>
+    </section>
+
+    <!-- ================= FINALE ================= -->
+    <section id="sc-cert" class="hidden">
+      <div class="cert pop">
+        <div class="em">🏆</div>
+        <div class="k">SprinkFlow · Course Complete</div>
+        <h2><span class="grad">13D Designer</span></h2>
+        <p class="sub">You can read a plan and answer the first question of every sprinkler design: where do the heads go?</p>
+        <div class="stats">
+          <div class="stat"><b id="cLevels">9</b><span>Levels</span></div>
+          <div class="stat"><b id="cRooms">0</b><span>Rooms laid out</span></div>
+          <div class="stat"><b id="cAcc">—</b><span>First-try</span></div>
+        </div>
+      </div>
+
+      <a class="nextcourse" href="./learn-hydraulics.html">
+        <span class="em">📐</span>
+        <span><span class="t">Next: Learn Hydraulic Calcs</span><span class="s">Question two of every design — will the water supply actually push enough water through those heads? Starts with the K-factor you already know.</span></span>
+      </a>
+
+      <div class="row13">
+        <button class="btn13 ghost" id="cMapBtn">← Back to levels</button>
+      </div>
+      <p class="foot13">This is a learning badge, not a certification. Rules taught here are NFPA 13D oriented and edition-dependent — verify against your adopted code and the sprinkler's listing.</p>
+    </section>
+  </main>
+
+  <script src="./learn-13d-course.js"></script>
+  <script>
+  (function () {
+    "use strict";
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("../sw.js").catch(function () {});
+
+    var C = window.Course13D;
+    var $ = function (id) { return document.getElementById(id); };
+    var LETTERS = ["A", "B", "C", "D", "E"];
+    var STORE = "learn13dProgress";
+
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c];
+      });
+    }
+    /* Haptics only after a genuine user gesture — Chrome logs a console error
+       if vibrate() is called before the frame has been tapped, and try/catch
+       does not suppress it. */
+    var userTapped = false;
+    function markTap(e) { if (e && e.isTrusted) userTapped = true; }   // trusted = a real tap
+    document.addEventListener("pointerdown", markTap, true);
+    document.addEventListener("keydown", markTap, true);
+    function buzz(ms) {
+      if (!userTapped) return;
+      try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {}
+    }
+
+    /* ---------------- progress ---------------- */
+    var P = load();
+    function load() {
+      var d = { v: 1, done: {}, firstTry: {}, labs: {}, completedAt: 0, ca: false };
+      try {
+        var raw = JSON.parse(localStorage.getItem(STORE) || "null");
+        if (raw && typeof raw === "object") {
+          if (raw.done && typeof raw.done === "object") d.done = raw.done;
+          if (raw.firstTry && typeof raw.firstTry === "object") d.firstTry = raw.firstTry;
+          if (raw.labs && typeof raw.labs === "object") d.labs = raw.labs;
+          if (typeof raw.completedAt === "number") d.completedAt = raw.completedAt;
+          d.ca = raw.ca === true;                       // default OFF — pure 13D
+        }
+      } catch (e) {}
+      return d;
+    }
+    function save() { try { localStorage.setItem(STORE, JSON.stringify(P)); } catch (e) {} }
+    function markDone(id) { if (!P.done[id]) { P.done[id] = 1; save(); } }
+
+    /* California amendment overlay: content-only, never changes beat counts */
+    function caOn() { return P.ca === true; }
+    function view(b) { return C.applyCA(b, caOn()); }
+    function caTouched(b) {
+      if (!caOn()) return false;
+      if (b.ca) return true;
+      return b.k === "omit" && C.omitRooms.some(C.isCA);
+    }
+    function caBadge(b) { return caTouched(b) ? '<span class="cabadge">CA</span>' : ""; }
+
+    function show(name) {
+      ["map", "level", "done", "cert"].forEach(function (n) { $("sc-" + n).classList.add("hidden"); });
+      $("sc-" + name).classList.remove("hidden");
+      window.scrollTo(0, 0);
+    }
+
+    /* ================= OVERVIEW ================= */
+    function renderMap() {
+      var total = C.totalBeats(), doneN = 0;
+      C.levels.forEach(function (l) { doneN += C.levelCount(l, P.done); });
+      var pct = total ? Math.round((doneN / total) * 100) : 0;
+      $("pVal").textContent = pct + "%";
+      $("pFill").style.width = pct + "%";
+
+      var complete = C.courseDone(P.done);
+      $("trophyBtn").classList.toggle("hidden", !complete);
+
+      $("caTog").setAttribute("aria-checked", caOn() ? "true" : "false");
+      $("caSub").textContent = caOn()
+        ? "On — amended rules shown, marked with a CA badge."
+        : "Designing in California? Turn this on.";
+
+      var nextIdx = -1;
+      C.levels.some(function (l, i) { if (!C.levelDone(l, P.done)) { nextIdx = i; return true; } return false; });
+
+      $("levelMap").innerHTML = C.levels.map(function (l, i) {
+        var n = C.levelCount(l, P.done), tot = l.beats.length, isDone = n === tot;
+        var cls = isDone ? "done" : (i === nextIdx ? "next" : "");
+        var st = isDone ? '<span class="st ok">✓ Done</span>'
+          : (i === nextIdx ? '<span class="st go">' + (n ? "↻ Resume" : "▶ Start") + '</span>'
+            : '<span class="st idle">' + n + "/" + tot + '</span>');
+        return '<button class="lvl ' + cls + '" data-id="' + l.id + '">' +
+          '<span class="node">' + (isDone ? "✓" : l.icon) + '</span>' +
+          '<span class="mid"><span class="t">' + (i + 1) + ". " + esc(l.title) + '</span>' +
+          '<span class="o">' + esc(l.blurb) + '</span></span>' + st + '</button>';
+      }).join("");
+
+      [].forEach.call($("levelMap").children, function (b) {
+        b.onclick = function () { openLevel(b.dataset.id); };
+      });
+      show("map");
+    }
+
+    /* ================= LEVEL RUNNER ================= */
+    var LV = null, bi = 0, canGo = false, cleanup = null;
+
+    function openLevel(id, at) {
+      LV = C.levelById(id);
+      if (!LV) return;
+      if (typeof at === "number") bi = at;
+      else {
+        bi = 0;
+        for (var i = 0; i < LV.beats.length; i++) { if (!P.done[LV.beats[i].id]) { bi = i; break; } bi = i; }
+        if (C.levelDone(LV, P.done)) bi = 0;
+      }
+      renderBeat();
+    }
+
+    function setGo(ok, label) {
+      canGo = !!ok;
+      var b = $("nextBtn");
+      b.disabled = !ok;
+      if (label) b.textContent = label;
+    }
+
+    function renderBeat() {
+      if (cleanup) { try { cleanup(); } catch (e) {} cleanup = null; }
+      var beat = LV.beats[bi], idx = C.levels.indexOf(LV) + 1;
+      $("lvlPos").textContent = "Level " + idx + " · " + (bi + 1) + " of " + LV.beats.length;
+      $("pips").innerHTML = LV.beats.map(function (b, i) {
+        return '<i class="' + (i === bi ? "at" : (P.done[b.id] ? "on" : "")) + '"></i>';
+      }).join("");
+      $("prevBtn").style.visibility = bi === 0 ? "hidden" : "visible";
+      var last = bi === LV.beats.length - 1;
+      setGo(false, last ? "Finish level →" : "Continue →");
+
+      var host = $("beatHost");
+      host.innerHTML = "";
+      var fn = RENDER[beat.k];
+      if (fn) fn(host, beat, last);
+      else { host.innerHTML = '<div class="beat"><h2>—</h2></div>'; setGo(true); }
+      show("level");
+    }
+
+    function advance() {
+      if (!canGo) return;
+      markDone(LV.beats[bi].id);
+      if (bi < LV.beats.length - 1) { bi++; renderBeat(); }
+      else finishLevel();
+    }
+    function goBack() { if (bi > 0) { bi--; renderBeat(); } }
+
+    function finishLevel() {
+      if (cleanup) { try { cleanup(); } catch (e) {} cleanup = null; }
+      if (C.courseDone(P.done)) {
+        if (!P.completedAt) { P.completedAt = Date.now(); save(); }
+        return renderCert(true);
+      }
+      var idx = C.levels.indexOf(LV), nx = C.levels[idx + 1];
+      $("dEm").textContent = "✅";
+      $("dTitle").textContent = "Level " + (idx + 1) + " done";
+      $("dMsg").textContent = nx ? "Up next: " + nx.title + "." : "That is every level — head back to the map.";
+      $("dNextBtn").textContent = nx ? "Next level →" : "Back to levels";
+      $("dNextBtn").onclick = function () { if (nx) openLevel(nx.id); else renderMap(); };
+      show("done");
+      buzz(18);
+    }
+
+    $("nextBtn").onclick = advance;
+    $("prevBtn").onclick = goBack;
+    $("toMap").onclick = renderMap;
+    $("dMapBtn").onclick = renderMap;
+    $("cMapBtn").onclick = renderMap;
+    $("trophyBtn").onclick = function () { renderCert(false); };
+    $("caTog").onclick = function () {
+      P.ca = !P.ca;
+      save();
+      buzz(12);
+      renderMap();
+    };
+
+    /* ================= ART ================= */
+    var ART = {
+      square: '<svg viewBox="0 0 320 150"><rect class="sf" x="86" y="14" width="122" height="122" rx="4"/>' +
+        '<rect class="wf" x="86" y="14" width="122" height="122" rx="4"/>' +
+        '<circle class="dot" cx="147" cy="75" r="7"/>' +
+        '<line class="lm dash" x1="86" y1="145" x2="208" y2="145"/><text class="txa" x="147" y="142" text-anchor="middle">16 ft</text>' +
+        '<line class="lm dash" x1="78" y1="14" x2="78" y2="136"/><text class="txa" x="70" y="79" text-anchor="end">16 ft</text>' +
+        '<text class="tx" x="216" y="79">one head,</text><text class="tx" x="216" y="92">its listed area</text></svg>',
+
+      halfwall: '<svg viewBox="0 0 320 140"><rect class="sf" x="20" y="20" width="280" height="100" rx="3"/>' +
+        '<circle class="dot" cx="90" cy="70" r="7"/><circle class="dot" cx="230" cy="70" r="7"/>' +
+        '<line class="w dash" x1="20" y1="70" x2="90" y2="70"/><line class="w dash" x1="230" y1="70" x2="300" y2="70"/>' +
+        '<line class="lm" x1="90" y1="70" x2="230" y2="70"/>' +
+        '<text class="txa" x="55" y="62" text-anchor="middle">8 ft</text>' +
+        '<text class="txa" x="265" y="62" text-anchor="middle">8 ft</text>' +
+        '<text class="tx" x="160" y="62" text-anchor="middle">up to 16 ft</text>' +
+        '<text class="tx" x="160" y="112" text-anchor="middle">half spacing to each wall</text></svg>',
+
+      coldsolder: '<svg viewBox="0 0 320 140"><line class="l" x1="16" y1="30" x2="304" y2="30"/>' +
+        '<circle class="dot" cx="130" cy="42" r="8"/><circle class="rf" cx="182" cy="42" r="8"/>' +
+        '<path class="w" d="M130 50 L104 106 M130 50 L130 110 M130 50 L156 106"/>' +
+        '<path class="w dash" d="M130 50 Q166 62 182 50"/>' +
+        '<text class="tx" x="122" y="128" text-anchor="middle">this one opened</text>' +
+        '<text class="tx" x="238" y="46">spray cools its</text><text class="tx" x="238" y="59">neighbour — it</text><text class="tx" x="238" y="72">never opens</text>' +
+        '<text class="txa" x="156" y="26" text-anchor="middle">too close</text></svg>',
+
+      sprinkler: '<svg viewBox="0 0 320 170"><line class="l" x1="30" y1="24" x2="290" y2="24"/>' +
+        '<text class="tx" x="30" y="18">ceiling</text>' +
+        '<rect class="sf" x="146" y="24" width="28" height="30" rx="3"/>' +
+        '<path class="l" d="M152 54 L152 104 M168 54 L168 104"/>' +
+        '<circle class="rf" cx="160" cy="76" r="9"/>' +
+        '<rect class="wf" x="130" y="104" width="60" height="8" rx="3"/>' +
+        '<path class="w" d="M138 116 L112 152 M160 116 L160 156 M182 116 L208 152"/>' +
+        '<text class="txa" x="200" y="44">frame</text>' +
+        '<text class="txa" x="200" y="80">thermal element</text>' +
+        '<text class="txa" x="200" y="112">deflector</text>' +
+        '<text class="tx" x="118" y="80" text-anchor="end">water waits</text>' +
+        '<text class="tx" x="118" y="93" text-anchor="end">behind the plug</text></svg>',
+
+      pendent: '<svg viewBox="0 0 320 130"><line class="l" x1="30" y1="26" x2="290" y2="26"/>' +
+        '<line class="l" x1="160" y1="26" x2="160" y2="54"/><rect class="wf" x="140" y="54" width="40" height="7" rx="3"/>' +
+        '<path class="w" d="M146 64 L118 106 M160 64 L160 112 M174 64 L202 106"/>' +
+        '<text class="tx" x="30" y="20">ceiling</text><text class="txa" x="200" y="60">deflector below</text></svg>',
+
+      upright: '<svg viewBox="0 0 320 130"><line class="lm dash" x1="30" y1="18" x2="290" y2="18"/>' +
+        '<line class="l" x1="60" y1="86" x2="260" y2="86"/><line class="l" x1="160" y1="86" x2="160" y2="60"/>' +
+        '<rect class="wf" x="140" y="52" width="40" height="7" rx="3"/>' +
+        '<path class="w" d="M146 62 Q112 74 106 108 M174 62 Q208 74 214 108 M160 60 Q160 90 160 112"/>' +
+        '<text class="tx" x="30" y="12">deck above</text><text class="txa" x="200" y="50">deflector on top</text>' +
+        '<text class="tx" x="60" y="100">pipe below the deck</text></svg>',
+
+      sidewall: '<svg viewBox="0 0 320 130"><line class="l" x1="30" y1="22" x2="290" y2="22"/>' +
+        '<line class="l" x1="46" y1="22" x2="46" y2="116"/>' +
+        '<rect class="wf" x="52" y="36" width="9" height="26" rx="3"/>' +
+        '<path class="w" d="M64 44 Q140 44 196 76 M64 50 Q150 62 220 100 M64 40 Q120 34 168 46"/>' +
+        '<text class="tx" x="70" y="20">ceiling</text><text class="tx" x="30" y="112" text-anchor="middle">wall</text>' +
+        '<text class="txa" x="180" y="120" text-anchor="middle">throws out across the room</text></svg>',
+
+      kformula: '<svg viewBox="0 0 320 120"><rect class="sf" x="20" y="20" width="280" height="80" rx="12"/>' +
+        '<text x="160" y="62" text-anchor="middle" style="font:700 30px \'Space Grotesk\';fill:var(--l13)">Q = K × √P</text>' +
+        '<text class="tx" x="70" y="86" text-anchor="middle">gpm</text>' +
+        '<text class="tx" x="160" y="86" text-anchor="middle">orifice size</text>' +
+        '<text class="tx" x="252" y="86" text-anchor="middle">psi at the head</text></svg>',
+
+      alphabet: '<svg viewBox="0 0 320 130">' +
+        '<rect class="sf" x="14" y="24" width="90" height="80" rx="10"/><text class="txa" x="59" y="58" text-anchor="middle" style="font:700 17px \'Space Grotesk\'">13</text><text class="tx" x="59" y="78" text-anchor="middle">everything</text><text class="tx" x="59" y="90" text-anchor="middle">else</text>' +
+        '<rect class="sf" x="115" y="24" width="90" height="80" rx="10"/><text class="txa" x="160" y="58" text-anchor="middle" style="font:700 17px \'Space Grotesk\'">13R</text><text class="tx" x="160" y="78" text-anchor="middle">low-rise</text><text class="tx" x="160" y="90" text-anchor="middle">residential</text>' +
+        '<rect class="gf" x="216" y="24" width="90" height="80" rx="10"/><text x="261" y="58" text-anchor="middle" style="font:700 17px \'Space Grotesk\';fill:var(--l13-2)">13D</text><text class="tx" x="261" y="78" text-anchor="middle">houses</text><text class="tx" x="261" y="90" text-anchor="middle">← you are here</text></svg>',
+
+      beam: '<svg viewBox="0 0 320 130"><line class="l" x1="20" y1="26" x2="300" y2="26"/>' +
+        '<rect class="rf" x="150" y="26" width="22" height="30" rx="2"/>' +
+        '<line class="l" x1="70" y1="26" x2="70" y2="42"/><rect class="wf" x="52" y="42" width="36" height="7" rx="3"/>' +
+        '<path class="w" d="M58 52 L34 100 M70 52 L70 106 M84 52 Q126 66 142 92"/>' +
+        '<path class="w dash" d="M84 52 Q140 60 150 40"/>' +
+        '<text class="tx" x="20" y="20">ceiling</text>' +
+        '<text class="txa" x="182" y="44">beam blocks</text><text class="txa" x="182" y="57">the spray</text>' +
+        '<text class="tx" x="182" y="80">depth vs distance</text><text class="tx" x="182" y="93">— check the table</text></svg>',
+
+      slope: '<svg viewBox="0 0 320 130"><path class="l" d="M24 106 L160 30 L296 106"/>' +
+        '<line class="lm dash" x1="24" y1="106" x2="296" y2="106"/>' +
+        '<circle class="dot" cx="160" cy="42" r="6"/><circle class="dot" cx="104" cy="74" r="6"/><circle class="dot" cx="216" cy="74" r="6"/>' +
+        '<text class="txa" x="160" y="26" text-anchor="middle">ridge — heat collects</text>' +
+        '<text class="tx" x="54" y="98">measured along the ceiling</text>' +
+        '<text class="txa" x="272" y="122" text-anchor="end">many listings: up to 8:12</text></svg>'
+    };
+
+    /* ================= BEAT RENDERERS ================= */
+    var RENDER = {};
+
+    /* ---- say ---- */
+    RENDER.say = function (host, raw) {
+      var b = view(raw);
+      host.innerHTML =
+        '<div class="beat tint">' +
+          '<div class="eyebrow">' + esc(LV.tag) + caBadge(raw) + '</div>' +
+          '<h2>' + esc(b.h) + '</h2>' +
+          '<div class="p">' + esc(b.p) + '</div>' +
+          (b.art && ART[b.art] ? '<div class="art">' + ART[b.art] + '</div>' : '') +
+          (b.pills ? '<div class="pills">' + b.pills.map(function (x) { return "<span>" + esc(x) + "</span>"; }).join("") + '</div>' : '') +
+          (caTouched(raw) ? '<div class="canote"><b>California amendment.</b> This screen shows the amended rule because the California toggle is on. Base NFPA 13D reads differently — flip the toggle off on the start screen to compare.</div>' : '') +
+        '</div>';
+      setGo(true);
+    };
+
+    /* ---- quiz ---- */
+    RENDER.quiz = function (host, raw) {
+      var b = view(raw);
+      host.innerHTML =
+        '<div class="beat">' +
+          '<div class="eyebrow">Quick check' + caBadge(raw) + '</div>' +
+          '<h2 style="font-size:1.24rem;line-height:1.35">' + esc(b.q) + '</h2>' +
+          '<div class="choices13" id="qChoices">' +
+            b.a.map(function (t, i) {
+              return '<button class="ch" data-i="' + i + '"><span class="bd">' + LETTERS[i] + '</span><span>' + esc(t) + '</span></button>';
+            }).join("") +
+          '</div>' +
+          '<div class="fb hidden" id="qFb"><div class="h" id="qFbH"></div><div class="b" id="qFbB"></div></div>' +
+          (caTouched(raw) ? '<div class="canote"><b>California amendment.</b> The right answer here differs from base NFPA 13D.</div>' : '') +
+        '</div>';
+
+      var tries = 0, settled = false;
+      [].forEach.call($("qChoices").children, function (btn) {
+        btn.onclick = function () {
+          if (settled || btn.disabled) return;
+          var i = parseInt(btn.dataset.i, 10);
+          if (i === b.correct) {
+            settled = true;
+            if (tries === 0 && P.firstTry[b.id] === undefined) { P.firstTry[b.id] = 1; save(); }
+            btn.classList.add("right");
+            [].forEach.call($("qChoices").children, function (x) { x.disabled = true; });
+            $("qFb").className = "fb";
+            $("qFbH").textContent = "✓ Correct";
+            $("qFbB").textContent = b.why;
+            $("qFb").classList.remove("hidden");
+            buzz(14);
+            setGo(true);
+          } else {
+            tries++;
+            if (P.firstTry[b.id] === undefined) { P.firstTry[b.id] = 0; save(); }
+            btn.classList.add("nope");
+            btn.disabled = true;
+            btn.classList.add("shake");
+            setTimeout(function () { btn.classList.remove("shake"); }, 320);
+            $("qFb").className = "fb no";
+            if (tries >= 2) {
+              $("qFbH").textContent = "Here — it is " + LETTERS[b.correct];
+              $("qFbB").textContent = b.why;
+              [].forEach.call($("qChoices").children, function (x) {
+                if (parseInt(x.dataset.i, 10) === b.correct) x.classList.add("right");
+              });
+            } else {
+              $("qFbH").textContent = "Not that one";
+              $("qFbB").textContent = "Have another go — one of the rest is right.";
+            }
+            $("qFb").classList.remove("hidden");
+          }
+        };
+      });
+    };
+
+    /* ---- sprinkler anatomy hotspot ---- */
+    RENDER.parts = function (host, b) {
+      var order = C.parts.slice();
+      var found = {}, cur = 0;
+      host.innerHTML =
+        '<div class="beat">' +
+          '<div class="eyebrow">Tap to find</div>' +
+          '<h2 style="font-size:1.3rem">Four parts, that is the whole sprinkler.</h2>' +
+          '<div class="hotwrap">' +
+            '<svg viewBox="0 0 300 220" aria-label="Sprinkler anatomy">' +
+              '<line x1="20" y1="26" x2="280" y2="26" stroke="var(--line-strong)" stroke-width="2"/>' +
+              '<text x="20" y="19" style="font:600 10px Inter;fill:var(--muted)">ceiling</text>' +
+              '<g class="hot" data-p="frame">' +
+                '<rect class="body fillp" x="126" y="26" width="48" height="44" rx="4" fill="var(--surface-soft)" stroke="var(--line-strong)" stroke-width="2"/>' +
+                '<path class="body" d="M134 70 L134 138 M166 70 L166 138" stroke="var(--line-strong)" stroke-width="3" fill="none" stroke-linecap="round"/>' +
+                '<rect class="hit" x="118" y="26" width="64" height="112"/>' +
+              '</g>' +
+              '<g class="hot" data-p="orifice">' +
+                '<ellipse class="body fillp" cx="150" cy="76" rx="15" ry="6" fill="rgba(55,183,228,.22)" stroke="var(--l13)" stroke-width="2"/>' +
+                '<ellipse class="hit" cx="150" cy="76" rx="17" ry="10"/>' +
+              '</g>' +
+              '<g class="hot" data-p="bulb">' +
+                '<rect class="body fillp" x="143" y="90" width="14" height="42" rx="7" fill="rgba(255,90,79,.28)" stroke="var(--l13-bad)" stroke-width="2"/>' +
+                '<rect class="hit" x="136" y="88" width="28" height="46" rx="10"/>' +
+              '</g>' +
+              '<g class="hot" data-p="deflector">' +
+                '<rect class="body fillp" x="110" y="138" width="80" height="11" rx="4" fill="var(--surface-soft)" stroke="var(--line-strong)" stroke-width="2"/>' +
+                '<rect class="hit" x="104" y="132" width="92" height="24" rx="8"/>' +
+              '</g>' +
+              '<path d="M120 154 L92 200 M150 154 L150 206 M180 154 L208 200" stroke="var(--l13)" stroke-width="2" fill="none" stroke-linecap="round" opacity=".55"/>' +
+            '</svg>' +
+          '</div>' +
+          '<div class="ask" id="askLine"></div>' +
+          '<div class="foundlist" id="foundList"></div>' +
+          '<div class="fb hidden" id="pFb"><div class="h" id="pFbH"></div><div class="b" id="pFbB"></div></div>' +
+        '</div>';
+
+      function paint() {
+        $("foundList").innerHTML = C.parts.map(function (p) {
+          return '<span class="' + (found[p.id] ? "got" : "") + '">' + (found[p.id] ? "✓ " : "") + esc(p.label) + "</span>";
+        }).join("");
+        if (cur < order.length) $("askLine").innerHTML = 'Tap <span class="n">' + esc(order[cur].ask) + "</span>";
+        else $("askLine").textContent = "All four found.";
+      }
+      paint();
+
+      [].forEach.call(host.querySelectorAll(".hot"), function (g) {
+        g.addEventListener("click", function () {
+          if (cur >= order.length) return;
+          var want = order[cur];
+          if (g.dataset.p === want.id) {
+            found[want.id] = 1;
+            g.classList.add("found");
+            $("pFb").className = "fb";
+            $("pFbH").textContent = "✓ " + want.label;
+            $("pFbB").textContent = want.why;
+            $("pFb").classList.remove("hidden");
+            cur++;
+            buzz(12);
+            paint();
+            if (cur >= order.length) setGo(true);
+          } else {
+            g.classList.add("shake");
+            setTimeout(function () { g.classList.remove("shake"); }, 320);
+            $("pFb").className = "fb no";
+            $("pFbH").textContent = "Not that part";
+            $("pFbB").textContent = "Keep looking for " + want.ask + ".";
+            $("pFb").classList.remove("hidden");
+          }
+        });
+      });
+    };
+
+    /* ---- 13D omission sorter ---- */
+    RENDER.omit = function (host, b) {
+      var ROOMS = C.caRooms(caOn());
+      var answered = 0, right = 0, N = ROOMS.length;
+      host.innerHTML =
+        '<div class="beat">' +
+          '<div class="eyebrow">Sort the house' + caBadge(b) + '</div>' +
+          '<h2 style="font-size:1.3rem">Sprinkler, or skip it?</h2>' +
+          '<div class="p sm">Call each space. ' + (caOn() ? "NFPA 13D as amended by the California Fire Code." : "NFPA 13D rules only.") + '</div>' +
+          '<div class="rooms" id="roomList">' +
+            ROOMS.map(function (r, i) {
+              return '<div class="room" data-i="' + i + '">' +
+                '<div class="rt">' + esc(r.name) + (caOn() && C.isCA(C.omitRooms[i]) ? '<span class="cabadge">CA</span>' : "") + '</div>' +
+                '<div class="rd">' + esc(r.detail) + '</div>' +
+                '<div class="ra"><button data-v="1">💧 Sprinkler</button><button data-v="0">⃠ Skip it</button></div>' +
+                '<div class="rw hidden"></div></div>';
+            }).join("") +
+          '</div>' +
+        '</div>';
+
+      [].forEach.call($("roomList").children, function (card) {
+        var r = ROOMS[parseInt(card.dataset.i, 10)];
+        [].forEach.call(card.querySelectorAll(".ra button"), function (btn) {
+          btn.onclick = function () {
+            if (card.classList.contains("right") || card.classList.contains("wrong")) return;
+            var saidSprinkler = btn.dataset.v === "1";
+            var ok = saidSprinkler === !r.omit;
+            btn.classList.add("pick");
+            [].forEach.call(card.querySelectorAll(".ra button"), function (x) { x.disabled = true; });
+            card.classList.add(ok ? "right" : "wrong");
+            var w = card.querySelector(".rw");
+            w.innerHTML = (ok ? '<b class="y">✓ Right.</b> ' : '<b class="n">✗ Actually: ' + (r.omit ? "skip it" : "sprinkler") + ".</b> ") + esc(r.why);
+            w.classList.remove("hidden");
+            answered++;
+            if (ok) right++;
+            if (answered === N) {
+              if (P.firstTry[b.id] === undefined) { P.firstTry[b.id] = right === N ? 1 : 0; save(); }
+              setGo(true, "You got " + right + "/" + N + " — continue →");
+              buzz(16);
+            }
+          };
+        });
+      });
+    };
+
+    /* ---- K-factor explorer ---- */
+    RENDER.kf = function (host, b) {
+      host.innerHTML =
+        '<div class="beat">' +
+          '<div class="eyebrow">Drag it</div>' +
+          '<h2 style="font-size:1.3rem">K = ' + b.K + '</h2>' +
+          '<div class="p sm">' + esc(b.brief) + '</div>' +
+          '<div class="readout">' +
+            '<div><span class="big" id="kQ">0.0</span><span class="unit"> gpm</span></div>' +
+            '<div class="eq" id="kEq">—</div>' +
+            '<div class="tgt" id="kTgt">Target: ' + b.targetQ + ' gpm</div>' +
+          '</div>' +
+          '<input class="sl" type="range" id="kSl" min="4" max="80" step="0.5" value="10" aria-label="Pressure at the sprinkler, psi" />' +
+          '<div class="slrow"><span>4 psi</span><span id="kP">10.0 psi</span><span>80 psi</span></div>' +
+          '<div class="fb hidden" id="kFb"><div class="h" id="kFbH"></div><div class="b" id="kFbB"></div></div>' +
+        '</div>';
+
+      var hit = false;
+      function upd() {
+        var p = parseFloat($("kSl").value);
+        var q = b.K * Math.sqrt(p);
+        var on = Math.abs(q - b.targetQ) <= 0.25;
+        $("kQ").textContent = q.toFixed(1);
+        $("kQ").className = "big" + (on ? " hit" : "");
+        $("kP").textContent = p.toFixed(1) + " psi";
+        $("kEq").textContent = "Q = " + b.K + " × √" + p.toFixed(1) + " = " + q.toFixed(1) + " gpm";
+        if (on && !hit) {
+          hit = true;
+          $("kFb").className = "fb";
+          $("kFbH").textContent = "✓ Nailed it — " + p.toFixed(1) + " psi";
+          $("kFbB").textContent = "√" + p.toFixed(1) + " = " + Math.sqrt(p).toFixed(2) + ", times K " + b.K + " gives " + q.toFixed(1) + " gpm. Double the flow needs four times the pressure — that square root is why hydraulics gets expensive.";
+          $("kFb").classList.remove("hidden");
+          if (P.firstTry[b.id] === undefined) { P.firstTry[b.id] = 1; save(); }
+          buzz(14);
+          setGo(true);
+        }
+      }
+      $("kSl").addEventListener("input", upd);
+      $("kSl").addEventListener("change", upd);
+      upd();
+    };
+
+    /* ---- deflector depth ---- */
+    RENDER.defl = function (host, b) {
+      host.innerHTML =
+        '<div class="beat">' +
+          '<div class="eyebrow">Set the height</div>' +
+          '<h2 style="font-size:1.3rem">' + esc(b.kind) + ' deflector</h2>' +
+          '<div class="p sm">' + esc(b.brief) + '</div>' +
+          '<div class="art" style="margin-top:12px"><svg viewBox="0 0 300 170" aria-label="Deflector depth below ceiling">' +
+            '<line class="l" x1="18" y1="26" x2="282" y2="26"/>' +
+            '<text class="tx" x="18" y="19">ceiling</text>' +
+            '<rect id="dBand" class="gf hidden" x="18" y="33" width="264" height="21" rx="2"/>' +
+            '<line id="dStem" class="l" x1="150" y1="26" x2="150" y2="40"/>' +
+            '<rect id="dDefl" class="wf" x="122" y="40" width="56" height="8" rx="3"/>' +
+            '<path id="dSpray" class="w" d="M128 50 L104 106 M150 50 L150 112 M172 50 L196 106"/>' +
+            '<line id="dDim" class="lm dash" x1="66" y1="26" x2="66" y2="40"/>' +
+            '<text id="dLbl" class="txa" x="60" y="42" text-anchor="end">2.00 in</text>' +
+            '<text id="dBandLbl" class="tx hidden" x="282" y="20" text-anchor="end">listed range</text>' +
+          '</svg></div>' +
+          '<input class="sl" type="range" id="dSl" min="0" max="9" step="0.25" value="2" aria-label="Deflector distance below the ceiling, inches" />' +
+          '<div class="slrow"><span>0 in</span><span id="dVal">2.00 in below ceiling</span><span>9 in</span></div>' +
+          '<div class="row13"><button class="btn13 ghost" id="dCheck">Check it</button></div>' +
+          '<div class="fb hidden" id="dFb"><div class="h" id="dFbH"></div><div class="b" id="dFbB"></div></div>' +
+        '</div>';
+
+      var CEIL = 26, PER_IN = 7;                             // svg units per inch below the ceiling
+      var revealed = false;
+      function draw() {
+        var v = parseFloat($("dSl").value);
+        var yy = CEIL + v * PER_IN;                          // top of the deflector plate
+        $("dStem").setAttribute("y2", String(yy));
+        $("dDefl").setAttribute("y", String(yy));
+        $("dSpray").setAttribute("d",
+          "M128 " + (yy + 10) + " L104 " + (yy + 66) +
+          " M150 " + (yy + 10) + " L150 " + (yy + 72) +
+          " M172 " + (yy + 10) + " L196 " + (yy + 66));
+        $("dDim").setAttribute("y2", String(yy));
+        $("dLbl").setAttribute("y", String(CEIL + Math.max(v * PER_IN / 2, 0) + 12));
+        $("dLbl").textContent = v.toFixed(2) + " in";
+        $("dVal").textContent = v.toFixed(2) + " in below ceiling";
+        if (revealed) {
+          $("dBand").setAttribute("y", String(CEIL + b.lo * PER_IN));
+          $("dBand").setAttribute("height", String((b.hi - b.lo) * PER_IN));
+        }
+      }
+      $("dSl").addEventListener("input", draw);
+      $("dSl").addEventListener("change", draw);
+      draw();
+
+      $("dCheck").onclick = function () {
+        var v = parseFloat($("dSl").value);
+        var ok = v >= b.lo && v <= b.hi;
+        revealed = true;
+        $("dBand").classList.remove("hidden");
+        $("dBandLbl").classList.remove("hidden");
+        draw();
+        if (ok) {
+          $("dFb").className = "fb";
+          $("dFbH").textContent = "✓ " + v.toFixed(2) + " in — inside the listed range";
+          $("dFbB").textContent = "Typical listed range for a residential " + b.kind.toLowerCase() + " is " + b.lo + " to " + b.hi + " in below the ceiling. The data sheet always governs.";
+          if (P.firstTry[b.id] === undefined) { P.firstTry[b.id] = 1; save(); }
+          buzz(14);
+          setGo(true);
+        } else {
+          if (P.firstTry[b.id] === undefined) { P.firstTry[b.id] = 0; save(); }
+          $("dFb").className = "fb no";
+          $("dFbH").textContent = v < b.lo ? "Too tight to the ceiling" : "Too far below the ceiling";
+          $("dFbB").textContent = "The green band is the typical listed range for a " + b.kind.toLowerCase() + ": " + b.lo + " to " + b.hi + " in. Slide into it and check again.";
+          $("dCheck").textContent = "Check again";
+        }
+        $("dFb").classList.remove("hidden");
+      };
+    };
+
+    /* ================= THE SPACING PLAYGROUND ================= */
+    var MIN_WALL_FT = 4 / 12;     // 4 in minimum off a wall
+    var MIN_SEP_FT = 8;           // 8 ft minimum between residential heads
+    var PAD_L = 30, PAD_T = 24, PAD_R = 14, PAD_B = 10, BIN_H = 66;
+
+    function tok(name, fb) {
+      var v = getComputedStyle(document.documentElement).getPropertyValue(name);
+      v = (v || "").trim();
+      return v || fb;
+    }
+    function rgba(hex, a) {
+      var h = hex.replace("#", "");
+      if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+      var n = parseInt(h, 16);
+      return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")";
+    }
+
+    /* ideal solution: even spread per axis, ceil(len / spacing) heads */
+    function axisPositions(len, s) {
+      var n = Math.max(1, Math.ceil(len / s - 1e-9));
+      var step = len / n, out = [];
+      for (var i = 0; i < n; i++) out.push(step * (i + 0.5));
+      return out;
+    }
+
+    function evalLab(cfg, heads) {
+      var half = cfg.s / 2;
+      var wallBad = [], sepBad = [];
+      heads.forEach(function (h, i) {
+        if (h.x < MIN_WALL_FT - 1e-9 || h.y < MIN_WALL_FT - 1e-9 ||
+            cfg.w - h.x < MIN_WALL_FT - 1e-9 || cfg.h - h.y < MIN_WALL_FT - 1e-9) wallBad.push(i);
+      });
+      for (var i = 0; i < heads.length; i++) {
+        for (var j = i + 1; j < heads.length; j++) {
+          var dx = heads[i].x - heads[j].x, dy = heads[i].y - heads[j].y;
+          if (Math.sqrt(dx * dx + dy * dy) < MIN_SEP_FT - 1e-9) sepBad.push([i, j]);
+        }
+      }
+      // coverage: sample the room at 0.25 ft; a point is covered if some head
+      // is within half the listed spacing in BOTH axes (square coverage area)
+      var step = 0.25, tot = 0, cov = 0;
+      for (var x = step / 2; x < cfg.w; x += step) {
+        for (var y = step / 2; y < cfg.h; y += step) {
+          tot++;
+          for (var k = 0; k < heads.length; k++) {
+            if (Math.abs(heads[k].x - x) <= half + 1e-9 && Math.abs(heads[k].y - y) <= half + 1e-9) { cov++; break; }
+          }
+        }
+      }
+      var pct = tot ? (cov / tot) * 100 : 0;
+      var bad = {};
+      wallBad.forEach(function (i) { bad[i] = 1; });
+      sepBad.forEach(function (p) { bad[p[0]] = 1; bad[p[1]] = 1; });
+      return {
+        coveragePct: pct,
+        covered: pct >= 99.999,
+        wallOk: wallBad.length === 0,
+        sepOk: sepBad.length === 0,
+        sepBad: sepBad,
+        badHeads: bad,
+        countOk: heads.length > 0 && heads.length <= cfg.max,
+        pass: pct >= 99.999 && wallBad.length === 0 && sepBad.length === 0 && heads.length > 0 && heads.length <= cfg.max
+      };
+    }
+
+    RENDER.lab = function (host, b) {
+      host.innerHTML =
+        '<div class="lab">' +
+          '<div class="lhead"><span class="lname">' + esc(b.name) + '</span>' +
+            '<span class="ldim">' + b.w + " × " + b.h + " ft · head listed " + b.s + " × " + b.s + '</span></div>' +
+          '<div class="lbrief">' + esc(b.brief) + '</div>' +
+          '<div class="canvas-wrap"><canvas class="plan" id="planC"></canvas></div>' +
+          '<div class="chips" id="labChips"></div>' +
+          '<div class="labtools">' +
+            '<button class="btn13 ghost sm" id="labReset">↻ Clear</button>' +
+            '<button class="btn13 ghost sm" id="labHint">💡 Show me one answer</button>' +
+          '</div>' +
+          '<div class="win hidden" id="labWin"><div class="h">✓ Room covered</div><div class="b" id="labWinB"></div></div>' +
+        '</div>';
+
+      var cv = $("planC"), ctx = cv.getContext("2d");
+      var heads = [], drag = null, downAt = null, moved = false, won = false;
+      var geo = { scale: 1, ox: 0, oy: 0, cw: 0, ch: 0, binY: 0 };
+      var off = document.createElement("canvas"), octx = off.getContext("2d");
+      var TH = {
+        ink: tok("--ink", "#f5f7f8"), muted: tok("--muted", "#aab4bd"),
+        line: tok("--line", "#2d3742"), lineStrong: tok("--line-strong", "#536171"),
+        surface: tok("--surface", "#171d24"), soft: tok("--surface-soft", "#202832"),
+        bg: tok("--bg", "#0d1116"), ok: tok("--l13-2", "#3ddc97"),
+        water: tok("--l13", "#37b7e4"), bad: tok("--l13-bad", "#ff5a4f")
+      };
+
+      function layout() {
+        var cw = cv.parentNode.clientWidth || 320;
+        var avail = cw - PAD_L - PAD_R;
+        var scale = avail / b.w;
+        var maxRoomH = Math.min(Math.max(window.innerHeight * 0.44, 190), 400);
+        if (b.h * scale > maxRoomH) scale = maxRoomH / b.h;
+        var roomH = b.h * scale;
+        var ch = PAD_T + roomH + PAD_B + BIN_H;
+        var dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+        cv.style.height = ch + "px";
+        cv.width = Math.round(cw * dpr);
+        cv.height = Math.round(ch * dpr);
+        off.width = cv.width; off.height = cv.height;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        geo.scale = scale;
+        geo.ox = PAD_L + (avail - b.w * scale) / 2;
+        geo.oy = PAD_T;
+        geo.cw = cw; geo.ch = ch;
+        geo.binY = PAD_T + roomH + PAD_B;
+        draw();
+      }
+      var fx = function (ft) { return geo.ox + ft * geo.scale; };
+      var fy = function (ft) { return geo.oy + ft * geo.scale; };
+      var px2ft = function (px) { return (px - geo.ox) / geo.scale; };
+      var py2ft = function (py) { return (py - geo.oy) / geo.scale; };
+      var clamp = function (v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); };
+
+      function draw() {
+        var st = evalLab(b, heads);
+        var half = b.s / 2;
+        ctx.clearRect(0, 0, geo.cw, geo.ch);
+
+        var rx = fx(0), ry = fy(0), rw = b.w * geo.scale, rh = b.h * geo.scale;
+
+        // base
+        ctx.fillStyle = TH.soft;
+        ctx.fillRect(rx, ry, rw, rh);
+
+        // covered layer (single pass so overlaps do not double-darken)
+        if (heads.length) {
+          octx.clearRect(0, 0, geo.cw, geo.ch);
+          octx.fillStyle = TH.water;
+          heads.forEach(function (h) {
+            octx.fillRect(fx(h.x - half), fy(h.y - half), b.s * geo.scale, b.s * geo.scale);
+          });
+          ctx.save();
+          ctx.beginPath(); ctx.rect(rx, ry, rw, rh); ctx.clip();
+          ctx.globalAlpha = 0.17;
+          ctx.drawImage(off, 0, 0, off.width, off.height, 0, 0, geo.cw, geo.ch);
+          ctx.globalAlpha = 1;
+          ctx.restore();
+        }
+
+        // uncovered layer (red where no square reaches)
+        octx.clearRect(0, 0, geo.cw, geo.ch);
+        octx.fillStyle = TH.bad;
+        octx.fillRect(rx, ry, rw, rh);
+        octx.globalCompositeOperation = "destination-out";
+        heads.forEach(function (h) {
+          octx.fillRect(fx(h.x - half), fy(h.y - half), b.s * geo.scale, b.s * geo.scale);
+        });
+        octx.globalCompositeOperation = "source-over";
+        ctx.save();
+        ctx.globalAlpha = 0.3;
+        ctx.drawImage(off, 0, 0, off.width, off.height, 0, 0, geo.cw, geo.ch);
+        ctx.globalAlpha = 1;
+        ctx.restore();
+
+        // 2 ft grid
+        ctx.save();
+        ctx.beginPath(); ctx.rect(rx, ry, rw, rh); ctx.clip();
+        ctx.strokeStyle = rgba(TH.lineStrong, 0.32);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (var gx = 2; gx < b.w; gx += 2) { ctx.moveTo(fx(gx), ry); ctx.lineTo(fx(gx), ry + rh); }
+        for (var gy = 2; gy < b.h; gy += 2) { ctx.moveTo(rx, fy(gy)); ctx.lineTo(rx + rw, fy(gy)); }
+        ctx.stroke();
+        ctx.restore();
+
+        // coverage square outlines
+        ctx.save();
+        ctx.beginPath(); ctx.rect(rx - 1, ry - 1, rw + 2, rh + 2); ctx.clip();
+        ctx.strokeStyle = rgba(TH.water, 0.75);
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 4]);
+        heads.forEach(function (h) {
+          ctx.strokeRect(fx(h.x - half), fy(h.y - half), b.s * geo.scale, b.s * geo.scale);
+        });
+        ctx.setLineDash([]);
+        ctx.restore();
+
+        // walls
+        ctx.strokeStyle = TH.lineStrong;
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(rx, ry, rw, rh);
+
+        // dimensions
+        ctx.fillStyle = TH.muted;
+        ctx.font = "600 11px Inter, system-ui, sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+        ctx.fillText(b.w + " ft", rx + rw / 2, ry - 8);
+        ctx.save();
+        ctx.translate(rx - 11, ry + rh / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText(b.h + " ft", 0, 0);
+        ctx.restore();
+
+        // min-separation violations
+        ctx.strokeStyle = TH.bad;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]);
+        st.sepBad.forEach(function (p) {
+          ctx.beginPath();
+          ctx.moveTo(fx(heads[p[0]].x), fy(heads[p[0]].y));
+          ctx.lineTo(fx(heads[p[1]].x), fy(heads[p[1]].y));
+          ctx.stroke();
+        });
+        ctx.setLineDash([]);
+
+        // the 8 ft keep-out ring while dragging
+        if (drag && heads[drag.i]) {
+          ctx.strokeStyle = rgba(TH.bad, 0.75);
+          ctx.setLineDash([3, 4]);
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(fx(heads[drag.i].x), fy(heads[drag.i].y), MIN_SEP_FT * geo.scale, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // heads
+        heads.forEach(function (h, i) {
+          var bad = st.badHeads[i];
+          var cx = fx(h.x), cy = fy(h.y), r = drag && drag.i === i ? 11 : 9;
+          ctx.beginPath(); ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
+          ctx.fillStyle = rgba(bad ? TH.bad : TH.ok, 0.22); ctx.fill();
+          ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.fillStyle = bad ? TH.bad : TH.ok; ctx.fill();
+          ctx.lineWidth = 2; ctx.strokeStyle = TH.bg; ctx.stroke();
+          ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+          ctx.fillStyle = TH.bg; ctx.fill();
+        });
+
+        // tray
+        var left = b.max - heads.length;
+        ctx.fillStyle = TH.surface;
+        ctx.fillRect(0, geo.binY, geo.cw, BIN_H);
+        ctx.strokeStyle = TH.line; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(0, geo.binY + 0.5); ctx.lineTo(geo.cw, geo.binY + 0.5); ctx.stroke();
+        var tcx = geo.cw / 2, tcy = geo.binY + BIN_H / 2;
+        if (left > 0) {
+          ctx.beginPath(); ctx.arc(tcx, tcy, 15, 0, Math.PI * 2);
+          ctx.fillStyle = rgba(TH.ok, 0.2); ctx.fill();
+          ctx.beginPath(); ctx.arc(tcx, tcy, 10, 0, Math.PI * 2);
+          ctx.fillStyle = TH.ok; ctx.fill();
+          ctx.beginPath(); ctx.arc(tcx, tcy, 3.5, 0, Math.PI * 2);
+          ctx.fillStyle = TH.bg; ctx.fill();
+          ctx.fillStyle = TH.muted;
+          ctx.font = "600 11px Inter, system-ui, sans-serif";
+          ctx.textAlign = "left";
+          ctx.fillText("Drag up into the room", tcx + 24, tcy - 2);
+          ctx.fillStyle = TH.ok;
+          ctx.fillText(left + " sprinkler" + (left === 1 ? "" : "s") + " left", tcx + 24, tcy + 13);
+        } else {
+          ctx.fillStyle = TH.muted;
+          ctx.font = "600 11px Inter, system-ui, sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText("All " + b.max + " placed — drag one back down here to remove it", tcx, tcy + 4);
+        }
+        ctx.textAlign = "left";
+
+        paintChips(st);
+        return st;
+      }
+
+      function paintChips(st) {
+        var c = [];
+        c.push('<span class="chip ' + (st.countOk ? "ok" : "") + '">Heads ' + heads.length + " / " + b.max + "</span>");
+        c.push('<span class="chip ' + (st.covered ? "ok" : "no") + '">Coverage ' + (st.coveragePct >= 99.999 ? "100" : st.coveragePct.toFixed(0)) + "%</span>");
+        c.push('<span class="chip ' + (st.wallOk ? "ok" : "no") + '">≥ 4 in off walls</span>');
+        c.push('<span class="chip ' + (st.sepOk ? "ok" : "no") + '">≥ 8 ft apart</span>');
+        $("labChips").innerHTML = c.join("");
+
+        if (st.pass && !won) {
+          won = true;
+          P.labs[b.id] = 1;                                   // distinct rooms solved
+          if (P.firstTry[b.id] === undefined) { P.firstTry[b.id] = 1; }
+          save();
+          $("labWinB").textContent = heads.length + (heads.length === 1 ? " head covers " : " heads cover ") + b.w + " × " + b.h +
+            " ft with every rule satisfied — no gaps, 4 in clear of the walls, and " + (heads.length > 1 ? "at least 8 ft between heads." : "nothing to crowd.");
+          $("labWin").classList.remove("hidden");
+          $("labWin").classList.add("pop");
+          buzz(22);
+          setGo(true, "Nice — continue →");
+        } else if (!st.pass && won) {
+          won = false;
+          $("labWin").classList.add("hidden");
+          setGo(false);
+        }
+      }
+
+      /* ---- pointer handling: drag from the tray, drag to move, drag back to remove ---- */
+      function local(e) {
+        var r = cv.getBoundingClientRect();
+        return { x: e.clientX - r.left, y: e.clientY - r.top };
+      }
+      function hitHead(p) {
+        var best = -1, bd = 26;
+        heads.forEach(function (h, i) {
+          var d = Math.hypot(fx(h.x) - p.x, fy(h.y) - p.y);
+          if (d < bd) { bd = d; best = i; }
+        });
+        return best;
+      }
+      function place(p) {
+        return { x: clamp(px2ft(p.x), 0, b.w), y: clamp(py2ft(p.y), 0, b.h) };
+      }
+
+      function onDown(e) {
+        var p = local(e);
+        moved = false; downAt = p;
+        var hi = hitHead(p);
+        if (hi >= 0) {
+          drag = { i: hi, fromTray: false };
+        } else if (p.y >= geo.binY && heads.length < b.max) {
+          heads.push(place({ x: geo.cw / 2, y: geo.binY - 4 }));
+          drag = { i: heads.length - 1, fromTray: true };
+        } else if (p.y < geo.binY && heads.length < b.max) {
+          // tap straight into the room places a head there
+          heads.push(place(p));
+          drag = { i: heads.length - 1, fromTray: true };
+        } else { drag = null; return; }
+        try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+        e.preventDefault();
+        draw();
+      }
+      function onMove(e) {
+        if (!drag) return;
+        var p = local(e);
+        if (downAt && Math.hypot(p.x - downAt.x, p.y - downAt.y) > 4) moved = true;
+        heads[drag.i] = place(p);
+        e.preventDefault();
+        draw();
+      }
+      function onUp(e) {
+        if (!drag) return;
+        var p = local(e);
+        // released over the tray → remove (or cancel a tray drag that never left)
+        if (p.y >= geo.binY - 4) heads.splice(drag.i, 1);
+        drag = null;
+        downAt = null;
+        try { cv.releasePointerCapture(e.pointerId); } catch (err) {}
+        draw();
+      }
+
+      cv.addEventListener("pointerdown", onDown);
+      cv.addEventListener("pointermove", onMove);
+      cv.addEventListener("pointerup", onUp);
+      cv.addEventListener("pointercancel", onUp);
+
+      $("labReset").onclick = function () { heads = []; won = false; $("labWin").classList.add("hidden"); setGo(false); draw(); };
+      $("labHint").onclick = function () {
+        heads = [];
+        var xs = axisPositions(b.w, b.s), ys = axisPositions(b.h, b.s);
+        xs.forEach(function (x) { ys.forEach(function (y) { heads.push({ x: x, y: y }); }); });
+        if (P.firstTry[b.id] === undefined) { P.firstTry[b.id] = 0; save(); }
+        won = false;
+        draw();
+      };
+
+      var onResize = function () { layout(); };
+      window.addEventListener("resize", onResize);
+      cleanup = function () {
+        window.removeEventListener("resize", onResize);
+        cv.removeEventListener("pointerdown", onDown);
+        cv.removeEventListener("pointermove", onMove);
+        cv.removeEventListener("pointerup", onUp);
+        cv.removeEventListener("pointercancel", onUp);
+      };
+
+      layout();
+      // expose for headless verification
+      window.__lab13 = {
+        cfg: b,
+        get heads() { return heads.map(function (h) { return { x: h.x, y: h.y }; }); },
+        get state() { return evalLab(b, heads); },
+        get won() { return won; },
+        solve: function () { $("labHint").click(); },
+        headAt: function (i) { return { x: fx(heads[i].x), y: fy(heads[i].y) }; },
+        ftToPx: function (x, y) { return { x: fx(x), y: fy(y) }; },
+        trayPt: function () { return { x: geo.cw / 2, y: geo.binY + BIN_H / 2 }; },
+        geo: geo
+      };
+    };
+
+    /* ================= FINALE ================= */
+    var confettiRAF = 0;
+    function confetti() {
+      var cv = $("confetti"), ctx = cv.getContext("2d");
+      var dpr = Math.min(window.devicePixelRatio || 1, 2);
+      cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      cv.classList.remove("hidden");
+      var cols = [tok("--l13", "#37b7e4"), tok("--l13-2", "#3ddc97"), tok("--accent", "#ffb03a"), tok("--brand", "#ff5a2f")];
+      var bits = [];
+      for (var i = 0; i < 90; i++) {
+        bits.push({
+          x: Math.random() * innerWidth, y: -20 - Math.random() * innerHeight * 0.6,
+          vx: (Math.random() - 0.5) * 1.6, vy: 2 + Math.random() * 3.4,
+          s: 4 + Math.random() * 6, r: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.25,
+          c: cols[i % cols.length]
+        });
+      }
+      var t0 = performance.now();
+      cancelAnimationFrame(confettiRAF);
+      (function frame(t) {
+        ctx.clearRect(0, 0, innerWidth, innerHeight);
+        bits.forEach(function (p) {
+          p.x += p.vx; p.y += p.vy; p.r += p.vr;
+          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r);
+          ctx.fillStyle = p.c; ctx.globalAlpha = 0.9;
+          ctx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s * 0.6);
+          ctx.restore();
+        });
+        if (t - t0 < 2800) confettiRAF = requestAnimationFrame(frame);
+        else { ctx.clearRect(0, 0, innerWidth, innerHeight); cv.classList.add("hidden"); }
+      })(t0);
+    }
+
+    function renderCert(celebrate) {
+      var keys = Object.keys(P.firstTry), tried = keys.length;
+      var got = keys.filter(function (k) { return P.firstTry[k] === 1; }).length;
+      $("cLevels").textContent = String(C.levels.length);
+      $("cRooms").textContent = String(Object.keys(P.labs || {}).length);
+      $("cAcc").textContent = tried ? Math.round((got / tried) * 100) + "%" : "—";
+      show("cert");
+      if (celebrate) { confetti(); buzz([18, 60, 18]); }
+    }
+
+    /* ---- boot ---- */
+    renderMap();
+    // deep-link: ?level=l5-kfactor
+    try {
+      var q = new URLSearchParams(location.search).get("level");
+      if (q && C.levelById(q)) openLevel(q);
+    } catch (e) {}
+
+    // test hook
+    window.__c13 = {
+      openLevel: openLevel,
+      renderMap: renderMap,
+      next: advance,
+      get beat() { return LV ? LV.beats[bi] : null; },
+      get view() { return LV ? view(LV.beats[bi]) : null; },
+      get canGo() { return canGo; },
+      get progress() { return P; },
+      get caOn() { return caOn(); },
+      setCA: function (on) { P.ca = !!on; save(); renderMap(); },
+      caBeatIds: C.caBeatIds,
+      levels: C.levels
+    };
+  })();
+  </script>
+</body>
+</html>
